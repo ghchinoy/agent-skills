@@ -42,7 +42,7 @@ If the user specified `--with-audio`:
 *   Read the content of the generated recap file.
 *   Clean up the text to make it suitable for text-to-speech (e.g., remove markdown symbols, expand PR numbers to "Pull Request").
 *   Split the text into chunks to avoid timeouts.
-*   Use the `chirp_tts` tool to generate a WAV audio file for each chunk.
+*   Use the `gemini_audio_tts` tool to generate a WAV audio file for each chunk.
 *   Use the `ffmpeg_concatenate_media_files` tool to combine the audio chunks into a single WAV file.
 *   Save the final audio file to the `recaps/` directory with the same name as the markdown file, but with a `.wav` extension.
 *   Clean up the temporary audio files.
