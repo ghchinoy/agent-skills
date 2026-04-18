@@ -6,6 +6,9 @@ Agent Skills provide **on-demand expertise** without cluttering an AI model's im
 
 ## Available Skills
 
+### 🔄 Repository Change Recap (`repository-change-recap`)
+Generates a structured weekly or custom timeframe commit recap for a repository. Looks for repository-specific categorization rules in `.gemini/recap-rules.md` or `GEMINI.md` before fetching git logs via `git log --stat` to accurately organize changes (e.g., core vs experiments). Supports optional audio generation.
+
 ### 🛡️ MCP Security Auditor (`mcp-auditor`)
 Audits local Model Context Protocol (MCP) server configurations (e.g., Gemini CLI, Claude Desktop, Cursor) and custom-built MCP servers for Remote Command Execution (RCE) and supply chain vulnerabilities. It focuses on identifying dangerous STDIO transport injections and malicious prompt injections as detailed in the [OX Security Advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem/).
 
