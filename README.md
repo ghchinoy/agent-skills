@@ -14,6 +14,15 @@ Audits local Model Context Protocol (MCP) server configurations (e.g., Gemini CL
 
 *(Note: See the `sample-reports/` directory for an example of the security audit report this skill can produce.)*
 
+### 🖥️ macOS HIG: Layout & Window Management (`macos-hig-layout`)
+Guidelines and assistance for creating macOS applications compliant with Apple's Human Interface Guidelines. Focuses on proper usage of large displays, ergonomics, multiple window states, and idiomatic SwiftUI `.windowResizability` limits.
+
+### ⌨️ macOS HIG: Interaction & System Features (`macos-hig-interaction`)
+Guidelines for integrating deeply with macOS system features. Focuses on comprehensive Menu Bar implementations (via SwiftUI `.commands`), Dock context menus, and handling high-precision inputs like `.onHover` and `.onContinuousHover`.
+
+### 🔎 macOS HIG: Compliance Reviewer (`macos-hig-reviewer`)
+A comprehensive macOS code and design reviewer that analyzes a project against Apple's Human Interface Guidelines. Evaluates ergonomics, window behavior, system integration, and accessibility. Also includes custom `SwiftLint` rules to enforce idiomatic macOS architectures and flags unsupported iOS-only patterns.
+
 ---
 
 ## How to Get these Skills via Gemini CLI
