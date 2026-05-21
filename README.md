@@ -6,6 +6,9 @@ Agent Skills provide **on-demand expertise** without cluttering an AI model's im
 
 ## Available Skills
 
+### 🥩 Grill with Beads (`grill-with-beads`)
+Grilling session that challenges your plan, sharpens the work breakdown, and updates the beads (bd) issue tracker inline as decisions crystallise. Use when you want to stress-test a plan and translate it directly into actionable, tracked bd tasks and dependencies. Based off of Matt Pocock's [grill-with-docs](https://github.com/mattpocock/skills) to use Steve Yegge's [beads](https://github.com/gastownhall/beads).
+
 ### 🔄 Repository Change Recap (`repository-change-recap`)
 Generates a structured weekly or custom timeframe commit recap for a repository. Looks for repository-specific categorization rules in `.gemini/recap-rules.md` or `GEMINI.md` before fetching git logs via `git log --stat` to accurately organize changes (e.g., core vs experiments). Supports optional audio generation.
 
