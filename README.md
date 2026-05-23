@@ -12,6 +12,9 @@ Grilling session that challenges your plan, sharpens the work breakdown, and upd
 ### 🔄 Repository Change Recap (`repository-change-recap`)
 Generates a structured weekly or custom timeframe commit recap for a repository. Looks for repository-specific categorization rules in `.gemini/recap-rules.md` or `GEMINI.md` before fetching git logs via `git log --stat` to accurately organize changes (e.g., core vs experiments). Supports optional audio generation.
 
+### 📜 Changelog Manager (`changelog-manager`)
+Generates, updates, and curates a `CHANGELOG.md` file adhering to Keep a Changelog v1.1.0 and Common Changelog specifications by analyzing `bd` issue history and `git` commit history.
+
 ### 🛡️ MCP Security Auditor (`mcp-auditor`)
 Audits local Model Context Protocol (MCP) server configurations (e.g., Gemini CLI, Claude Desktop, Cursor) and custom-built MCP servers for Remote Command Execution (RCE) and supply chain vulnerabilities. It focuses on identifying dangerous STDIO transport injections and malicious prompt injections as detailed in the [OX Security Advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem/).
 
