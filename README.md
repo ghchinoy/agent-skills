@@ -29,6 +29,21 @@ Guidelines for integrating deeply with macOS system features. Focuses on compreh
 ### 🔎 macOS HIG: Compliance Reviewer (`macos-hig-reviewer`)
 A comprehensive macOS code and design reviewer that analyzes a project against Apple's Human Interface Guidelines. Evaluates ergonomics, window behavior, system integration, and accessibility. Also includes custom `SwiftLint` rules to enforce idiomatic macOS architectures and flags unsupported iOS-only patterns.
 
+### 🎤 AI Pop: Producer (Primary Orchestrator) (`ai-pop-producer`)
+Primary orchestrator skill for creating concept-driven AI Pop Artists. Coordinates sub-skills to generate artist profiles, album narratives, lyrics, cover art, track compositions, and local web-player dashboards.
+
+### 📝 AI Pop: Concept Planner (`ai-pop-concept-planner`)
+Drafts virtual artist backstories, mini-albums, theme-based color palettes, track metadata, and lyrics.
+
+### 🎹 AI Pop: Audio Synthesizer (`ai-pop-audio-synthesizer`)
+Composes high-fidelity music tracks via Google DeepMind Lyria and performs stream container format verification.
+
+### 🎨 AI Pop: Visual Designer (`ai-pop-visual-designer`)
+Generates cohesive album cover art and individual track illustrations using NanoBanana.
+
+### ⚙️ AI Pop: Compiler (`ai-pop-compiler`)
+Validates the artist.json metadata contract, copies files, compiles TypeScript/Vite templates, and verifies static client builds using an embedded Go CLI scaffolder.
+
 ---
 
 ## How to Get these Skills via Gemini CLI
@@ -90,3 +105,68 @@ Use the `/skills` slash command to view and manage available expertise:
 2. **Activation:** If Gemini identifies a task that matches the skill's description (e.g., you ask to "audit my MCP configurations"), it calls the `activate_skill` tool.
 3. **Consent:** You will see a confirmation prompt in the UI detailing the skill's purpose.
 4. **Execution:** Upon your approval, the `SKILL.md` body is added to the conversation history, and the agent proceeds with the specialized expertise active!
+
+## Using with Antigravity CLI (`agy`)
+
+These skills are fully compatible with the official [Antigravity CLI](https://antigravity.google/docs/skills). They can be loaded into your interactive terminal sessions to equip your assistant with specialized capabilities.
+
+### 1. Install the Antigravity CLI
+
+If you don't have the CLI (`agy`) installed yet, run the appropriate command for your platform:
+
+*   **macOS / Linux:**
+    ```bash
+    curl -fsSL https://antigravity.google/cli/install.sh | bash
+    ```
+*   **Windows (PowerShell):**
+    ```powershell
+    irm https://antigravity.google/cli/install.ps1 | iex
+    ```
+
+Ensure that `agy` is in your shell's `PATH`.
+
+### 2. Add Skills to your Environment
+
+You can install these skills at either the global level or project level:
+
+#### Option A: Global Scope (Available in All Workspaces)
+To make these skills available everywhere, copy the skill directories into your global Antigravity configuration folder:
+
+```bash
+# Create the global skills folder if it doesn't exist
+mkdir -p ~/.gemini/antigravity-cli/skills/
+
+# Copy the skills into the global folder
+cp -R /path/to/agent-skills/ai-pop-* ~/.gemini/antigravity-cli/skills/
+```
+
+#### Option B: Project-Level Scope (Available in Current Workspace)
+To use these skills only inside a specific project, copy them into the `.agents/skills/` directory of your project workspace:
+
+```bash
+# Navigate to your target project folder
+cd /path/to/your/project
+
+# Create the project-level agents/skills directory
+mkdir -p .agents/skills/
+
+# Copy the skills into your project
+cp -R /path/to/agent-skills/ai-pop-* .agents/skills/
+```
+
+### 3. Verify Installed Skills
+
+To verify that your skills have been correctly loaded and recognized by the CLI, run:
+
+```bash
+agy inspect
+```
+
+This will display a list of all discovered and active skills, plugins, and hooks.
+
+### 4. Interactive Usage
+
+Once loaded, the skills are active in your interactive sessions. If you ask the agent a question or assign a task that matches a skill's description (for example, "scaffold a new virtual artist profile"), the agent will automatically activate the relevant skill.
+
+For more details on skill authoring, configuration, and advanced commands, refer to the official [Antigravity Documentation](https://antigravity.google/docs/skills).
+
