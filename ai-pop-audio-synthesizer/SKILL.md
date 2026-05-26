@@ -8,6 +8,11 @@ license: Apache-2.0
 
 This skill handles the synthesis and verification of music audio assets.
 
+## Dependencies & Requirements
+
+This skill relies on the `lyria_generate_music` tool from the Google GenMedia MCP suite.
+*   **If missing or inactive:** Follow the [install-mcp-genmedia](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia/skills/install-mcp-genmedia) skill to download, install, and register the pre-compiled server binaries, then reload your agent session.
+
 ## Instructions
 
 1. **Invoke Lyria 3 Pro:**

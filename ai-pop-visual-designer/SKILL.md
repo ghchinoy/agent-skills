@@ -8,6 +8,11 @@ license: Apache-2.0
 
 This skill coordinates the generation of cohesive visual artwork.
 
+## Dependencies & Requirements
+
+This skill relies on the `nanobanana_image_generation` tool from the Google GenMedia MCP suite.
+*   **If missing or inactive:** Follow the [install-mcp-genmedia](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia/skills/install-mcp-genmedia) skill to download, install, and register the pre-compiled server binaries, then reload your agent session.
+
 ## Instructions
 
 1. **Formulate Imagery Parameters:**
