@@ -19,7 +19,11 @@ This skill relies on the `nanobanana_image_generation` tool from the Google GenM
    * Ensure prompts use detailed art styles (e.g., *"detailed lofi illustration, watercolor and ink, retro gradient, synthwave vibe"*) and embed the artist's primary and secondary color tokens.
 2. **Generate Cover Art:**
    * Invoke `nanobanana_image_generation` with a `1:1` aspect ratio to produce `album_art.png`.
+   * **Multimodal Fallback:** If `nanobanana` tool calls fail due to daemon connection closed or invalid request errors, immediately fallback to the platform's native asset generation tool:
+     - Invoke the `generate_image` tool, embedding the color palette hex tokens.
+     - Copy the resulting image from the brain/artifacts directory into the artist root directory as `album_art.png`.
 3. **Generate Track Illustrations:**
-   * Generate an illustration for each track in the tracklist, saved as `track[N]_art.png`.
+   * Generate an illustration for each track, saved as `track[N]_art.png`.
+   * Use the same `generate_image` fallback if `nanobanana` is unavailable, copying the generated artifact to `track[N]_art.png`.
 4. **Compression & Formatting:**
    * Verify that output files are standard PNG/JPG files and reside in the root of the project directory.

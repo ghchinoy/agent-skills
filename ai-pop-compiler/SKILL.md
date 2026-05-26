@@ -44,6 +44,15 @@ By embedding this code, any agent loading this skill can instantly scaffold or m
      ```
    * Confirm that all source files and media assets are written to the `web` subdirectory.
 
-4. **Execute Compiler Check:**
+4. **Execute Compiler & Portable Packaging:**
    * Navigate into the newly created `web` folder.
-   * Run `npm run build` to verify that the TypeScript compiler (`tsc`) and Vite successfully bundle the assets into `dist/` with no compilation errors.
+   * **Node Modules Workaround:** If `npm install` times out or fails due to permission constraints, recursively copy `node_modules` from an existing sibling artist project using the pre-authorized command:
+     ```bash
+     cp -R ../../sibling-project/web/node_modules ./node_modules
+     ```
+   * **Portable Build base:** Ensure `vite.config.js` contains `base: './'`.
+   * Run the pre-authorized `npm run build` to compile files to `dist/`.
+   * **Standalone ZIP Distribution:** Package the production build into a portable standalone zip file using the pre-authorized command:
+     ```bash
+     zip -r [Artist_Name]_Player.zip dist
+     ```
