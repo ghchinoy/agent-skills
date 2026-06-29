@@ -65,6 +65,51 @@ bd export -o .beads/issues.jsonl
 Note: `bd backup` snapshots are distinct from the `.beads/backup/` Dolt backup
 target that causes the corruption — don't confuse them.
 
+## Case E: Engine mode mismatch (embedded when server data exists)
+
+`bd dolt show` reports `Mode: embedded` but `.beads/dolt/` contains an existing
+server-mode database. bd won't start properly, or throws "hyphens are not allowed
+in embedded mode" errors.
+
+1. Find the existing database name and configured port:
+   ```bash
+   ls .beads/dolt/                        # directory name = database name
+   grep "port:" .beads/dolt/config.yaml   # server port
+   ```
+
+2. Re-init into server mode, preserving all server data:
+   ```bash
+   bd init --server --reinit-local \
+     --database <db-name> \
+     --server-port <port> \
+     --non-interactive \
+     --skip-hooks --skip-agents
+   ```
+   bd will auto-start a Dolt server pointed at the existing `.beads/dolt/` data.
+   If it picks a different port than configured, pin it afterward:
+   ```bash
+   # find the new port
+   bd dolt status
+   # optionally pin it in config.yaml for team consistency
+   # dolt: port: <N>
+   ```
+
+3. If a repo ID mismatch remains (daemon-error still present):
+   ```bash
+   bd migrate --update-repo-id --yes
+   ```
+
+4. Clean up the stale daemon-error file:
+   ```bash
+   rm -f .beads/daemon-error
+   ```
+
+5. Verify all issues are accessible:
+   ```bash
+   bd list --all
+   bd dolt show   # should report Mode: per-project and ✓ Server connection OK
+   ```
+
 ## Prevention checklist
 
 - [ ] `.beads/backup/` is **not** in `git ls-files`

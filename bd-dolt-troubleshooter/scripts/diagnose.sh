@@ -39,6 +39,31 @@ command -v bd >/dev/null 2>&1 || { red "bd not found in PATH."; exit 1; }
 
 ISSUES=0
 
+info "0. Engine mode and daemon-error (foundational check)"
+MODE_LINE=$(bd dolt show 2>/dev/null | grep "Mode:" || true)
+printf "    %s\n" "$MODE_LINE"
+if echo "$MODE_LINE" | grep -q "embedded"; then
+  if [ -d .beads/dolt ] && [ "$(ls -A .beads/dolt 2>/dev/null)" ]; then
+    red "    PROBLEM: Engine is in embedded mode but .beads/dolt/ contains server-mode data."
+    red "    Fix: bd init --server --reinit-local --database <name> --non-interactive"
+    red "         (find <name> with: ls .beads/dolt/)"
+    ISSUES=$((ISSUES+1))
+  else
+    yellow "    Engine is in embedded mode (no server-mode data found in .beads/dolt/)."
+  fi
+fi
+if [ -f .beads/daemon-error ]; then
+  red "    PROBLEM: .beads/daemon-error exists — bd failed to start:"
+  sed 's/^/      /' .beads/daemon-error
+  if grep -q "DATABASE MISMATCH" .beads/daemon-error; then
+    red "    Fix: bd migrate --update-repo-id --yes"
+    red "         then: rm .beads/daemon-error"
+  fi
+  ISSUES=$((ISSUES+1))
+else
+  green "    No daemon-error file. Good."
+fi
+
 info "1. Dolt server status"
 bd dolt status 2>&1 | sed 's/^/    /' || yellow "    bd dolt status failed"
 
@@ -132,5 +157,7 @@ if [ "$ISSUES" -eq 0 ]; then
   green "No problems detected by primary checks."
   [ "$PROBE" -eq 0 ] && yellow "(Run with --probe for the definitive write-persistence test.)"
 else
-  red "Detected $ISSUES problem area(s). Run scripts/repair-corrupt-backup.sh to fix."
+  red "Detected $ISSUES problem area(s). See SKILL.md for fixes:"
+  red "  - Engine mode / daemon-error issues: references/recovery-playbook.md Case E"
+  red "  - Corrupt backup / write-revert issues: scripts/repair-corrupt-backup.sh"
 fi
