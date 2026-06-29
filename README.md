@@ -9,11 +9,17 @@ Agent Skills provide **on-demand expertise** without cluttering an AI model's im
 ### 🥩 Grill with Beads (`grill-with-beads`)
 Grilling session that challenges your plan, sharpens the work breakdown, and updates the beads (bd) issue tracker inline as decisions crystallise. Use when you want to stress-test a plan and translate it directly into actionable, tracked bd tasks and dependencies. Based off of Matt Pocock's [grill-with-docs](https://github.com/mattpocock/skills) to use Steve Yegge's [beads](https://github.com/gastownhall/beads).
 
+### 🩺 bd / Dolt Troubleshooter (`bd-dolt-troubleshooter`)
+Diagnose and repair [beads (`bd`)](https://github.com/gastownhall/beads) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), DATABASE MISMATCH repo-ID errors, database name incompatibilities, and the "auto-backup failed / table file not found" corruption that silently reverts writes. Use when `bd` won't start, a `daemon-error` file is present, updates don't persist, or you see Dolt backup/sync errors.
+
 ### 🔄 Repository Change Recap (`repository-change-recap`)
 Generates a structured weekly or custom timeframe commit recap for a repository. Looks for repository-specific categorization rules in `.gemini/recap-rules.md` or `GEMINI.md` before fetching git logs via `git log --stat` to accurately organize changes (e.g., core vs experiments). Supports optional audio generation.
 
 ### 📜 Changelog Manager (`changelog-manager`)
 Generates, updates, and curates a `CHANGELOG.md` file adhering to Keep a Changelog v1.1.0 and Common Changelog specifications by analyzing `bd` issue history and `git` commit history.
+
+### 🖥️ Agent-Aware CLI Design (`agent-aware-cli`)
+Guide for designing and implementing command-line interfaces (CLIs) that are equally usable by human developers and automated coding agents. Covers idiomatic Go with Cobra and Viper, machine-readable output, structured error codes, and flag conventions that agents can reliably parse. Use when building or refactoring a CLI.
 
 ### 🛡️ MCP Security Auditor (`mcp-auditor`)
 Audits local Model Context Protocol (MCP) server configurations (e.g., Gemini CLI, Claude Desktop, Cursor) and custom-built MCP servers for Remote Command Execution (RCE) and supply chain vulnerabilities. It focuses on identifying dangerous STDIO transport injections and malicious prompt injections as detailed in the [OX Security Advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem/).
@@ -43,6 +49,9 @@ Generates cohesive album cover art and individual track illustrations using Nano
 
 ### ⚙️ AI Pop: Compiler (`ai-pop-compiler`)
 Validates the artist.json metadata contract, copies files, compiles TypeScript/Vite templates, and verifies static client builds using an embedded Go CLI scaffolder.
+
+### ✍️ Technical Post Editorial (`technical-post-editorial`)
+Edit technical blog posts to remove AI writing patterns and preserve human voice. Targets developer-facing posts, migration guides, and engineering write-ups — tightening structure, eliminating hedging language, and keeping the author's original tone intact. Use when reviewing or polishing a technical blog post draft.
 
 ---
 
