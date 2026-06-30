@@ -1,6 +1,6 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, and lock contention when multiple `dolt sql-server` processes (across projects, or a bind-mounted .beads/ shared by host + container) fight over the single exclusive write lock. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, you see "database locked by another dolt process" / "server started but not accepting connections", or you see Dolt backup/sync errors.
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, and orphaned dolt sql-server process leaks. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, or you see Dolt backup/sync errors.
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
@@ -53,6 +53,105 @@ even that is unreliable.
 If `.beads/backup/` was ever committed to git (despite being listed in
 `.beads/.gitignore`), the corruption travels with the repo. Git honors tracking
 over `.gitignore`, so a file added before the ignore rule stays tracked.
+
+## The Hook-Timeout Stash-Wipe (untracked files vanish after a commit)
+
+**Symptom:** Untracked files (drafts, new posts, uncommitted work) disappear from the
+working tree after a `git commit`. `git stash list` shows a new stash with message
+`WIP on <branch>: <hash> <msg>`. The untracked files are in `stash@{0}^3`.
+
+**Root-cause chain:**
+
+1. bd's git hooks (pre-commit, post-commit, etc.) run `bd hooks run …` on every commit.
+2. bd's sync does a `git stash -u` (includes untracked files) to get a clean tree for
+   Dolt ref work.
+3. The hook runs under a `timeout` (default 30s). If Dolt sync takes longer, the
+   timeout fires, the hook prints "continuing without beads" and exits — **without
+   popping the stash**.
+4. The working tree stays at the stashed state: untracked files are gone, tracked files
+   are reverted to HEAD.
+
+**Identify:** Check whether the stash was bd-caused (has an untracked section):
+```bash
+git stash list            # look for unexpected stash@{0}
+git ls-tree -r --name-only stash@{0}^3 2>/dev/null  # non-empty = -u stash, likely bd
+```
+
+**Immediate recovery:** restore untracked files from the stash without disturbing
+anything committed since:
+```bash
+# Restore individual files from the untracked tree (stash@{0}^3)
+git show stash@{0}^3:<path/to/file> > <path/to/file>
+# Or restore all untracked files at once (safe if working tree is clean):
+git checkout stash@{0}^3 -- .
+# Then drop the stash once everything is confirmed on disk and committed:
+git stash drop stash@{0}
+```
+
+**Permanent fixes (apply both):**
+
+Fix 1 — Raise the hook timeout in your shell profile so the stash-and-pop completes
+before the timeout bails:
+```bash
+# ~/.zshrc or ~/.bashrc
+export BEADS_HOOK_TIMEOUT=120   # was 30; 2 min covers slow Dolt sync
+```
+
+Fix 2 — In repos where beads is unused (no issues, no `issues.jsonl`, no remote),
+disable the hooks entirely — they add no value and carry real risk:
+```bash
+cd .git/hooks
+for h in pre-commit post-commit post-checkout post-merge pre-push prepare-commit-msg; do
+  [ -f "$h" ] && mv "$h" "$h.disabled"
+done
+```
+Detect an unused beads repo: `bd dolt show` shows embedded mode with no remote, and
+`bd list` returns "No issues found" with no `issues.jsonl` on disk.
+
+Reverse: `for h in *.disabled; do mv "$h" "${h%.disabled}"; done`
+
+**Check all repos for bd-caused orphaned stashes:**
+```bash
+for dir in $(find ~/projects -maxdepth 1 -type d); do
+  [ -d "$dir/.git" ] || continue
+  stash=$(git -C "$dir" stash list 2>/dev/null)
+  [ -z "$stash" ] && continue
+  # Check for untracked section (^3) which indicates a -u stash
+  while IFS= read -r entry; do
+    ref=$(echo "$entry" | grep -o 'stash@{[0-9]*}')
+    has_untracked=$(git -C "$dir" ls-tree -r --name-only "$ref^3" 2>/dev/null)
+    [ -n "$has_untracked" ] && echo "bd-stash candidate: $dir  $entry"
+  done <<< "$stash"
+done
+```
+
+---
+
+## The Orphaned dolt sql-server Process Leak
+
+**Symptom:** `ps aux | grep "dolt sql-server"` shows multiple processes (each
+80–160 MB RAM) on different ports. Memory usage grows across the day.
+
+**Root cause:** Each beads repo in server mode spawns a `dolt sql-server` instance.
+If the bd daemon exits uncleanly (timeout, SIGKILL, machine sleep) without sending
+SIGTERM to its server, the process is orphaned. Repeated bd invocations across many
+repos accumulate leaked servers.
+
+**Identify and reap:**
+```bash
+# Count
+pgrep -c -f "dolt sql-server"
+
+# Reap gracefully (SIGTERM allows Dolt to flush)
+pkill -TERM -f "dolt sql-server"
+sleep 3
+pgrep -c -f "dolt sql-server"   # should be 0; if not, use SIGKILL
+```
+
+Servers restart automatically on the next `bd` command in each repo. No data is lost
+from a clean SIGTERM.
+
+---
 
 ## Quick Diagnosis
 
@@ -117,6 +216,14 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
    *and* grep the JSONL.
 4. **Batch writes, then one export.** Because each command re-imports JSONL,
    apply all mutations, confirm Dolt state with `bd show`, then export once.
+5. **Commit before bd operations.** Untracked files are the most vulnerable to
+   the hook-timeout stash-wipe. If a file matters, commit it before running
+   anything that triggers a git hook.
+6. **Set `BEADS_HOOK_TIMEOUT=120` in your shell profile.** The 30s default is
+   too short for Dolt sync on slow or cold connections and causes orphaned stashes.
+7. **Disable hooks in repos where beads is unused.** An empty beads repo (no
+   issues, no JSONL, no remote) with active hooks is a net liability. Detect with
+   `bd list` and `bd dolt show`; disable as shown above.
 
 ## Manual Verification Snippet
 
