@@ -167,6 +167,18 @@ Re-run the PID+path loop to confirm no remaining process points at this repo's
 `.beads/`. Only if a truly orphaned process survives, `kill <that-PID>` — the
 *specific* PID you identified, never a blanket kill.
 
+> **Trap: `bd dolt stop` can report "server is not running" while the process is
+> still alive.** When the server was auto-started (or started outside bd's
+> management) and this shell has `BEADS_DOLT_AUTO_START=false`, bd does not treat
+> it as *its* managed server, so `bd dolt stop` prints
+> `Error: dolt server is not running` **even though the `dolt sql-server` process
+> is still holding the lock.** Do not trust that message — **always re-verify by
+> PID** (`pgrep -af 'dolt sql-server'` or the PID+path loop) and `kill` the
+> specific orphan. Observed live: an auto-started server survived `bd dolt stop`
+> and only died on `kill <PID>` (SIGTERM was sufficient; escalate to `kill -9`
+> only if it persists). After killing, `pgrep`'s own command line may match the
+> pattern — confirm you're not seeing a false positive from the grep/pgrep itself.
+
 ### 3. Clear stale runtime files and start the single owner
 
 These are machine-local and never committed (safe to remove):
@@ -191,3 +203,9 @@ directly. See the project's `AGENTS.md` for the full host/container runbook.
 - [ ] `.beads/.gitignore` contains `backup/`, `dolt-server.pid`, `dolt-server.port`, `dolt-server.lock`
 - [ ] CI/agents run `bd export -o .beads/issues.jsonl` before committing bd changes
 - [ ] After bulk bd operations, diff `issues.jsonl` before `git commit`
+- [ ] On any machine that must stay Dolt-free (the non-owning side of a
+      bind-mounted `.beads/`, e.g. a container), `BEADS_DOLT_AUTO_START=false` is
+      exported **in the current shell**, not just in `/etc/environment`. A `bd`
+      command in a shell that missed the env var can auto-start a server and steal
+      the lock. Set it explicitly: `export BEADS_DOLT_AUTO_START=false` before
+      running `bd`, and prefer reading state from `.beads/issues.jsonl` directly.

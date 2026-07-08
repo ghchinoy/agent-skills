@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.1"
+  version: "1.2"
 ---
 
 # bd / Dolt Troubleshooter
