@@ -110,6 +110,80 @@ in embedded mode" errors.
    bd dolt show   # should report Mode: per-project and ✓ Server connection OK
    ```
 
+## Case F: Multiple `dolt sql-server` processes — lock contention across projects
+
+**Symptom.** `bd dolt start` (or auto-start) fails with:
+```
+server started (PID N) but not accepting connections on port … : timeout
+```
+and `.beads/dolt-server.log` shows repeated:
+```
+database "dolt" is locked by another dolt process; either clone the database to
+run a second server, or stop the dolt process which currently holds an exclusive
+write lock on the database
+```
+Dolt takes a **single exclusive filesystem write lock** per data directory. This
+bites in two situations:
+- **Bind-mounted `.beads/` shared between two machines** (e.g. a host + a
+  container both mounting the same workspace): only ONE server may run against it,
+  on *either* machine. bd's per-project auto-start is not cross-machine-aware.
+- **One machine running many projects at once**: each project has its own
+  `dolt sql-server`, so you must not blanket-kill them — killing another project's
+  server disrupts that project's bd state.
+
+**Do NOT `kill` all `dolt sql-server` processes.** Isolate the one bound to *this*
+project's `.beads/` directory. The reliable discriminator is each server's
+**current working directory (CWD)**, not its port (ports here are ephemeral).
+
+### 1. Identify the server that owns THIS project (prints PID + path together)
+
+macOS / BSD (`lsof`):
+```bash
+for pid in $(pgrep -f "dolt sql-server"); do
+  cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+  printf 'PID %s\t%s\n' "$pid" "$cwd"
+done
+```
+Linux (`/proc`, no lsof needed):
+```bash
+for pid in $(pgrep -f "dolt sql-server"); do
+  printf 'PID %s\t%s\n' "$pid" "$(readlink -f /proc/$pid/cwd)"
+done
+```
+The target is the PID whose path is under **this repo's** `.beads/`. A bundled
+helper does exactly this and highlights the match:
+```bash
+scripts/find-dolt-server.sh            # lists all; marks the one for CWD's repo
+```
+
+### 2. Stop only that server (prefer the scoped command)
+
+From the project root, `bd dolt stop` acts on **this project's** server only —
+it will not touch other projects' servers:
+```bash
+bd dolt stop
+```
+Re-run the PID+path loop to confirm no remaining process points at this repo's
+`.beads/`. Only if a truly orphaned process survives, `kill <that-PID>` — the
+*specific* PID you identified, never a blanket kill.
+
+### 3. Clear stale runtime files and start the single owner
+
+These are machine-local and never committed (safe to remove):
+```bash
+rm -f .beads/dolt-server.lock .beads/dolt-server.port \
+      .beads/dolt-server.info .beads/dolt-server.pid
+bd dolt start
+bd dolt status
+```
+
+### Cross-machine coordination (bind-mount case)
+
+If the `.beads/` is bind-mounted into a container, don't run a second server
+there — pick ONE owner (usually the host) and make the other side Dolt-free
+(`BEADS_DOLT_AUTO_START=false`), reading issues from `.beads/issues.jsonl`
+directly. See the project's `AGENTS.md` for the full host/container runbook.
+
 ## Prevention checklist
 
 - [ ] `.beads/backup/` is **not** in `git ls-files`

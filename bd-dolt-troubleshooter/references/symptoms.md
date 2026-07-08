@@ -14,6 +14,7 @@
 | Only one write "sticks" per session | The import-revert loop | Batch writes, verify with `bd show`, then single `bd export` |
 | `bd dolt status` shows server not running | Server crashed or never started | `bd dolt start` |
 | Stale `.beads/dolt-server.pid`/`.port` cause connection errors | Runtime files tracked/leftover | Untrack them; restart server |
+| `server started (PID N) but not accepting connections … timeout` + log repeats `database "dolt" is locked by another dolt process` | Another `dolt sql-server` holds the single exclusive write lock (another project, or a bind-mounted `.beads/` shared by host + container) | `scripts/find-dolt-server.sh` to isolate this repo's server by CWD; `bd dolt stop` (scoped); clear stale runtime files; `bd dolt start`. See recovery-playbook Case F |
 
 ## Distinguishing real corruption from normal noise
 

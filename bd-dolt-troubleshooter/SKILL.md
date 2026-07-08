@@ -1,6 +1,6 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, and the "auto-backup failed / table file not found" corruption that silently reverts writes. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, or you see Dolt backup/sync errors.
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, and lock contention when multiple `dolt sql-server` processes (across projects, or a bind-mounted .beads/ shared by host + container) fight over the single exclusive write lock. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, you see "database locked by another dolt process" / "server started but not accepting connections", or you see Dolt backup/sync errors.
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
@@ -136,8 +136,32 @@ for l in open('.beads/issues.jsonl'):
 done
 ```
 
+## Lock Contention: Multiple `dolt sql-server` Processes
+
+**Symptom:** `bd dolt start` reports `server started (PID N) but not accepting
+connections … timeout`, and `.beads/dolt-server.log` repeats `database "dolt" is
+locked by another dolt process`. Dolt allows only **one** server per data
+directory (a single exclusive write lock). This happens when many projects each
+run a server, or a bind-mounted `.beads/` is shared by a host + container.
+
+**Never blanket-kill `dolt sql-server` — you'd disrupt other projects.** Isolate
+the server bound to *this* repo by its working directory:
+
+```bash
+scripts/find-dolt-server.sh          # lists all servers with PID + CWD; marks THIS repo's
+```
+
+Then stop only that one (`bd dolt stop` from the repo root is scoped to this
+project), clear stale runtime files, and start the single owner. Full steps:
+`references/recovery-playbook.md` → **Case F**. For the bind-mount host/container
+variant, one machine owns the server and the other stays Dolt-free — see the
+project `AGENTS.md`.
+
 ## Related References
 
 - `references/symptoms.md` — symptom → cause → fix lookup table
 - `references/recovery-playbook.md` — step-by-step recovery for harder cases
-  (lost writes, divergent Dolt vs JSONL, restoring from `bd backup`)
+  (lost writes, divergent Dolt vs JSONL, restoring from `bd backup`, and
+  multi-server lock contention in Case F)
+- `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
+  their working dirs and flag the one owning the current repo's `.beads/`
