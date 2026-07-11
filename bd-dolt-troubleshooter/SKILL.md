@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, and orphaned dolt sql-server process leaks. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, or you see Dolt backup/sync errors.
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, orphaned dolt sql-server process leaks, and schema version skew in BOTH directions — a newer bd client refusing to auto-apply migrations to a remote-backed database, AND an older client stranded behind a database another agent/machine already migrated forward (bd doctor reports "database is at vX, binary knows up to vY (N migrations ahead)" and writes fail with "Field 'id' doesn't have a default value"). Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, you see Dolt backup/sync errors, a watcher/agent fails with "refusing to auto-apply N pending schema migrations", or bd writes fail after a colleague/agent upgraded the shared database.
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.2"
+  version: "1.4"
 ---
 
 # bd / Dolt Troubleshooter
@@ -153,9 +153,147 @@ from a clean SIGTERM.
 
 ---
 
+## Schema Version Skew (remote-backed database migration block)
+
+**Symptom:** A newer bd version (e.g., a watcher app, agent tool, or second machine)
+fails to open the database with:
+```
+Failed to open beads database: failed to initialize schema: refusing to auto-apply
+N pending schema migrations to a remote-backed database (vX -> vY):
+migrating clones independently forks the schema (#4259)
+```
+Simultaneously, `dolt-server.log` fills with recurring errors like:
+```
+error running query ... error="column "content_hash" could not be found in any table in scope"
+```
+
+**Root-cause:**
+
+bd added schema migrations (new columns, tables, etc.) between the version the
+database was last migrated on and the version the new client was built against.
+The new client refuses to apply those migrations automatically because the
+database has a Dolt **remote** configured (`bd dolt show` shows a remote URL).
+Applying migrations locally without pushing would leave the remote at the old
+schema, so any other clone pulling from the remote would get mismatched data —
+a schema fork.
+
+The old server (the running `dolt sql-server`) continues serving the old schema.
+Any client querying for columns from the new schema (like `content_hash`) gets
+SQL errors on every poll.
+
+**Fix — apply once on primary, push, then pull on all clones:**
+
+```bash
+# 1. On the machine with the running bd server (primary):
+bd migrate schema          # applies vX → vY migrations idempotently
+bd dolt push               # push migrated schema + data to remote
+
+# 2. On every other clone (including the machine running the watcher):
+bd dolt pull               # pull the migrated schema from remote
+
+# 3. Restart the watcher / newer-version bd client
+#    It will now open successfully at the new schema version.
+```
+
+**Verify the migration landed:**
+```bash
+bd migrate --inspect        # Schema Version should match the new bd binary version
+bd doctor                   # should pass schema checks
+```
+
+**Why the watcher error recurs every 30s:** The watcher is likely running a
+keep-alive or polling loop. Each iteration hits the missing-column SQL error and
+logs it. The errors stop once the migration is applied and the watcher is
+restarted.
+
+**Prevention:**
+
+- Before upgrading bd on any machine that has a watcher, agent, or second-machine
+  clone reading the same Dolt remote: apply `bd migrate schema && bd dolt push`
+  on the primary first, then update the secondary.
+- Add `bd migrate --inspect` to CI/release gates to catch schema drift before it
+  reaches clones.
+- Keep all bd clients (CLI, watcher, agent) on the same version, or upgrade in
+  primary-first order.
+
+---
+
+## Schema Version Skew — Client BEHIND the Database (the inverse case)
+
+The section above is a *newer* client blocked from migrating an *older* DB.
+This is the mirror image, and it is the more likely one in a multi-agent
+setup: your bd binary is **older** than a database another agent/machine
+already migrated **forward**.
+
+**Symptom:**
+```
+bd doctor
+  ⚠ ... schema version mismatch: database is at v53, binary knows up to v49
+    (4 migrations ahead)
+```
+Reads mostly succeed (with the warning), but **every write fails**:
+```
+Error updating <id>: failed to record event: record event in events:
+Error 1105 (HY000): Field 'id' doesn't have a default value
+```
+`scripts/diagnose.sh` shows the Dolt-vs-JSONL check reporting `dolt=?` for
+issues (the old binary cannot read the newer schema, so status comes back
+unknown while JSONL still has the real state).
+
+**Root cause (a multi-agent coordination hazard):** bd auto-migrates a
+shared Dolt database forward the first time a newer client touches it. Once
+that happens, every *older* client on the same DB is stranded — it can read
+past the skew but cannot write against the changed schema (e.g., the `events`
+table's `id` column changed between versions). This is not corruption and it
+is not fixable with `bd migrate` on the old binary: a v49 binary cannot
+apply — or write against — a v53 schema it doesn't know.
+
+**Fix — upgrade the stranded client to match the DB (do NOT downgrade the DB):**
+
+1. Identify the newest bd across all agents/machines sharing the DB. The
+   build that migrated it is the one to match (check `go list -m
+   github.com/steveyegge/beads@main` for the current tip pseudo-version, or
+   the latest tag with `go list -m -versions github.com/steveyegge/beads`).
+2. Reinstall bd from source at that version:
+   ```bash
+   go install github.com/steveyegge/beads/cmd/bd@main   # or @vX.Y.Z
+   ```
+   **CGO/ICU gotcha (recent bd):** the build pulls `dolthub/go-icu-regex`,
+   which needs the ICU C++ header `unicode/regex.h`. If it fails with
+   `fatal error: 'unicode/regex.h' file not found`, point CGO at a local ICU:
+   ```bash
+   ICU="$(brew --prefix icu4c)"        # or icu4c@<N>, e.g. icu4c@78
+   CGO_CFLAGS="-I$ICU/include" CGO_CPPFLAGS="-I$ICU/include" \
+   CGO_LDFLAGS="-L$ICU/lib" \
+     go install github.com/steveyegge/beads/cmd/bd@main
+   ```
+   Recent bd also requires a newer Go toolchain (it auto-switches, e.g. to
+   go1.26.x, if `go >= 1.26.2` is declared).
+3. **Sync every copy of the binary on your PATH.** `go install` writes to
+   `~/go/bin`; if your PATH `bd` is elsewhere (e.g. `~/.local/bin/bd`), copy
+   it: `cp ~/go/bin/bd ~/.local/bin/bd && hash -r`. A stale second copy is a
+   classic "I upgraded but it's still the old version" trap — verify with
+   `which bd && bd --version`.
+4. Verify: `bd doctor` no longer reports the mismatch, and a real write
+   (`bd update <id> --append-notes "..."`) succeeds. After the new binary
+   applies any pending migration it may prompt `Run bd dolt push` — push so
+   other clones converge.
+
+**Read-only stopgap** if you cannot upgrade immediately: the global flag
+`--ignore-schema-skew` ("proceed despite forward schema drift; some queries
+may fail") lets the old binary read the newer DB. It does **not** fix writes
+(the `events` schema mismatch still bites) — it only buys time to read.
+
+**Prevention (multi-agent):** all agents/machines sharing one bd database
+MUST run compatible bd binaries. Before an agent migrates a shared DB forward,
+confirm the others can be upgraded to match; otherwise you strand them. A
+session preflight of `bd doctor` catches the skew before you rely on writes.
+
+---
+
 ## Quick Diagnosis
 
-**Start here — three commands before anything else:**
+**Start here — four commands before anything else:**
 
 ```bash
 # 1. Reveal engine mode, data directory, and server connection status
@@ -164,7 +302,11 @@ bd dolt show
 # 2. Let bd self-diagnose and suggest fixes
 bd doctor
 
-# 3. Read the cached failure reason if bd won't start at all
+# 3. Check schema version and pending migrations (especially after a bd upgrade
+#    or when a watcher/agent fails to open the database)
+bd migrate --inspect
+
+# 4. Read the cached failure reason if bd won't start at all
 cat .beads/daemon-error 2>/dev/null
 ```
 

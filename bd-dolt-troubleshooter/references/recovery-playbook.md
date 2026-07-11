@@ -196,6 +196,118 @@ there — pick ONE owner (usually the host) and make the other side Dolt-free
 (`BEADS_DOLT_AUTO_START=false`), reading issues from `.beads/issues.jsonl`
 directly. See the project's `AGENTS.md` for the full host/container runbook.
 
+---
+
+## Case G: Schema version skew — remote-backed database refuses auto-migration
+
+A newer bd binary (watcher, agent, second machine) cannot open the database
+because pending schema migrations exist but the database has a Dolt remote, so
+auto-applying would fork the schema across clones.
+
+Error signature:
+```
+refusing to auto-apply N pending schema migrations to a remote-backed database
+(vX -> vY): migrating clones independently forks the schema (#4259)
+```
+Secondary symptom in `dolt-server.log` — recurring every poll interval:
+```
+error running query ... error="column "<col>" could not be found in any table in scope"
+```
+
+**Recovery:**
+
+1. On the **primary** host (where the main bd server runs):
+   ```bash
+   bd migrate schema          # apply vX → vY
+   bd migrate --inspect       # confirm Schema Version is now vY
+   bd dolt push               # push to remote
+   ```
+
+2. On **every other clone** (including the watcher machine):
+   ```bash
+   bd dolt pull               # pull migrated schema
+   ```
+
+3. Restart the watcher / newer-version bd client. The SQL errors stop and the
+   client opens successfully.
+
+**If `bd migrate schema` itself fails** (the server is stuck or the schema is
+partially applied):
+```bash
+bd dolt stop
+```
+```bash
+bd dolt start
+bd migrate schema --verbose   # retry with detail
+```
+
+**Upgrade order rule:** always migrate-and-push on the primary before updating
+any secondary client to a newer bd version.
+
+---
+
+## Case H: Schema version skew — client binary is BEHIND the database (inverse of G)
+
+The mirror image of Case G, and the more common one in a multi-agent setup:
+another agent/machine already migrated the shared database **forward**, and
+your bd binary is now **older** than the schema. bd auto-migrates a shared DB
+on first touch by a newer client, which strands every older client on it.
+
+Error signature (`bd doctor`):
+```
+schema version mismatch: database is at v53, binary knows up to v49
+(4 migrations ahead)
+```
+Reads succeed with a warning; **writes fail**:
+```
+failed to record event: record event in events:
+Error 1105 (HY000): Field 'id' doesn't have a default value
+```
+`scripts/diagnose.sh` reports the Dolt-vs-JSONL check as `dolt=?` (the old
+binary can't read the newer schema).
+
+**Recovery — upgrade the stranded client to match the DB (never downgrade the DB):**
+
+1. Find the version that migrated the DB (match it, don't guess):
+   ```bash
+   go list -m -versions github.com/steveyegge/beads   # tagged releases
+   go list -m github.com/steveyegge/beads@main         # current main-tip pseudo-version
+   ```
+2. Reinstall bd at that version. Recent bd needs ICU (CGO) and a newer Go
+   toolchain:
+   ```bash
+   ICU="$(brew --prefix icu4c)"        # or icu4c@<N>, e.g. icu4c@78
+   CGO_CFLAGS="-I$ICU/include" CGO_CPPFLAGS="-I$ICU/include" \
+   CGO_LDFLAGS="-L$ICU/lib" \
+     go install github.com/steveyegge/beads/cmd/bd@main
+   ```
+   (Failure `fatal error: 'unicode/regex.h' file not found` = ICU flags not set.)
+3. Sync the PATH copy — `go install` writes `~/go/bin/bd`; if your PATH `bd`
+   is elsewhere, copy it or you'll keep running the old one:
+   ```bash
+   cp ~/go/bin/bd "$(which bd)" && hash -r
+   which bd && bd --version        # verify
+   ```
+4. Verify + converge:
+   ```bash
+   bd doctor                       # mismatch gone
+   bd update <id> --append-notes "skew fixed"   # a real write now succeeds
+   bd dolt push                    # if the new binary applied a pending migration
+   ```
+
+**Do NOT** run `bd migrate` on the old binary — it cannot apply (or write
+against) a schema version it doesn't know.
+
+**Read-only stopgap** if you can't upgrade yet: `bd --ignore-schema-skew <cmd>`
+lets the old binary *read* the newer DB; it does not fix writes.
+
+**Prevention (multi-agent):** all agents/machines sharing one bd database must
+run compatible binaries. Before migrating a shared DB forward, confirm the
+others can upgrade to match, or you strand them. Add `bd doctor` as a session
+preflight so the skew surfaces before you rely on writes.
+
+---
+
 ## Prevention checklist
 
 - [ ] `.beads/backup/` is **not** in `git ls-files`
@@ -209,3 +321,5 @@ directly. See the project's `AGENTS.md` for the full host/container runbook.
       command in a shell that missed the env var can auto-start a server and steal
       the lock. Set it explicitly: `export BEADS_DOLT_AUTO_START=false` before
       running `bd`, and prefer reading state from `.beads/issues.jsonl` directly.
+- [ ] All agents/machines sharing one bd database run compatible bd versions
+- [ ] `bd doctor` is run as a session preflight (catches schema skew before writes)

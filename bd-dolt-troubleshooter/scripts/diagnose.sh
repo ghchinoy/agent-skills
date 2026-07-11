@@ -64,6 +64,25 @@ else
   green "    No daemon-error file. Good."
 fi
 
+info "0b. Schema version skew (client binary vs database)"
+SKEW=$(bd doctor 2>&1 | grep -i "schema version mismatch" | head -1 || true)
+if [ -n "$SKEW" ]; then
+  red "    PROBLEM: schema version skew detected:"
+  printf "      %s\n" "$SKEW"
+  if echo "$SKEW" | grep -qi "binary knows up to"; then
+    red "    Your bd binary is BEHIND the database (another agent/machine migrated it forward)."
+    red "    Reads warn; writes FAIL (\"Field 'id' doesn't have a default value\")."
+    red "    Fix: UPGRADE the client to match — go install github.com/steveyegge/beads/cmd/bd@main"
+    red "         (CGO/ICU + PATH-copy caveats: SKILL.md 'Client BEHIND the Database')."
+    red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
+  else
+    red "    A newer client cannot migrate a remote-backed DB. See recovery-playbook Case F."
+  fi
+  ISSUES=$((ISSUES+1))
+else
+  green "    No schema version skew (client and database agree)."
+fi
+
 info "1. Dolt server status"
 bd dolt status 2>&1 | sed 's/^/    /' || yellow "    bd dolt status failed"
 
