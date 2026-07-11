@@ -55,6 +55,54 @@ Edit technical blog posts to remove AI writing patterns and preserve human voice
 
 ---
 
+## Installing via the Open Agent Skills CLI (`npx skills`)
+
+The [Open Agent Skills CLI](https://github.com/vercel-labs/skills) is an agent-agnostic tool that can automatically install skills from this repository directly to **OpenCode**, **Claude Code**, **Cursor**, **Cline**, and over 70+ other supported AI coding agents.
+
+### 1. Discover Available Skills
+To list the available skills in this repository without installing them:
+```bash
+npx skills add ghchinoy/agent-skills --list
+```
+
+### 2. Install Specific Skills
+You can install one or more specific skills to your local project (which saves them in `./<agent>/skills/` so they can be committed to Git):
+```bash
+# Install a single skill (e.g., mcp-auditor)
+npx skills add ghchinoy/agent-skills --skill mcp-auditor
+
+# Install multiple specific skills
+npx skills add ghchinoy/agent-skills --skill mcp-auditor --skill technical-post-editorial
+```
+
+### 3. Install All Skills
+To install all skills in this repository to your project:
+```bash
+npx skills add ghchinoy/agent-skills --all
+```
+
+### 4. Advanced Options
+- **Global Scope:** To make skills available across all your projects, add the `-g` or `--global` flag:
+  ```bash
+  npx skills add ghchinoy/agent-skills --skill mcp-auditor -g
+  ```
+- **Target Specific Agents:** To only install to specific agents (e.g., OpenCode and Claude Code):
+  ```bash
+  npx skills add ghchinoy/agent-skills -a opencode -a claude-code
+  ```
+
+### 5. Use a Skill Without Installing
+You can generate a prompt for a single skill and feed it directly into a terminal-based agent, or start an agent interactively:
+```bash
+# Feed directly into claude-code
+npx skills use ghchinoy/agent-skills@mcp-auditor | claude
+
+# Start OpenCode interactively with the skill
+npx skills use ghchinoy/agent-skills --skill mcp-auditor --agent opencode
+```
+
+---
+
 ## How to Get these Skills via Gemini CLI
 
 Gemini CLI makes it easy to discover and activate skills. You can install individual skills directly from this repository or link your local clone of this repository.
