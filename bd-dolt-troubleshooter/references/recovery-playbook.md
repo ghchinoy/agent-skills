@@ -218,9 +218,11 @@ error running query ... error="column "<col>" could not be found in any table in
 
 1. On the **primary** host (where the main bd server runs):
    ```bash
-   bd migrate schema          # apply vX → vY
-   bd migrate --inspect       # confirm Schema Version is now vY
-   bd dolt push               # push to remote
+   # BD_ALLOW_REMOTE_MIGRATE=1 is REQUIRED — without it, bd migrate schema
+   # silently no-ops because the gate fires first ("Schema already at vX").
+   BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema   # apply vX → vY
+   bd migrate --inspect                           # confirm Schema Version is now vY
+   bd dolt push                                   # push to remote
    ```
 
 2. On **every other clone** (including the watcher machine):
@@ -235,10 +237,8 @@ error running query ... error="column "<col>" could not be found in any table in
 partially applied):
 ```bash
 bd dolt stop
-```
-```bash
 bd dolt start
-bd migrate schema --verbose   # retry with detail
+BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema --verbose   # retry with detail
 ```
 
 **Upgrade order rule:** always migrate-and-push on the primary before updating
@@ -268,27 +268,47 @@ binary can't read the newer schema).
 
 **Recovery — upgrade the stranded client to match the DB (never downgrade the DB):**
 
-1. Find the version that migrated the DB (match it, don't guess):
+1. **First: identify what the installed binary actually is.** `bd --version`
+   is not sufficient — a build from local source shows the same version string
+   as the published tag but may be commits ahead. Use the authoritative check:
    ```bash
-   go list -m -versions github.com/steveyegge/beads   # tagged releases
-   go list -m github.com/steveyegge/beads@main         # current main-tip pseudo-version
+   go version -m "$(which bd)"
+   # Look for the `mod` line, e.g.:
+   #   mod  github.com/steveyegge/beads  v1.1.1-0.20260711070917-64a136d56e8a
+   # A pseudo-version (v1.x.x-0.YYYYMMDDHHMMSS-<hash>) means it was built
+   # from a commit not on any tag. "(dev)" in bd --version output is also a
+   # red flag that the binary came from a local source tree.
    ```
-2. Reinstall bd at that version. Recent bd needs ICU (CGO) and a newer Go
+
+2. Find the target version — the one that migrated the DB forward. Check all
+   agents/machines sharing the DB. If the migrating binary was a dev build,
+   its pseudo-version is the target:
+   ```bash
+   go list -m -versions github.com/steveyegge/beads   # tagged releases only
+   go list -m github.com/steveyegge/beads@main         # current main-tip pseudo-version
+   # Or read it directly from the binary that migrated:
+   go version -m /path/to/that/bd
+   ```
+
+3. Reinstall bd at that version. Recent bd needs ICU (CGO) and a newer Go
    toolchain:
    ```bash
    ICU="$(brew --prefix icu4c)"        # or icu4c@<N>, e.g. icu4c@78
    CGO_CFLAGS="-I$ICU/include" CGO_CPPFLAGS="-I$ICU/include" \
    CGO_LDFLAGS="-L$ICU/lib" \
-     go install github.com/steveyegge/beads/cmd/bd@main
+     go install github.com/steveyegge/beads/cmd/bd@<version-or-pseudo-version>
    ```
    (Failure `fatal error: 'unicode/regex.h' file not found` = ICU flags not set.)
-3. Sync the PATH copy — `go install` writes `~/go/bin/bd`; if your PATH `bd`
-   is elsewhere, copy it or you'll keep running the old one:
+
+4. Sync the PATH copy — `go install` writes `~/go/bin/bd`; if your PATH `bd`
+   is elsewhere (e.g. `~/.local/bin/bd`), copy it or you'll keep running the
+   old one:
    ```bash
    cp ~/go/bin/bd "$(which bd)" && hash -r
-   which bd && bd --version        # verify
+   go version -m "$(which bd)"    # verify the module version, not just --version
    ```
-4. Verify + converge:
+
+5. Verify + converge:
    ```bash
    bd doctor                       # mismatch gone
    bd update <id> --append-notes "skew fixed"   # a real write now succeeds
@@ -321,5 +341,10 @@ preflight so the skew surfaces before you rely on writes.
       command in a shell that missed the env var can auto-start a server and steal
       the lock. Set it explicitly: `export BEADS_DOLT_AUTO_START=false` before
       running `bd`, and prefer reading state from `.beads/issues.jsonl` directly.
-- [ ] All agents/machines sharing one bd database run compatible bd versions
+- [ ] All agents/machines sharing one bd database run compatible bd versions —
+      "compatible" means the same module pseudo-version hash, verified with
+      `go version -m "$(which bd)"`, not just `bd --version` (which is unreliable
+      for dev/local builds that show a tag version string but are commits ahead)
+- [ ] `(dev)` in `bd --version` output triggers a `go version -m "$(which bd)"`
+      check before any operation that could migrate a shared database
 - [ ] `bd doctor` is run as a session preflight (catches schema skew before writes)

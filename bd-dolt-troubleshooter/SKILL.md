@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.4"
+  version: "1.5"
 ---
 
 # bd / Dolt Troubleshooter
@@ -185,7 +185,11 @@ SQL errors on every poll.
 
 ```bash
 # 1. On the machine with the running bd server (primary):
-bd migrate schema          # applies vX → vY migrations idempotently
+#    BD_ALLOW_REMOTE_MIGRATE=1 is REQUIRED. Without it, bd migrate schema
+#    silently no-ops — the gate fires first and reports "Schema already at vX"
+#    even though it hasn't applied anything.
+BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema   # applies vX → vY
+bd migrate --inspect       # confirm Schema Version is now vY
 bd dolt push               # push migrated schema + data to remote
 
 # 2. On every other clone (including the machine running the watcher):
@@ -250,10 +254,20 @@ apply — or write against — a v53 schema it doesn't know.
 
 **Fix — upgrade the stranded client to match the DB (do NOT downgrade the DB):**
 
-1. Identify the newest bd across all agents/machines sharing the DB. The
-   build that migrated it is the one to match (check `go list -m
-   github.com/steveyegge/beads@main` for the current tip pseudo-version, or
-   the latest tag with `go list -m -versions github.com/steveyegge/beads`).
+1. **Identify what the installed binary actually is** — `bd --version` is not
+   enough. A dev build shows the same version string as a published tag but may
+   be commits ahead. `(dev)` in the version string is a red flag. Use:
+   ```bash
+   go version -m "$(which bd)"
+   # Look for the `mod` line — a pseudo-version
+   # (v1.x.x-0.YYYYMMDDHHMMSS-<hash>) means it was built from an untagged commit.
+   ```
+   Then find the target (the version that migrated the DB) by checking `go version -m`
+   on the binary that triggered the migration, or the latest tag/pseudo-version:
+   ```bash
+   go list -m -versions github.com/steveyegge/beads   # tagged releases
+   go list -m github.com/steveyegge/beads@main         # main-tip pseudo-version
+   ```
 2. Reinstall bd from source at that version:
    ```bash
    go install github.com/steveyegge/beads/cmd/bd@main   # or @vX.Y.Z
@@ -366,6 +380,11 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
 7. **Disable hooks in repos where beads is unused.** An empty beads repo (no
    issues, no JSONL, no remote) with active hooks is a net liability. Detect with
    `bd list` and `bd dolt show`; disable as shown above.
+8. **`bd --version` lies when the binary is a dev build.** A binary built from
+   local source shows the same version string as the published tag it was branched
+   from, but may be many commits — and schema migrations — ahead. `(dev)` in the
+   output is a red flag. Always verify with `go version -m "$(which bd)"` and
+   compare the `mod` pseudo-version hash across all machines sharing a database.
 
 ## Manual Verification Snippet
 
