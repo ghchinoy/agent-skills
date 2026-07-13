@@ -53,6 +53,9 @@ Validates the artist.json metadata contract, copies files, compiles TypeScript/V
 ### ✍️ Technical Post Editorial (`technical-post-editorial`)
 Edit technical blog posts to remove AI writing patterns and preserve human voice. Targets developer-facing posts, migration guides, and engineering write-ups — tightening structure, eliminating hedging language, and keeping the author's original tone intact. Use when reviewing or polishing a technical blog post draft.
 
+### 📄 Make README (`make-readme`)
+Create, assess, and improve `README.md` files for public GitHub projects. Scores an existing README against a weighted quality rubric based on Mark Allen's ["How to Write a Great README for Your Public GitHub Project"](https://www.markcallen.com/how-to-write-a-great-readme-for-your-public-github-project/), gives targeted section-by-section fixes, and can separately check strict, pass/fail [standard-readme](https://github.com/RichardLitt/standard-readme) spec compliance on request. Use when asked to write a README, grade one, improve one, or check standard-readme compliance.
+
 ---
 
 ## Installing via the Open Agent Skills CLI (`npx skills`)
