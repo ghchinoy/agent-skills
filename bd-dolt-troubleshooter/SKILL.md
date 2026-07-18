@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, orphaned dolt sql-server process leaks, and schema version skew in BOTH directions — a newer bd client refusing to auto-apply migrations to a remote-backed database, AND an older client stranded behind a database another agent/machine already migrated forward (bd doctor reports "database is at vX, binary knows up to vY (N migrations ahead)" and writes fail with "Field 'id' doesn't have a default value"). Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, you see Dolt backup/sync errors, a watcher/agent fails with "refusing to auto-apply N pending schema migrations", or bd writes fail after a colleague/agent upgraded the shared database.
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, orphaned dolt sql-server process leaks, and schema version skew in BOTH directions — a newer bd client refusing to auto-apply migrations to a remote-backed database, AND an older client stranded behind a database another agent/machine already migrated forward (bd doctor reports "database is at vX, binary knows up to vY (N migrations ahead)" and writes fail with "Field 'id' doesn't have a default value"). Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, you see Dolt backup/sync errors, a watcher/agent fails with "refusing to auto-apply N pending schema migrations", `bd migrate --force` fails with "pending schema migrations alter pre-existing dirty tables" (a chicken-and-egg trap where the suggested `bd dolt commit` fix hits the same gate and requires a raw `dolt` CLI workaround), or bd writes fail after a colleague/agent upgraded the shared database.
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.5"
+  version: "1.6"
 ---
 
 # bd / Dolt Troubleshooter
@@ -181,14 +181,31 @@ The old server (the running `dolt sql-server`) continues serving the old schema.
 Any client querying for columns from the new schema (like `content_hash`) gets
 SQL errors on every poll.
 
+**Before touching anything, take a filesystem-level backup.** During an active
+skew, `bd`'s own safety nets are unreliable: `bd export --all` frequently hits
+the *same* missing-column error as `bd list` (it doesn't go through the gate,
+it just runs the failing query), and `bd vc status` / `bd dolt commit` hit the
+gate itself (see the dirty-working-set trap below). Don't trust either as a
+pre-migration backup:
+```bash
+cp -R .beads/dolt /tmp/bd-raw-snapshot-$(date +%Y%m%d-%H%M%S)
+```
+
 **Fix — apply once on primary, push, then pull on all clones:**
 
 ```bash
 # 1. On the machine with the running bd server (primary):
-#    BD_ALLOW_REMOTE_MIGRATE=1 is REQUIRED. Without it, bd migrate schema
-#    silently no-ops — the gate fires first and reports "Schema already at vX"
-#    even though it hasn't applied anything.
-BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema   # applies vX → vY
+#    The exact gate-bypass flag/subcommand has moved between bd versions —
+#    check `bd migrate --help` for your build. As of bd 1.1.x it's a
+#    top-level flag: `bd migrate --force` (equivalent to setting
+#    BD_ALLOW_REMOTE_MIGRATE=1). Older builds instead required
+#    `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema`. Without one of these,
+#    the gate fires first and reports "Schema already at vX" even though
+#    nothing was applied. Note `--force` cannot be combined with `--dry-run`
+#    (opening the store with the gate overridden applies the migration
+#    before any preview could run).
+bd migrate --force                            # applies vX → vY (bd 1.1.x+)
+# BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema # equivalent on older builds
 bd migrate --inspect       # confirm Schema Version is now vY
 bd dolt push               # push migrated schema + data to remote
 
@@ -199,11 +216,56 @@ bd dolt pull               # pull the migrated schema from remote
 #    It will now open successfully at the new schema version.
 ```
 
+**Trap: migration blocked by a dirty working set (chicken-and-egg with `bd
+dolt commit`).** If the `issues` table (or any table) has uncommitted Dolt
+changes, `bd migrate --force` fails instead of migrating:
+```
+Error: failed to open database: failed to initialize schema: schema
+migration: pending schema migrations alter pre-existing dirty tables: issues;
+run 'bd dolt commit' to commit the working set at the current schema, then
+re-run the migration (gastownhall/beads#4566)
+```
+The suggested fix doesn't work as stated: `bd dolt commit` *also* opens the
+database through the same gated path and fails with the identical "refusing
+to auto-apply" gate error — it can't get past the gate to do the very commit
+it's telling you to do. `BD_ALLOW_REMOTE_MIGRATE=1 bd dolt commit` hits the
+exact same wall.
+
+**Workaround — commit the working set with the raw `dolt` CLI, bypassing bd's
+schema gate entirely.** This talks straight to the already-running
+`dolt sql-server` (bd's Go-level gate lives in the `bd` binary, not the
+server), so it isn't subject to the check:
+```bash
+# 1. Confirm what's dirty and that it's a DATA change, not a schema change
+#    (a dirty schema change here would mean something already touched the
+#    table structure outside a migration — investigate before committing).
+dolt --data-dir .beads/dolt sql -q "use <dolt_database>; select * from dolt_status"
+dolt --data-dir .beads/dolt sql -q \
+  "use <dolt_database>; select * from dolt_diff_summary('HEAD','WORKING','<table>')"
+#    schema_change must be 0 to proceed safely.
+
+# 2. Commit the working set at the CURRENT (pre-migration) schema
+dolt --data-dir .beads/dolt sql -q \
+  "use <dolt_database>; CALL DOLT_COMMIT('-a', '-m', 'chore(bd): commit working set before schema migration');"
+
+# 3. Verify clean, then retry the bd migration
+dolt --data-dir .beads/dolt sql -q "use <dolt_database>; select * from dolt_status"  # empty
+bd migrate --force
+```
+`<dolt_database>` is the name from `bd dolt show` (`Database:` field), e.g.
+`eldamo_server`. Find it and the data dir with `bd dolt show`; the data dir is
+almost always `.beads/dolt` in server mode.
+
 **Verify the migration landed:**
 ```bash
 bd migrate --inspect        # Schema Version should match the new bd binary version
 bd doctor                   # should pass schema checks
 ```
+
+**Note on the two version numbers you'll see:** `bd migrate --inspect` and the
+gate message use an internal migration counter (`v49 -> v54`); `bd doctor`
+reports a separate semantic-looking "Database: version 1.0.5 (CLI: 1.1.0)".
+These both describe the same skew — don't be thrown by the different scales.
 
 **Why the watcher error recurs every 30s:** The watcher is likely running a
 keep-alive or polling loop. Each iteration hits the missing-column SQL error and

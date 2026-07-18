@@ -216,11 +216,24 @@ error running query ... error="column "<col>" could not be found in any table in
 
 **Recovery:**
 
+0. **Back up first, and don't trust `bd export` to do it.** During active skew,
+   `bd export --all` typically fails with the same missing-column error `bd
+   list` does (it runs the failing query directly rather than hitting the
+   gate). Take a raw filesystem copy instead:
+   ```bash
+   cp -R .beads/dolt /tmp/bd-raw-snapshot-$(date +%Y%m%d-%H%M%S)
+   ```
+
 1. On the **primary** host (where the main bd server runs):
    ```bash
-   # BD_ALLOW_REMOTE_MIGRATE=1 is REQUIRED — without it, bd migrate schema
-   # silently no-ops because the gate fires first ("Schema already at vX").
-   BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema   # apply vX → vY
+   # The gate-bypass surface has moved between bd versions — check
+   # `bd migrate --help` for your build. bd 1.1.x: top-level flag
+   # `bd migrate --force` (equiv. to BD_ALLOW_REMOTE_MIGRATE=1). Older
+   # builds: `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema`. Without one of
+   # these the gate fires first and reports "Schema already at vX" even
+   # though nothing was applied. `--force` cannot combine with `--dry-run`.
+   bd migrate --force                            # apply vX → vY (bd 1.1.x+)
+   # BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema # equivalent on older builds
    bd migrate --inspect                           # confirm Schema Version is now vY
    bd dolt push                                   # push to remote
    ```
@@ -233,12 +246,38 @@ error running query ... error="column "<col>" could not be found in any table in
 3. Restart the watcher / newer-version bd client. The SQL errors stop and the
    client opens successfully.
 
-**If `bd migrate schema` itself fails** (the server is stuck or the schema is
-partially applied):
+**If migration fails with "pending schema migrations alter pre-existing dirty
+tables: `<table>`; run 'bd dolt commit' ..."** — a table has uncommitted Dolt
+changes. The suggested `bd dolt commit` does **not** work: it opens the
+database through the same gated path and fails with the identical "refusing
+to auto-apply" error (chicken-and-egg — `BD_ALLOW_REMOTE_MIGRATE=1 bd dolt
+commit` hits the same wall). Bypass bd entirely and commit via the raw `dolt`
+CLI talking directly to the already-running server:
+```bash
+# Get the database name from `bd dolt show` (Database: field)
+DB=<dolt_database>   # e.g. eldamo_server
+
+# 1. Confirm the dirty change is DATA-only, not a schema change
+dolt --data-dir .beads/dolt sql -q "use $DB; select * from dolt_status"
+dolt --data-dir .beads/dolt sql -q \
+  "use $DB; select * from dolt_diff_summary('HEAD','WORKING','<table>')"
+#    schema_change must be 0 — if it's 1, stop and investigate first.
+
+# 2. Commit the working set at the current (pre-migration) schema
+dolt --data-dir .beads/dolt sql -q \
+  "use $DB; CALL DOLT_COMMIT('-a', '-m', 'chore(bd): commit working set before schema migration');"
+
+# 3. Verify clean (empty result), then retry
+dolt --data-dir .beads/dolt sql -q "use $DB; select * from dolt_status"
+bd migrate --force
+```
+
+**If `bd migrate` itself fails for other reasons** (the server is stuck or the
+schema is partially applied):
 ```bash
 bd dolt stop
 bd dolt start
-BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema --verbose   # retry with detail
+bd migrate --force --verbose   # retry with detail
 ```
 
 **Upgrade order rule:** always migrate-and-push on the primary before updating
