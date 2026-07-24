@@ -307,50 +307,22 @@ binary can't read the newer schema).
 
 **Recovery — upgrade the stranded client to match the DB (never downgrade the DB):**
 
-1. **First: identify what the installed binary actually is.** `bd --version`
-   is not sufficient — a build from local source shows the same version string
-   as the published tag but may be commits ahead. Use the authoritative check:
+> **THE CLI RECOMMENDATION TRAP:** When `bd` encounters schema version skew, its terminal error output instructs you to run `CGO_ENABLED=0 go install ...@latest`. **Do NOT follow this advice.** Installing `@latest` fetches an older tagged release (e.g., `v1.1.0`) rather than the active `@main` development branch that migrated your database, leaving you stranded behind the schema. Furthermore, setting `CGO_ENABLED=0` cripples embedded database inspection engines, causing 15+ tests in `bd doctor` to degrade with `Skipped: requires CGO`.
+
+1. **Automated Restoration (Recommended):**
+   Execute the bundled restoration script from the skill directory. It automatically handles macOS/Linux ICU dependency discovery, compiles with `CGO_ENABLED=1` against `@main` (or a specified pseudo-version), and synchronizes all shadowed binary installations in your PATH:
    ```bash
-   go version -m "$(which bd)"
-   # Look for the `mod` line, e.g.:
-   #   mod  github.com/steveyegge/beads  v1.1.1-0.20260711070917-64a136d56e8a
-   # A pseudo-version (v1.x.x-0.YYYYMMDDHHMMSS-<hash>) means it was built
-   # from a commit not on any tag. "(dev)" in bd --version output is also a
-   # red flag that the binary came from a local source tree.
+   scripts/restore-bd.sh           # Rebuild against @main and sync PATH binaries
    ```
 
-2. Find the target version — the one that migrated the DB forward. Check all
-   agents/machines sharing the DB. If the migrating binary was a dev build,
-   its pseudo-version is the target:
-   ```bash
-   go list -m -versions github.com/steveyegge/beads   # tagged releases only
-   go list -m github.com/steveyegge/beads@main         # current main-tip pseudo-version
-   # Or read it directly from the binary that migrated:
-   go version -m /path/to/that/bd
-   ```
+2. **Manual Investigation & Compilation:**
+   For manual version inspection (`go version -m "$(which bd)"`) or custom package setup commands across macOS (Homebrew `icu4c`) and Linux distributions (`libicu-dev`, `icu-dev`, `pkg-config`), consult the comprehensive reference runbook:
+   * **See:** `references/cgo-and-schema-drift.md`
 
-3. Reinstall bd at that version. Recent bd needs ICU (CGO) and a newer Go
-   toolchain:
+3. **Verify + converge:**
    ```bash
-   ICU="$(brew --prefix icu4c)"        # or icu4c@<N>, e.g. icu4c@78
-   CGO_CFLAGS="-I$ICU/include" CGO_CPPFLAGS="-I$ICU/include" \
-   CGO_LDFLAGS="-L$ICU/lib" \
-     go install github.com/steveyegge/beads/cmd/bd@<version-or-pseudo-version>
-   ```
-   (Failure `fatal error: 'unicode/regex.h' file not found` = ICU flags not set.)
-
-4. Sync the PATH copy — `go install` writes `~/go/bin/bd`; if your PATH `bd`
-   is elsewhere (e.g. `~/.local/bin/bd`), copy it or you'll keep running the
-   old one:
-   ```bash
-   cp ~/go/bin/bd "$(which bd)" && hash -r
-   go version -m "$(which bd)"    # verify the module version, not just --version
-   ```
-
-5. Verify + converge:
-   ```bash
-   bd doctor                       # mismatch gone
-   bd update <id> --append-notes "skew fixed"   # a real write now succeeds
+   bd doctor                       # mismatch and 'Skipped: requires CGO' warnings resolved
+   bd update <id> --append-notes "skew fixed"   # real write succeeds against upgraded schema
    bd dolt push                    # if the new binary applied a pending migration
    ```
 
