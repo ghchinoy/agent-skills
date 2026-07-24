@@ -231,11 +231,14 @@ already migrated **forward**.
 
 **Symptom:**
 ```
-bd doctor
-  ⚠ ... schema version mismatch: database is at v53, binary knows up to v49
-    (4 migrations ahead)
+Warning: schema skew ignored — database (v54) is ahead of binary (v53); some queries may fail
 ```
-Reads mostly succeed (with the warning), but **every write fails**:
+or in `bd doctor`:
+```
+  ⚠ ... schema version mismatch: database is at v54, binary knows up to v53
+    (1 migrations ahead)
+```
+Reads mostly succeed (with the warning under `--ignore-schema-skew`), but **every write fails**:
 ```
 Error updating <id>: failed to record event: record event in events:
 Error 1105 (HY000): Field 'id' doesn't have a default value
@@ -286,8 +289,10 @@ apply — or write against — a v53 schema it doesn't know.
 3. **Sync every copy of the binary on your PATH.** `go install` writes to
    `~/go/bin`; if your PATH `bd` is elsewhere (e.g. `~/.local/bin/bd`), copy
    it: `cp ~/go/bin/bd ~/.local/bin/bd && hash -r`. A stale second copy is a
-   classic "I upgraded but it's still the old version" trap — verify with
-   `which bd && bd --version`.
+   classic "I upgraded but it's still the old version" trap — `bd` itself will
+   warn: `Warning: multiple 'bd' binaries found in PATH`. Verify all installed
+   copies and their Go git commit revisions using `scripts/inspect-binary.sh` or
+   manually via `which -a bd && go version -m "$(which bd)"`.
 4. Verify: `bd doctor` no longer reports the mismatch, and a real write
    (`bd update <id> --append-notes "..."`) succeeds. After the new binary
    applies any pending migration it may prompt `Run bd dolt push` — push so
@@ -332,11 +337,18 @@ scripts/diagnose.sh
 
 It checks, in order:
 - Engine mode and whether a `daemon-error` file is present
+- Schema version skew warnings and whether duplicate `bd` binaries shadow your PATH
 - Dolt server status and recent backup errors in the log
 - Whether `.beads/backup/` or `dolt-server.*` runtime files are git-**tracked**
   (they should not be)
 - Whether `bd show` (Dolt) agrees with `.beads/issues.jsonl` for a sample issue
 - Whether the backup `manifest` references missing table files
+
+To inspect git commit revision hashes across all installed `bd` client binaries:
+
+```bash
+scripts/inspect-binary.sh
+```
 
 ## Repair
 
@@ -433,3 +445,5 @@ project `AGENTS.md`.
   multi-server lock contention in Case F)
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`
+- `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,
+  extract Go build metadata (pseudo-versions, timestamps, git commits), and detect PATH shadowing

@@ -65,13 +65,13 @@ else
 fi
 
 info "0b. Schema version skew (client binary vs database)"
-SKEW=$(bd doctor 2>&1 | grep -i "schema version mismatch" | head -1 || true)
+SKEW=$(bd doctor 2>&1 | grep -i -E "schema version mismatch|schema skew" | head -1 || true)
 if [ -n "$SKEW" ]; then
   red "    PROBLEM: schema version skew detected:"
   printf "      %s\n" "$SKEW"
-  if echo "$SKEW" | grep -qi "binary knows up to"; then
+  if echo "$SKEW" | grep -qi -E "binary knows up to|is ahead of binary"; then
     red "    Your bd binary is BEHIND the database (another agent/machine migrated it forward)."
-    red "    Reads warn; writes FAIL (\"Field 'id' doesn't have a default value\")."
+    red "    Reads warn; writes FAIL (\"Field 'id' doesn't have a default value\" or unexpected schema errors)."
     red "    Fix: UPGRADE the client to match — go install github.com/steveyegge/beads/cmd/bd@main"
     red "         (CGO/ICU + PATH-copy caveats: SKILL.md 'Client BEHIND the Database')."
     red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
@@ -81,6 +81,28 @@ if [ -n "$SKEW" ]; then
   ISSUES=$((ISSUES+1))
 else
   green "    No schema version skew (client and database agree)."
+fi
+
+info "0c. Client binary & PATH shadowing check"
+PATH_BINS=$(which -a bd 2>/dev/null | sort -u || true)
+BIN_COUNT=$(echo "$PATH_BINS" | grep -c . || echo 0)
+ACTIVE_BIN=$(which bd 2>/dev/null || true)
+if [ "$BIN_COUNT" -gt 1 ]; then
+  red "    PROBLEM: Multiple 'bd' binaries found in PATH ($BIN_COUNT installed):"
+  for bin in $PATH_BINS; do
+    if [ "$bin" = "$ACTIVE_BIN" ]; then
+      echo "      * $bin (ACTIVE)"
+    else
+      echo "        $bin (shadowed)"
+    fi
+  done
+  red "    Upgrade hazard: Running 'go install' installs to ~/go/bin/bd, but an older active copy in ~/.local/bin/bd"
+  red "    or /usr/local/bin/bd will shadow it, causing schema skew errors to persist after upgrading."
+  red "    Fix: Sync or remove duplicates — cp ~/go/bin/bd \"$ACTIVE_BIN\" && hash -r"
+  red "    Tip: Run scripts/inspect-binary.sh to inspect git commit revisions across all installed binaries."
+  ISSUES=$((ISSUES+1))
+else
+  green "    Single bd binary found in PATH ($ACTIVE_BIN). Good."
 fi
 
 info "1. Dolt server status"
