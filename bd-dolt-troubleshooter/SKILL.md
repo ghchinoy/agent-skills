@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, orphaned dolt sql-server process leaks, and schema version skew in BOTH directions — a newer bd client refusing to auto-apply migrations to a remote-backed database, AND an older client stranded behind a database another agent/machine already migrated forward (bd doctor reports "database is at vX, binary knows up to vY (N migrations ahead)" and writes fail with "Field 'id' doesn't have a default value"). Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, you see Dolt backup/sync errors, a watcher/agent fails with "refusing to auto-apply N pending schema migrations", `bd migrate --force` fails with "pending schema migrations alter pre-existing dirty tables" (a chicken-and-egg trap where the suggested `bd dolt commit` fix hits the same gate and requires a raw `dolt` CLI workaround), or bd writes fail after a colleague/agent upgraded the shared database.
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches (embedded vs server), database name incompatibilities, DATABASE MISMATCH repo-ID errors, the "auto-backup failed / table file not found" corruption that silently reverts writes, lock contention from multiple `dolt sql-server` processes (across projects or host/container), the hook-timeout stash-wipe that destroys untracked files on commit, orphaned dolt sql-server process leaks, and schema version skew in BOTH directions — a newer bd client refusing to auto-apply migrations to a remote-backed database, AND an older client stranded behind a database another agent/machine already migrated forward (bd doctor reports "database is at vX, binary knows up to vY (N migrations ahead)" and writes fail with "Field 'id' doesn't have a default value") — including the case where the client is ALREADY the latest tagged release and the standard "upgrade to @latest" fix is a no-op because an unreleased/main-branch build (not a tag) is what migrated the shared database forward. Use when bd won't start, a daemon-error file is present, bd updates don't persist, issues.jsonl is out of sync with bd show output, untracked files vanish after a commit, you see lock errors/connection issues, you see Dolt backup/sync errors, a watcher/agent fails with "refusing to auto-apply N pending schema migrations", `bd migrate --force` fails with "pending schema migrations alter pre-existing dirty tables" (a chicken-and-egg trap where the suggested `bd dolt commit` fix hits the same gate and requires a raw `dolt` CLI workaround), or bd writes fail after a colleague/agent upgraded the shared database.
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.6"
+  version: "1.7"
 ---
 
 # bd / Dolt Troubleshooter
@@ -370,6 +370,108 @@ MUST run compatible bd binaries. Before an agent migrates a shared DB forward,
 confirm the others can be upgraded to match; otherwise you strand them. A
 session preflight of `bd doctor` catches the skew before you rely on writes.
 
+### Preflight: confirm a newer *release* actually exists before upgrading
+
+The fix above assumes `go install …@latest` gets you a binary that knows the
+DB's schema version. **Verify this before running it** — if the DB was
+migrated forward by someone running an unreleased/branch build (the case
+below), `@latest` resolves to the same old tag you already have and changes
+nothing:
+
+```bash
+go list -m -versions github.com/steveyegge/beads   # highest tagged release
+go list -m github.com/steveyegge/beads@main         # main-tip pseudo-version
+```
+
+Compare the two. Pseudo-versions sort as `vX.Y.Z-0.<timestamp>-<hash>`; if the
+`@main` pseudo-version's base (`vX.Y.Z`) is *lower than or equal to* the
+highest tag, `main` has not yet been released — a plain `@latest` install
+will **not** advance your schema knowledge past the tag's max version. If
+your binary is already on the latest tag and the DB is still ahead, skip
+straight to the next section.
+
+---
+
+## Schema Version Skew — DB Migrated by an Unreleased Build (no newer release exists)
+
+This is a variant of "Client BEHIND the Database" above, but the standard fix
+(upgrade to `@latest`) is a no-op: **you already have the latest tagged
+release, and the database is still ahead of it.** This happens when another
+agent, teammate, or CI job ran a `bd` built from `main` (or a feature branch)
+that contains migrations not yet in any tag, and that binary auto-migrated
+the shared DB forward.
+
+**Symptom:** identical to the standard case (`bd doctor` reports "database is
+at vN, binary knows up to vM"), but the preflight above shows no newer
+release exists — `@main`'s pseudo-version does not exceed your current tag.
+
+**Confirm it conclusively — don't guess.** Match the DB's applied migrations
+against a fresh clone of `main` by content hash, not just version number
+(version numbers alone don't prove the *content* came from `main` rather
+than, say, a different fork):
+
+```bash
+# 1. Get the DB's applied migration ledger (versions + content hashes)
+dolt --data-dir .beads/dolt sql -q \
+  "use <dolt_database>; select * from schema_migrations order by version desc limit 15;"
+
+# 2. Clone the source and list the highest migration files it ships
+git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/bd-src-check
+ls /tmp/bd-src-check/internal/storage/schema/migrations/*.up.sql | xargs -n1 basename | sort -t_ -k1 -n | tail -10
+
+# 3. For each migration version present in the DB but missing from your
+#    installed binary's release tag, sha256 the corresponding file on main
+#    and compare to the DB's content_hash for that version:
+shasum -a 256 /tmp/bd-src-check/internal/storage/schema/migrations/00NN_*.up.sql
+```
+
+A byte-identical `content_hash` match against `main`'s migration files
+proves the DB was walked forward by a `main`-derived binary — not corruption,
+not a different fork, not a hand-edited ledger. Tell-tale new tables in
+`show tables` (e.g. `leases` as a standalone table, `wisp_*` variants, a
+`federation_peers` table) are a fast first signal that recent, unreleased
+feature work touched the schema before you dig into hashes.
+
+**Fix — install the exact commit that owns the migrations, not `@latest`:**
+
+```bash
+# Identify the commit: match the migration content hash to a specific commit,
+# or use the latest main HEAD if you have no other lead.
+git -C /tmp/bd-src-check log -1 --format="%H %ci %s"
+
+# Pin to that commit (reproducible) rather than a moving `@main` target —
+# especially important for a database other agents/machines will keep
+# migrating; a floating @main pin means your schema cap can silently drift
+# again on the next `go install`.
+CGO_ENABLED=0 go install -tags gms_pure_go \
+  github.com/steveyegge/beads/cmd/bd@<full-commit-hash>
+
+# Sync every PATH copy (see the shadowed-binary trap above), then verify:
+cp ~/go/bin/bd "$(command -v bd)" && hash -r
+bd doctor        # schema skew warning should be gone
+bd update <id> --append-notes "verify write path"   # real write must succeed
+```
+
+**Note on `CGO_ENABLED=0 -tags gms_pure_go`:** this sidesteps the ICU/CGO
+build requirement (SKILL.md's CGO/ICU gotcha above) at the cost of disabling
+several `bd doctor` checks that need CGO (`Dolt Locks`, `Orphaned
+Dependencies`, `Duplicate Issues`, and others report "Skipped: requires
+CGO"). This is an acceptable tradeoff to unblock writes; if those checks
+matter, build with CGO and the ICU headers instead.
+
+**Why this is a distinct case from the standard fix:** the standard fix's
+entire premise is "install the newer release." When no newer release exists,
+the stranded client isn't behind an upstream *version* — it's behind an
+upstream *commit* that was never tagged. Treating this as "just run
+`@latest`" wastes a cycle reinstalling the same binary and produces the
+confusing symptom of the skew warning persisting after an "upgrade."
+
+**Prevention:** in any multi-agent setup where agents may run bd built from
+`main` or feature branches (not just tagged releases), a session preflight
+should compare *commit*, not just semantic version — `go version -m` on every
+active binary — since two binaries can report the same `bd --version` string
+while being schema-incompatible dev builds from different points on `main`.
+
 ---
 
 ## Quick Diagnosis
@@ -459,6 +561,20 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
    from, but may be many commits — and schema migrations — ahead. `(dev)` in the
    output is a red flag. Always verify with `go version -m "$(which bd)"` and
    compare the `mod` pseudo-version hash across all machines sharing a database.
+9. **"Upgrade to latest" assumes a newer release exists — verify first.** Before
+   prescribing `go install …@latest` for a schema-skew fix, run
+   `go list -m -versions github.com/steveyegge/beads` and compare against the
+   installed tag. If you're already on the latest tag and the DB is still ahead,
+   the DB was migrated by an unreleased/`main` build — you need that specific
+   commit (`go install …@<commit>`), not a repeat of the same tag.
+10. **A repo-fingerprint mismatch after adding a remote late is expected, not
+    corruption.** `bd init` computes `repo_id` from `git config remote.origin.url`
+    when available, falling back to `sha256(realpath(repo_root))` when no remote
+    is configured yet. If you `bd init` before running `git remote add origin`,
+    the stored fingerprint is path-based; once a remote exists, `bd doctor`'s live
+    check recomputes a URL-based fingerprint and the two will never match. Fix
+    with `bd migrate --update-repo-id` (only if you're sure no other clone depends
+    on the old ID) rather than `rm -rf .beads && bd init`.
 
 ## Manual Verification Snippet
 
