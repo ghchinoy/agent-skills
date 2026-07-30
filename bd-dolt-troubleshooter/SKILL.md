@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.7"
+  version: "1.8"
 ---
 
 # bd / Dolt Troubleshooter
@@ -348,13 +348,14 @@ apply — or write against — a v53 schema it doesn't know.
    ```
    Recent bd also requires a newer Go toolchain (it auto-switches, e.g. to
    go1.26.x, if `go >= 1.26.2` is declared).
-3. **Sync every copy of the binary on your PATH.** `go install` writes to
-   `~/go/bin`; if your PATH `bd` is elsewhere (e.g. `~/.local/bin/bd`), copy
-   it: `cp ~/go/bin/bd ~/.local/bin/bd && hash -r`. A stale second copy is a
-   classic "I upgraded but it's still the old version" trap — `bd` itself will
-   warn: `Warning: multiple 'bd' binaries found in PATH`. Verify all installed
-   copies and their Go git commit revisions using `scripts/inspect-binary.sh` or
-   manually via `which -a bd && go version -m "$(which bd)"`.
+3. **Sync or link every copy of the binary on your PATH.** `go install` writes to
+   `~/go/bin`; if your active PATH `bd` is elsewhere (e.g. `~/.local/bin/bd`),
+   replace the shadowed copy with a symlink (`ln -sf ~/go/bin/bd ~/.local/bin/bd && hash -r`)
+   or remove it if `~/go/bin` is already in PATH (`rm ~/.local/bin/bd && hash -r`).
+   Using a symlink permanently prevents the upgrade trap where subsequent `go install`
+   commands leave the active binary stale. A stale second copy is a classic "I upgraded
+   but it's still the old version" trap — `bd` itself will warn: `Warning: multiple 'bd' binaries found in PATH`.
+   Verify all installed copies using `scripts/inspect-binary.sh` or manually via `which -a bd && go version -m "$(which bd)"`.
 4. Verify: `bd doctor` no longer reports the mismatch, and a real write
    (`bd update <id> --append-notes "..."`) succeeds. After the new binary
    applies any pending migration it may prompt `Run bd dolt push` — push so
@@ -573,8 +574,13 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
     is configured yet. If you `bd init` before running `git remote add origin`,
     the stored fingerprint is path-based; once a remote exists, `bd doctor`'s live
     check recomputes a URL-based fingerprint and the two will never match. Fix
-    with `bd migrate --update-repo-id` (only if you're sure no other clone depends
+    with `echo y | bd migrate --update-repo-id` (only if you're sure no other clone depends
     on the old ID) rather than `rm -rf .beads && bd init`.
+11. **Use non-interactive flags when repairing in autonomous/agent environments.**
+    Interactive prompts will time out or cancel in non-interactive agent sessions:
+    - `bd doctor --fix --yes` (auto-applies all fixable doctor issues)
+    - `echo y | bd migrate --update-repo-id` (bypasses interactive confirmation for repo ID updates)
+    - `bd migrate --force` / `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate` (overrides remote schema gate on designated migrator)
 
 ## Manual Verification Snippet
 

@@ -66,6 +66,9 @@ for bin in $CANDIDATES; do
   
   # File metadata
   ls -lh "$bin" 2>/dev/null || true
+  if [ -L "$bin" ]; then
+    cyan "  Symlink Target: $(readlink "$bin")"
+  fi
   
   # Check go build metadata
   if command -v go >/dev/null 2>&1; then
@@ -103,10 +106,12 @@ if [ "$COUNT" -gt 1 ]; then
     yellow "  Upgrade Trap Detected:"
     yellow "  Your active binary ($ACTIVE_BIN) takes precedence over ~/go/bin/bd in your PATH."
     yellow "  When you execute 'go install github.com/steveyegge/beads/cmd/bd@main', the updated"
-    yellow "  binary lands in ~/go/bin/bd, leaving your old binary active."
+    yellow "  binary lands in ~/go/bin/bd, leaving your active binary stale."
     printf "\n"
-    bold "  To synchronize your active binary with the latest Go install, run:"
-    green "    cp ~/go/bin/bd \"$ACTIVE_BIN\" && hash -r"
+    bold "  To permanently fix this so 'go install' auto-updates your active binary:"
+    green "    ln -sf \"$HOME/go/bin/bd\" \"$ACTIVE_BIN\" && hash -r"
+    bold "  Or if ~/go/bin is already in your PATH, remove the shadowed copy:"
+    green "    rm \"$ACTIVE_BIN\" && hash -r"
   fi
   printf "\n"
   yellow "  Multi-Agent Rule: When multiple machines or autonomous agents access the same Dolt"
