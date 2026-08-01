@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Agent Plugins and Skills Validator (Portable Version)
 # Validates conformance with Agent Plugins Specification v1.0.0 and Agent Skills spec.
+#
+# Canonical Specifications:
+#   - Agent Plugins Specification v1.0.0: https://github.com/agentplugins/agent-plugins-spec
+#   - Agent Skills Specification: https://agentskills.io/specification.md
+#   - Note: Reference validator (skills-ref) is marked for demonstration purposes and validates
+#     skills only; this validator covers both Agent Plugins manifests and Agent Skills metadata.
 
 set -euo pipefail
 

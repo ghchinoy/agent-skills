@@ -22,8 +22,8 @@ This playbook outlines the recommended step-by-step sequence for converting an e
 3. Execute renames using `git mv <skill-name> plugins/<plugin-name>/skills/<skill-name>`.
 
 ## Phase 3: Add Plugin Manifests & Marketplace Index
-1. Create `plugins/<plugin-name>/plugin.json` for each plugin, specifying `$schema`, `name`, `version`, `description`, `author`, `repository`, and `license`.
-2. If the plugin provides or configures MCP servers, create `plugins/<plugin-name>/mcp.json` with matching `$schema` version.
+1. Create `plugins/<plugin-name>/plugin.json` for each plugin, specifying `$schema` (`https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`), `name`, `version`, `description`, `author`, `repository`, and `license` per [Agent Plugins §5](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md#5-manifest).
+2. If the plugin provides or configures MCP servers, create `plugins/<plugin-name>/mcp.json` with matching `$schema` version (`https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`) per [Agent Plugins §7.2](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md#72-mcp-servers).
 3. Create `.claude-plugin/marketplace.json` at the repo root to provide a deterministic index for `npx skills` and Claude Code.
 
 ## Phase 4: Validation & Automation

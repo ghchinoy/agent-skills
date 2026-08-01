@@ -5,12 +5,18 @@ license: Apache-2.0
 compatibility: Requires git, python3, and POSIX shell.
 metadata:
   author: ghchinoy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Skills to Plugins (`skills-to-plugins`)
 
-This skill provides an expert workflow for **migrating** legacy flat skills repositories into [Agent Plugins v1.0.0 Specification](https://agent-plugins.org/schemas/1.0.0/plugin.schema.json) packages, **authoring** new plugins from scratch, and **linting** plugins for ongoing spec conformance.
+This skill provides an expert workflow for **migrating** legacy flat skills repositories into [Agent Plugins v1.0.0 Specification](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md) packages, **authoring** new plugins from scratch, and **linting** plugins for ongoing spec conformance.
+
+## Canonical Specifications
+
+- **Agent Plugins Specification:** [agentplugins/agent-plugins-spec](https://github.com/agentplugins/agent-plugins-spec) (Normative Text: [spec/1.0.0.md](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md))
+- **Agent Skills Specification:** [agentskills.io/specification.md](https://agentskills.io/specification.md)
+- **Reference Summary:** See [`references/spec-summary.md`](references/spec-summary.md) for a condensed lookup table of normative rules and schema boundaries.
 
 ## Reference & Asset Files (Progressive Disclosure)
 
@@ -76,3 +82,4 @@ Verify ongoing spec compliance for CI/CD or local pre-commit checks.
 1. **Strict Containment (§4.1):** Symlinks or relative paths escaping the plugin root violate spec §4.1 containment. Never create symlink farms pointing outside a plugin.
 2. **Cross-Skill Coupling Detection:** Parent-relative links (`../`) inside `SKILL.md` indicate co-dependent skills that MUST be packaged together inside the same plugin root so links resolve legally.
 3. **Phase Ordering:** Always resolve frontmatter and license debt *before* running `git mv` so history records clean directory renames without noisy content diffs.
+4. **Canonical Spec Verification:** Always verify specification questions against canonical sources ([agentplugins/agent-plugins-spec](https://github.com/agentplugins/agent-plugins-spec) and [agentskills.io/specification.md](https://agentskills.io/specification.md)) rather than relying solely on local summary distillations.

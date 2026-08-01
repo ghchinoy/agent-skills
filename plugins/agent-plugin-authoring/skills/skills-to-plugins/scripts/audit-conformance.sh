@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Read-Only Conformance Debt Auditor for Agent Skills & Plugins
 # Scans a repository and reports conformance debt without making modifications.
+#
+# Canonical Specifications:
+#   - Agent Plugins Specification v1.0.0: https://github.com/agentplugins/agent-plugins-spec
+#   - Agent Skills Specification: https://agentskills.io/specification.md
+#   - Note: Reference validator (skills-ref) is marked for demonstration purposes and validates
+#     skills only; this script provides custom automated debt analysis for plugin migrations.
 
 set -euo pipefail
 

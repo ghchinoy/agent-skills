@@ -1,6 +1,6 @@
 # Conformance Debt Catalog
 
-This catalog documents common conformance anti-patterns found in legacy skills repositories and their exact resolution under the Agent Plugins v1.0.0 and Agent Skills specifications.
+This catalog documents common conformance anti-patterns found in legacy skills repositories and their exact resolution under the [Agent Plugins Specification v1.0.0](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md) and [Agent Skills Specification](https://agentskills.io/specification.md).
 
 | Anti-Pattern / Debt Item | Spec Impact | Root Cause | Resolution |
 |---|---|---|---|
