@@ -4,8 +4,8 @@ GCP & Firebase Portfolio Audit Script
 
 Performs parallelized, strictly READ-ONLY discovery across Google Cloud and Firebase projects:
 - Project & Billing account status
+- Week-over-Week Spend Velocity & Trend Analysis (via BigQuery Billing Export)
 - Billing Budgets & Threshold Alert configurations
-- Itemized spend & service cost analysis via BigQuery Billing Export (if available)
 - Compute Engine VMs, Persistent Disks, Cloud Run, App Engine, Cloud Functions, GCS Buckets, Static IPs
 - 30-day Cloud Logging HTTP/API traffic detection
 - Firebase Services (Firestore DBs, Registered Apps, Hosting Domains)
@@ -56,6 +56,36 @@ def query_bigquery_billing():
     gross_cost_usd > 0 OR net_cost_usd > 0
   ORDER BY
     net_cost_usd DESC
+  """
+  try:
+    out = subprocess.check_output(
+        ['bq', 'query', '--use_legacy_sql=false', '--format=json', sql],
+        stderr=subprocess.DEVNULL,
+        timeout=20,
+    ).decode('utf-8')
+    return json.loads(out)
+  except Exception:
+    return []
+
+
+def query_bigquery_trends():
+  """Queries Week-over-Week spend velocity (last 7 days vs previous 7 days) for high-cost projects."""
+  sql = """
+  SELECT
+    IFNULL(project.id, "Shared / Unassigned") AS project_id,
+    service.description AS service_description,
+    ROUND(SUM(CASE WHEN _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) THEN cost ELSE 0 END), 2) AS cost_last_7d,
+    ROUND(SUM(CASE WHEN _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 14 DAY) AND _PARTITIONTIME < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) THEN cost ELSE 0 END), 2) AS cost_prev_7d
+  FROM
+    `simple-node-001.billingexport.gcp_billing_export_v1_00615D_35664D_BF0DF0`
+  WHERE
+    _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 14 DAY)
+  GROUP BY
+    project_id, service_description
+  HAVING
+    cost_last_7d > 0 OR cost_prev_7d > 0
+  ORDER BY
+    cost_last_7d DESC
   """
   try:
     out = subprocess.check_output(
@@ -337,9 +367,11 @@ def main():
         billing_budgets[acc_id] = {'accountName': acc_name, 'budgets': b_list}
 
   print(
-      '[3/5] Querying BigQuery Billing Export for itemized spend (READ-ONLY)...'
+      '[3/5] Querying BigQuery Billing Export for itemized spend & spend'
+      ' trends...'
   )
-  billing_export_data = query_bigquery_billing()
+  billing_export_spend = query_bigquery_billing()
+  billing_export_trends = query_bigquery_trends()
 
   print('[4/5] Concurrently scanning resources across projects (READ-ONLY)...')
   results = []
@@ -355,7 +387,8 @@ def main():
       'timestamp': datetime.now(timezone.utc).isoformat(),
       'projects': results,
       'billing_budgets': billing_budgets,
-      'billing_export_spend': billing_export_data,
+      'billing_export_spend': billing_export_spend,
+      'billing_export_trends': billing_export_trends,
   }
 
   print(f'[5/5] Writing audit data to {args.output}...')
