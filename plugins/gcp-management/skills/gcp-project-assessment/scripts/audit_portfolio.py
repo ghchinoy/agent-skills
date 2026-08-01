@@ -4,6 +4,7 @@ GCP & Firebase Portfolio Audit Script
 
 Performs parallelized, strictly READ-ONLY discovery across Google Cloud and Firebase projects:
 - Project & Billing account status
+- Billing Budgets & Threshold Alert configurations
 - Itemized spend & service cost analysis via BigQuery Billing Export (if available)
 - Compute Engine VMs, Persistent Disks, Cloud Run, App Engine, Cloud Functions, GCS Buckets, Static IPs
 - 30-day Cloud Logging HTTP/API traffic detection
@@ -78,6 +79,30 @@ def get_billing_accounts():
       )
       for a in accs
   }
+
+
+def get_billing_budgets(billing_acc_id):
+  """Queries configured billing budgets and threshold alerts for a billing account."""
+  raw = run_cmd([
+      'gcloud',
+      'billing',
+      'budgets',
+      'list',
+      f'--billing-account={billing_acc_id}',
+      '--billing-project=generative-bazaar-001',
+      '--format=json',
+  ])
+  if not isinstance(raw, list):
+    return []
+  budgets = []
+  for b in raw:
+    budgets.append({
+        'displayName': b.get('displayName'),
+        'amount': b.get('amount', {}),
+        'filter': b.get('budgetFilter', {}),
+        'thresholds': b.get('thresholdRules', []),
+    })
+  return budgets
 
 
 def describe_project_billing(pid, billing_accs):
@@ -294,7 +319,7 @@ def main():
       '%Y-%m-%dT%H:%M:%SZ'
   )
 
-  print('[1/4] Fetching GCP projects and billing accounts...')
+  print('[1/5] Fetching GCP projects and billing accounts...')
   projects = run_cmd(['gcloud', 'projects', 'list', '--format=json'])
   if not projects:
     print('Error: Could not retrieve gcloud projects list.', file=sys.stderr)
@@ -303,19 +328,20 @@ def main():
   billing_accs = get_billing_accounts()
   print(f'Discovered {len(projects)} total projects.')
 
+  print('[2/5] Inspecting Billing Budgets & Alerts across Billing Accounts...')
+  billing_budgets = {}
+  for acc_id, (acc_name, is_open) in billing_accs.items():
+    if is_open:
+      b_list = get_billing_budgets(acc_id)
+      if b_list:
+        billing_budgets[acc_id] = {'accountName': acc_name, 'budgets': b_list}
+
   print(
-      '[2/4] Querying BigQuery Billing Export for itemized spend (READ-ONLY)...'
+      '[3/5] Querying BigQuery Billing Export for itemized spend (READ-ONLY)...'
   )
   billing_export_data = query_bigquery_billing()
-  if billing_export_data:
-    print(
-        f'Retrieved {len(billing_export_data)} itemized service spend records'
-        ' from BigQuery.'
-    )
-  else:
-    print('BigQuery billing export dataset not found or unavailable.')
 
-  print('[3/4] Concurrently scanning resources across projects (READ-ONLY)...')
+  print('[4/5] Concurrently scanning resources across projects (READ-ONLY)...')
   results = []
   with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
     futures = [
@@ -328,26 +354,22 @@ def main():
   output_data = {
       'timestamp': datetime.now(timezone.utc).isoformat(),
       'projects': results,
+      'billing_budgets': billing_budgets,
       'billing_export_spend': billing_export_data,
   }
 
-  print(f'[4/4] Writing audit data to {args.output}...')
+  print(f'[5/5] Writing audit data to {args.output}...')
   with open(args.output, 'w') as f:
     json.dump(output_data, f, indent=2)
 
   enabled_count = sum(1 for r in results if r['billingEnabled'])
   active_traffic = sum(1 for r in results if r['http_requests_30d'] > 0)
-  running_vms = sum(
-      len([v for v in r['compute_vms'] if v['status'] == 'RUNNING'])
-      for r in results
-  )
 
   print('\n=== GCP & Firebase Audit Summary ===')
   print(f'Total Projects: {len(results)}')
   print(f'Billing Enabled: {enabled_count}')
-  print(f'Billing Disabled / Unlinked: {len(results) - enabled_count}')
+  print(f'Configured Billing Budgets Found: {len(billing_budgets)}')
   print(f'Projects with Active 30d HTTP Traffic: {active_traffic}')
-  print(f'Currently Running VMs: {running_vms}')
 
 
 if __name__ == '__main__':
