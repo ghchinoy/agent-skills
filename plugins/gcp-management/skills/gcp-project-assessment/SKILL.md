@@ -1,13 +1,13 @@
 ---
 name: gcp-project-assessment
-description: Audits, categorizes, and correlates Google Cloud & Firebase projects across billing accounts, active compute, 30-day traffic metrics, cost drivers, and Firebase services. Produces structured Markdown reports and actionable optimization recommendations.
+description: Audits, categorizes, and correlates Google Cloud & Firebase projects across billing accounts, active compute, 30-day traffic metrics, cost drivers, and Firebase services. Produces structured Markdown reports with Mermaid cost charts and actionable optimization recommendations.
 ---
 
 # GCP & Firebase Project Assessment Skill
 
 This skill provides an automated, parallelized workflow to analyze, categorize, and optimize Google Cloud Platform (GCP) and Firebase project portfolios.
 
-It inspects billing accounts, active compute resources (Compute Engine, Cloud Run, App Engine, Cloud Functions, GKE, Cloud SQL), Cloud Storage buckets, Cloud Logging activity, and Firebase services (Firestore databases, Firebase Apps, Firebase Hosting domains).
+It inspects billing accounts, itemized service spend via BigQuery Billing Export, active compute resources (Compute Engine, Cloud Run, App Engine, Cloud Functions, GKE, Cloud SQL), Cloud Storage buckets, Cloud Logging activity, and Firebase services (Firestore databases, Firebase Apps, Firebase Hosting domains).
 
 ---
 
@@ -15,7 +15,7 @@ It inspects billing accounts, active compute resources (Compute Engine, Cloud Ru
 
 > **STRICT RULE FOR AGENT EXECUTION:**
 > 1. The AI agent **MUST NOT** execute any mutable, modifying, or destructive commands against the user's Google Cloud infrastructure (e.g., `gcloud compute instances stop`, `gcloud compute disks delete`, `gcloud projects delete`, `gcloud beta billing projects unlink`).
-> 2. All audit steps **MUST be strictly read-only** (`list`, `describe`, `read`).
+> 2. All audit steps **MUST be strictly read-only** (`list`, `describe`, `read`, BigQuery SQL `SELECT`).
 > 3. Recommendations and remediation steps **MUST be formatted as copy-pasteable shell command blocks for human review and execution**.
 
 ---
@@ -24,10 +24,11 @@ It inspects billing accounts, active compute resources (Compute Engine, Cloud Ru
 
 Use this skill when:
 - Evaluating a collection of Google Cloud / Firebase projects.
+- Identifying exact 30-day dollar spend per project and per service (e.g. Vertex AI, Claude models, Gemini API, Storage).
 - Identifying cost drivers, running VMs, or orphaned resources (e.g., persistent disks on stopped VMs).
 - Determining which projects are receiving active user or API traffic vs. background system activity.
 - Planning project consolidations, billing unlinking, or project closures.
-- Generating a formal portfolio audit report (`GCP_PROJECTS_AUDIT_REPORT.md`).
+- Generating a formal portfolio audit report (`GCP_PROJECTS_AUDIT_REPORT.md`) with visual Mermaid diagrams and ASCII charts.
 
 ---
 
@@ -36,6 +37,7 @@ Use this skill when:
 Ensure the following local tools are available:
 - `gcloud` CLI (authenticated with access to billing accounts and project viewer permissions)
 - `firebase` CLI (`firebase --version`)
+- `bq` CLI (BigQuery CLI tool for itemized billing export queries)
 - `python3` (with standard library modules: `subprocess`, `json`, `concurrent.futures`, `datetime`)
 
 ---
@@ -51,36 +53,53 @@ python3 scripts/audit_portfolio.py --output gcp_audit_results.json
 
 This script:
 1. Queries all accessible GCP projects and their billing account attachment states.
-2. Concurrently scans billing-enabled projects for Compute VMs, Persistent Disks, Cloud Run services, App Engine apps, Cloud Functions, Storage buckets, and Static IPs.
-3. Checks Cloud Logging for 30-day HTTP/API request activity.
-4. Queries Firebase APIs for Firestore DBs, registered Firebase Apps, and Firebase Hosting domains.
-5. Saves the full structured data to `gcp_audit_results.json` without modifying any infrastructure.
+2. Queries BigQuery billing export datasets (`billingexport`) for 30-day itemized SKU/service spend per project.
+3. Concurrently scans billing-enabled projects for Compute VMs, Persistent Disks, Cloud Run services, App Engine apps, Cloud Functions, Storage buckets, and Static IPs.
+4. Checks Cloud Logging for 30-day HTTP/API request activity.
+5. Queries Firebase APIs for Firestore DBs, registered Firebase Apps, and Firebase Hosting domains.
+6. Saves the full structured data to `gcp_audit_results.json` without modifying any infrastructure.
 
 ---
 
 ## Step-by-Step Skill Workflow
 
 ### Step 1: Execute Portfolio Audit
-Run `python3 scripts/audit_portfolio.py --output gcp_audit_results.json` or perform equivalent read-only `gcloud` and `firebase` commands.
+Run `python3 scripts/audit_portfolio.py --output gcp_audit_results.json` or perform equivalent read-only `gcloud`, `bq`, and `firebase` commands.
 
-### Step 2: Categorize Projects
+### Step 2: Analyze Itemized Spend & Cost Drivers
+Query BigQuery billing export tables for 30-day net spend grouped by project and service:
+```sql
+SELECT
+  IFNULL(project.id, "Shared / Unassigned") AS project_id,
+  service.description AS service_description,
+  ROUND(SUM(cost), 2) AS gross_cost_usd,
+  ROUND(SUM(cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)), 2) AS net_cost_usd
+FROM
+  `simple-node-001.billingexport.gcp_billing_export_v1_00615D_35664D_BF0DF0`
+WHERE
+  _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+GROUP BY
+  project_id, service_description
+HAVING
+  gross_cost_usd > 0 OR net_cost_usd > 0
+ORDER BY
+  net_cost_usd DESC
+```
+
+### Step 3: Categorize Projects
 Analyze `gcp_audit_results.json` to group projects into four distinct categories:
-- **Category A: Active Production & Workload Hubs** (Active HTTP/API traffic, scheduled jobs, production workloads).
+- **Category A: Active Production & Workload Hubs** (Active HTTP/API traffic, high spend, production workloads).
 - **Category B: Deployed Services / Low Traffic & Standby** (Deployed Cloud Run/Functions/Hosting with low or zero 30d traffic; consolidation candidates).
 - **Category C: Dormant Projects with Billing Enabled** (Zero active compute, zero traffic, but billing linked; candidates for unlinking billing).
 - **Category D: Billing Disabled / Unlinked Projects** ($0 cost; candidates for project deletion/cleanup).
 
-### Step 3: Identify Cost Drivers & Quick Wins
-Isolate infrastructure incurring costs or risk:
-- **Running VMs:** Incurring hourly compute costs.
-- **Orphaned Persistent Disks:** Disks attached to terminated/stopped VMs continue to incur monthly storage costs ($/GB).
-- **Unassigned Static IPs / Load Balancers:** Incurring hourly reservation fees.
-- **Dormant Projects with Billing Linked:** Risk of unexpected background charges.
-
-### Step 4: Generate the Audit Report
+### Step 4: Generate Report with Mermaid Charts & Visualizations
 Write a Markdown report named `GCP_PROJECTS_AUDIT_REPORT.md` in the current working directory containing:
-1. **Executive Summary & Progress Update:** High-level project counts, billing-enabled vs unlinked, running VM count.
-2. **Immediate Cost Reduction & Quick-Win Recommendations:** Clear explanations of cost drivers.
+1. **Executive Summary & Progress Update:** High-level project counts, total spend, billing-enabled vs unlinked.
+2. **30-Day Cost & Spend Analysis (Data & Visualizations):**
+   - **Mermaid Pie Chart:** Portfolio spend distribution across projects.
+   - **Mermaid Bar / Gantt Chart:** Top service spend breakdown for the primary project.
+   - **Itemized Dollar Breakdown Table:** Project, Service Description, Gross Cost, Net Cost.
 3. **High-Priority Active Projects (In-Depth Audit):** Cloud Run services, Firebase DBs, apps, domains, buckets.
 4. **Firebase Services Correlation Matrix:** Comprehensive table linking projects to Firestore DBs, Apps, Hosting domains, and status.
 5. **Master Categorization:** Structured list of all projects under Categories A, B, C, and D.
