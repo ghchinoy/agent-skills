@@ -1,0 +1,66 @@
+{
+  "name": "agent-skills",
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "ai-pop",
+      "source": "./plugins/ai-pop",
+      "description": "Virtual music artist production suite",
+      "skills": [
+        "./plugins/ai-pop/skills/ai-pop-producer",
+        "./plugins/ai-pop/skills/ai-pop-concept-planner",
+        "./plugins/ai-pop/skills/ai-pop-audio-synthesizer",
+        "./plugins/ai-pop/skills/ai-pop-visual-designer",
+        "./plugins/ai-pop/skills/ai-pop-compiler"
+      ]
+    },
+    {
+      "name": "macos-hig",
+      "source": "./plugins/macos-hig",
+      "description": "macOS Human Interface Guidelines assistance and code reviewers",
+      "skills": [
+        "./plugins/macos-hig/skills/macos-hig-layout",
+        "./plugins/macos-hig/skills/macos-hig-interaction",
+        "./plugins/macos-hig/skills/macos-hig-reviewer"
+      ]
+    },
+    {
+      "name": "beads-workflow",
+      "source": "./plugins/beads-workflow",
+      "description": "Tools and workflows for the beads (bd) issue tracking ecosystem",
+      "skills": [
+        "./plugins/beads-workflow/skills/bd-dolt-troubleshooter",
+        "./plugins/beads-workflow/skills/grill-with-beads"
+      ]
+    },
+    {
+      "name": "repo-authoring",
+      "source": "./plugins/repo-authoring",
+      "description": "Repository management skills for technical writing, READMEs, changelogs, and recaps",
+      "skills": [
+        "./plugins/repo-authoring/skills/make-readme",
+        "./plugins/repo-authoring/skills/technical-post-editorial",
+        "./plugins/repo-authoring/skills/repository-change-recap",
+        "./plugins/repo-authoring/skills/changelog-manager"
+      ]
+    },
+    {
+      "name": "mcp-security",
+      "source": "./plugins/mcp-security",
+      "description": "MCP security auditing for RCE and supply chain vulnerabilities",
+      "skills": [
+        "./plugins/mcp-security/skills/mcp-auditor"
+      ]
+    },
+    {
+      "name": "agent-aware-cli",
+      "source": "./plugins/agent-aware-cli",
+      "description": "Guidelines for CLI tools optimized for humans and AI agents",
+      "skills": [
+        "./plugins/agent-aware-cli/skills/agent-aware-cli"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+name: Validate Plugins and Skills
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Plugin & Skill Validation
+        run: |
+          chmod +x scripts/validate-plugins.sh
+          ./scripts/validate-plugins.sh
