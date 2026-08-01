@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 6 thematic plugins under `plugins/`:
+The repository is organized into 7 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -43,6 +43,10 @@ The repository is organized into 6 thematic plugins under `plugins/`:
 ### 6. ⚙️ Agent-Aware CLI (`plugins/agent-aware-cli`)
 *Best practices for CLI tools optimized for both human users and AI agents.*
 - **`agent-aware-cli`**: Architecture guide covering Cobra/Viper in Go, machine-readable output formats, structured error codes, and flag conventions that AI agents can parse reliably.
+
+### 7. 🔌 Agent Plugin Authoring (`plugins/agent-plugin-authoring`)
+*Authoring, migration, and linting tools for packaging Agent Skills into Agent Plugins v1.0.0 specification packages.*
+- **`skills-to-plugins`**: Audits flat skills repositories for conformance debt, groups co-dependent skills, generates `plugin.json` and `.claude-plugin/marketplace.json` manifests, and enforces spec containment rules. Includes audit, validation, and template assets.
 
 ---
 

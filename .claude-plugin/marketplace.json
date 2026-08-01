@@ -61,6 +61,14 @@
       "skills": [
         "./plugins/agent-aware-cli/skills/agent-aware-cli"
       ]
+    },
+    {
+      "name": "agent-plugin-authoring",
+      "source": "./plugins/agent-plugin-authoring",
+      "description": "Authoring, migration, and linting tools for Agent Plugins v1.0.0 packages",
+      "skills": [
+        "./plugins/agent-plugin-authoring/skills/skills-to-plugins"
+      ]
     }
   ]
 }
