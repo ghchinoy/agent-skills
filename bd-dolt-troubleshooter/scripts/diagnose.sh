@@ -61,13 +61,30 @@ if [ -f .beads/daemon-error ]; then
   fi
   ISSUES=$((ISSUES+1))
 else
-  green "    No daemon-error file. Good."
+  # Check bd doctor output directly even if daemon-error file is missing
+  REPO_MISMATCH=$(bd doctor 2>&1 | grep -i "Database belongs to different repository" || true)
+  if [ -n "$REPO_MISMATCH" ]; then
+    red "    PROBLEM: Repo Fingerprint mismatch (Database belongs to different repository)."
+    red "    Fix: bd migrate --update-repo-id --yes"
+    ISSUES=$((ISSUES+1))
+  else
+    green "    No daemon-error or repo fingerprint mismatch. Good."
+  fi
 fi
 
-info "0b. Schema version skew (client binary vs database)"
-SKEW=$(bd doctor 2>&1 | grep -i -E "schema version mismatch|schema skew" | head -1 || true)
+info "0b. Schema version skew & pending migrations (client binary vs database)"
+DOCTOR_OUT=$(bd doctor 2>&1 || true)
+SKEW=$(echo "$DOCTOR_OUT" | grep -i -E "schema version mismatch|schema skew|pending schema migration|refusing to auto-apply" | head -1 || true)
+if [ -z "$SKEW" ]; then
+  # Also check bd list or bd migrate --inspect output for migration gates
+  MIG_CHECK=$(bd migrate --inspect 2>&1 || true)
+  if echo "$MIG_CHECK" | grep -qi -E "refusing to auto-apply|pending schema migration"; then
+    SKEW=$(echo "$MIG_CHECK" | grep -i -E "refusing to auto-apply|pending schema migration" | head -1)
+  fi
+fi
+
 if [ -n "$SKEW" ]; then
-  red "    PROBLEM: schema version skew detected:"
+  red "    PROBLEM: schema version skew / pending migrations detected:"
   printf "      %s\n" "$SKEW"
   if echo "$SKEW" | grep -qi -E "binary knows up to|is ahead of binary"; then
     red "    Your bd binary is BEHIND the database (another agent/machine migrated it forward)."
@@ -76,11 +93,12 @@ if [ -n "$SKEW" ]; then
     red "         (CGO/ICU + PATH-copy caveats: SKILL.md 'Client BEHIND the Database')."
     red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
   else
-    red "    A newer client cannot migrate a remote-backed DB. See recovery-playbook Case F."
+    red "    Database has pending migrations blocked by remote-sync gate."
+    red "    Fix: bd migrate --force (or BD_ALLOW_REMOTE_MIGRATE=1 bd migrate) followed by bd dolt push."
   fi
   ISSUES=$((ISSUES+1))
 else
-  green "    No schema version skew (client and database agree)."
+  green "    No schema version skew or pending migrations."
 fi
 
 info "0c. Client binary & PATH shadowing check"
@@ -133,7 +151,8 @@ print(' '.join(ids[:5]))
 " 2>/dev/null || true)
   MISMATCH=0
   for id in $SAMPLE; do
-    DOLT=$(bd show "$id" --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);i=d[0] if isinstance(d,list) else d;print(i['status'])" 2>/dev/null || echo "?")
+    DOLT_RAW=$(bd show "$id" --json 2>&1 || true)
+    DOLT=$(echo "$DOLT_RAW" | python3 -c "import json,sys;d=json.load(sys.stdin);i=d[0] if isinstance(d,list) else d;print(i['status'])" 2>/dev/null || echo "?")
     JSONL=$(python3 -c "
 import json
 for l in open('.beads/issues.jsonl'):
@@ -143,6 +162,13 @@ for l in open('.beads/issues.jsonl'):
 " 2>/dev/null || echo "?")
     if [ "$DOLT" = "$JSONL" ]; then
       green "    $id: dolt=$DOLT jsonl=$JSONL OK"
+    elif [ "$DOLT" = "?" ]; then
+      if echo "$DOLT_RAW" | grep -qi -E "refusing to auto-apply|Database belongs to different repository|schema version"; then
+        red "    $id: dolt=? (bd query failed due to schema skew / repo-id mismatch; see checks 0 & 0b)"
+      else
+        red "    $id: dolt=? jsonl=$JSONL MISMATCH (query failed)"
+        MISMATCH=1
+      fi
     else
       red "    $id: dolt=$DOLT jsonl=$JSONL MISMATCH"
       MISMATCH=1
@@ -199,6 +225,7 @@ if [ "$ISSUES" -eq 0 ]; then
   [ "$PROBE" -eq 0 ] && yellow "(Run with --probe for the definitive write-persistence test.)"
 else
   red "Detected $ISSUES problem area(s). See SKILL.md for fixes:"
+  red "  - Automated multi-issue repair: scripts/repair.sh"
   red "  - Engine mode / daemon-error issues: references/recovery-playbook.md Case E"
   red "  - Corrupt backup / write-revert issues: scripts/repair-corrupt-backup.sh"
 fi

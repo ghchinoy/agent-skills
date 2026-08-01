@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.8"
+  version: "1.9"
 ---
 
 # bd / Dolt Troubleshooter
@@ -581,6 +581,8 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
     - `bd doctor --fix --yes` (auto-applies all fixable doctor issues)
     - `echo y | bd migrate --update-repo-id` (bypasses interactive confirmation for repo ID updates)
     - `bd migrate --force` / `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate` (overrides remote schema gate on designated migrator)
+12. **Resolve "Dolt Remote vs Git Origin" endpoint conflicts using config.**
+    When `bd doctor` warns that a Dolt remote shares the same URL as git origin, run `bd config set dolt.local-only true` or remove the conflicting Dolt remote (`bd dolt remote remove origin`).
 
 ## Manual Verification Snippet
 
@@ -627,6 +629,9 @@ project `AGENTS.md`.
 - `references/recovery-playbook.md` — step-by-step recovery for harder cases
   (lost writes, divergent Dolt vs JSONL, restoring from `bd backup`, and
   multi-server lock contention in Case F)
+- `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
+- `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes`, and exports clean JSONL
+- `scripts/repair-corrupt-backup.sh` — targeted repair for corrupt backup write-rollback loops
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`
 - `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,
