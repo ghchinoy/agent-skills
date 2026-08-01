@@ -9,6 +9,17 @@ This skill provides an automated, parallelized workflow to analyze, categorize, 
 
 It inspects billing accounts, active compute resources (Compute Engine, Cloud Run, App Engine, Cloud Functions, GKE, Cloud SQL), Cloud Storage buckets, Cloud Logging activity, and Firebase services (Firestore databases, Firebase Apps, Firebase Hosting domains).
 
+---
+
+## CRITICAL SAFETY MANDATE: READ-ONLY AUDIT & HUMAN EXECUTION
+
+> **STRICT RULE FOR AGENT EXECUTION:**
+> 1. The AI agent **MUST NOT** execute any mutable, modifying, or destructive commands against the user's Google Cloud infrastructure (e.g., `gcloud compute instances stop`, `gcloud compute disks delete`, `gcloud projects delete`, `gcloud beta billing projects unlink`).
+> 2. All audit steps **MUST be strictly read-only** (`list`, `describe`, `read`).
+> 3. Recommendations and remediation steps **MUST be formatted as copy-pasteable shell command blocks for human review and execution**.
+
+---
+
 ## When to Use
 
 Use this skill when:
@@ -29,108 +40,66 @@ Ensure the following local tools are available:
 
 ---
 
-## Step-by-Step Workflow
+## Bundled Audit Script (`scripts/audit_portfolio.py`)
 
-### Step 1: Discover Projects & Billing Links
-1. Fetch all projects accessible to the user:
-   ```bash
-   gcloud projects list --format="json(projectId,name,projectNumber,createTime,lifecycleState)"
-   ```
-2. Query billing accounts and project billing details:
-   ```bash
-   gcloud billing accounts list --format="json"
-   gcloud beta billing projects describe <PROJECT_ID> --format="json"
-   ```
-3. Classify projects into:
-   - **Billing Enabled** (Linked to open billing account)
-   - **Billing Disabled / Unlinked** ($0 cost, dormant)
+The skill includes a dedicated, parallelized Python script located at `scripts/audit_portfolio.py`.
 
----
+### Execution:
+```bash
+python3 scripts/audit_portfolio.py --output gcp_audit_results.json
+```
 
-### Step 2: Parallel Resource Scanning
-Scan all projects concurrently (e.g., via `ThreadPoolExecutor` in Python) for active resources:
-- **Compute Engine:** `gcloud compute instances list --project=<pid>` & `gcloud compute disks list --project=<pid>`
-- **Cloud Run:** `gcloud run services list --project=<pid>`
-- **App Engine:** `gcloud app services list --project=<pid>`
-- **Cloud Functions:** `gcloud functions list --project=<pid>`
-- **GKE Clusters:** `gcloud container clusters list --project=<pid>`
-- **Cloud SQL:** `gcloud sql instances list --project=<pid>`
-- **Cloud Storage:** `gcloud storage buckets list --project=<pid>`
-- **Static IPs & Load Balancers:** `gcloud compute addresses list --project=<pid>`
+This script:
+1. Queries all accessible GCP projects and their billing account attachment states.
+2. Concurrently scans billing-enabled projects for Compute VMs, Persistent Disks, Cloud Run services, App Engine apps, Cloud Functions, Storage buckets, and Static IPs.
+3. Checks Cloud Logging for 30-day HTTP/API request activity.
+4. Queries Firebase APIs for Firestore DBs, registered Firebase Apps, and Firebase Hosting domains.
+5. Saves the full structured data to `gcp_audit_results.json` without modifying any infrastructure.
 
 ---
 
-### Step 3: Inspect 30-Day Traffic & Activity Logs
-Do not rely solely on project creation date or resource lists. Differentiate actual user/API traffic from passive system audit logs using Cloud Logging:
-1. **HTTP / Web Traffic Query:**
-   ```bash
-   gcloud logging read 'timestamp >= "YYYY-MM-DDT00:00:00Z" AND httpRequest.requestMethod:*' --project=<pid> --limit=20
-   ```
-2. **General Service Log Query:**
-   ```bash
-   gcloud logging read 'timestamp >= "YYYY-MM-DDT00:00:00Z"' --project=<pid> --limit=10
-   ```
-3. Categorize into:
-   - **Active HTTP Traffic:** Ongoing user/API requests (Cloud Run, App Engine, Load Balancer, Functions).
-   - **Active Scheduled Jobs:** Cloud Scheduler, Pub/Sub triggers, cron workflows.
-   - **Data / Developer Activity:** Direct BigQuery queries, GCS object access, manual developer edits.
-   - **Passive System Audit Logs:** Only automated Cloud Audit logs (`cloudaudit.googleapis.com`).
+## Step-by-Step Skill Workflow
 
----
+### Step 1: Execute Portfolio Audit
+Run `python3 scripts/audit_portfolio.py --output gcp_audit_results.json` or perform equivalent read-only `gcloud` and `firebase` commands.
 
-### Step 4: Correlate Firebase Services
-Scan for integrated Firebase services across all projects:
-1. **Firestore / Datastore Databases:**
-   ```bash
-   gcloud firestore databases list --project=<pid> --format="json"
-   ```
-2. **Firebase Registered Apps (Web, iOS, Android, macOS):**
-   ```bash
-   firebase apps:list --project=<pid> --json
-   ```
-3. **Firebase Hosting Domains & Custom Sites:**
-   ```bash
-   firebase hosting:sites:list --project=<pid> --json
-   ```
+### Step 2: Categorize Projects
+Analyze `gcp_audit_results.json` to group projects into four distinct categories:
+- **Category A: Active Production & Workload Hubs** (Active HTTP/API traffic, scheduled jobs, production workloads).
+- **Category B: Deployed Services / Low Traffic & Standby** (Deployed Cloud Run/Functions/Hosting with low or zero 30d traffic; consolidation candidates).
+- **Category C: Dormant Projects with Billing Enabled** (Zero active compute, zero traffic, but billing linked; candidates for unlinking billing).
+- **Category D: Billing Disabled / Unlinked Projects** ($0 cost; candidates for project deletion/cleanup).
 
----
-
-### Step 5: Identify Cost Drivers & Optimization Quick-Wins
-Analyze collected metadata to isolate cost drivers:
-- **Running VM Instances:** Incur continuous hourly compute fees.
+### Step 3: Identify Cost Drivers & Quick Wins
+Isolate infrastructure incurring costs or risk:
+- **Running VMs:** Incurring hourly compute costs.
 - **Orphaned Persistent Disks:** Disks attached to terminated/stopped VMs continue to incur monthly storage costs ($/GB).
-- **Reserved Static IPs & Forwarding Rules:** Unused load balancer IP addresses incur hourly reservation fees.
-- **Dormant Projects with Billing Enabled:** Zero compute, zero 30d traffic, but billing linked.
+- **Unassigned Static IPs / Load Balancers:** Incurring hourly reservation fees.
+- **Dormant Projects with Billing Linked:** Risk of unexpected background charges.
 
----
-
-### Step 6: Generate the Audit Report
+### Step 4: Generate the Audit Report
 Write a Markdown report named `GCP_PROJECTS_AUDIT_REPORT.md` in the current working directory containing:
-1. **Executive Summary:** High-level project counts, total billing-enabled vs disabled, active production hubs count.
-2. **Immediate Cost Reduction & Quick Wins:** Stopped VMs, deleted orphaned disks, project consolidations.
-3. **High-Priority Active Projects (In-Depth Analysis):** Cloud Run services, Firebase DBs, apps, domains, buckets.
+1. **Executive Summary & Progress Update:** High-level project counts, billing-enabled vs unlinked, running VM count.
+2. **Immediate Cost Reduction & Quick-Win Recommendations:** Clear explanations of cost drivers.
+3. **High-Priority Active Projects (In-Depth Audit):** Cloud Run services, Firebase DBs, apps, domains, buckets.
 4. **Firebase Services Correlation Matrix:** Comprehensive table linking projects to Firestore DBs, Apps, Hosting domains, and status.
-5. **Master Inventory Categorization:**
-   - *Category A:* Active Production & Workload Hubs
-   - *Category B:* Deployed Services / Low or Zero Traffic (Consolidation Candidates)
-   - *Category C:* Dormant Projects with Billing Enabled (Unlink Billing)
-   - *Category D:* Billing Disabled / Unlinked Projects (Delete Candidates)
-6. **Action Roadmap & Command Cheatsheet:** Exact `gcloud` commands to stop instances, delete disks, unlink billing, and delete projects.
+5. **Master Categorization:** Structured list of all projects under Categories A, B, C, and D.
+6. **Human Action Roadmap & Command Cheatsheet:** Copy-pasteable `gcloud` command blocks for the human operator to review and execute.
 
 ---
 
-## Cheatsheet of Common Remediation Commands
+## Human Remediation Commands (Provide to User - Do Not Execute)
 
 ```bash
-# Stop a running VM instance
+# 1. Stop a running VM instance
 gcloud compute instances stop <INSTANCE_NAME> --zone=<ZONE> --project=<PROJECT_ID>
 
-# Delete orphaned persistent disks
+# 2. Delete orphaned persistent disks
 gcloud compute disks delete <DISK_NAME> --zone=<ZONE> --project=<PROJECT_ID> --quiet
 
-# Unlink billing from a dormant project
+# 3. Unlink billing from a dormant project
 gcloud beta billing projects unlink <PROJECT_ID>
 
-# Delete/shut down a retired project
+# 4. Delete/shut down a retired project
 gcloud projects delete <PROJECT_ID> --quiet
 ```
