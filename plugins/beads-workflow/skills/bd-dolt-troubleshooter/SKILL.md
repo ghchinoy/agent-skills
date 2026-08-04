@@ -482,23 +482,43 @@ while being schema-incompatible dev builds from different points on `main`.
 
 ---
 
+## Diagnostic Architecture & Execution Flow
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Phase 3: Application Health & Issues (bd doctor)       │  ← FAILS/HANGS if Phase 1 or 0 is broken
+├────────────────────────────────────────────────────────┤
+│ Phase 2: Database Protocol & Schema (bd migrate)       │
+├────────────────────────────────────────────────────────┤
+│ Phase 1: OS Process & Lock Layer (.beads/dolt-server)  │  ← Single exclusive file lock
+├────────────────────────────────────────────────────────┤
+│ Phase 0: Binary & PATH Resolution (PATH, CGO, ICU)     │  ← Determines which binary executes
+└────────────────────────────────────────────────────────┘
+```
+
+> **Why `bd doctor` is NOT the first step:** `bd doctor` is a high-level tool that attempts to initialize an in-memory client or connect to the running Dolt server. If an orphaned `dolt sql-server` process holds the exclusive file lock on `.beads/dolt/`, `bd doctor` **blocks indefinitely on startup** without printing errors. Similarly, if multiple `bd` binaries shadow your PATH, `bd doctor` may execute an outdated pure-Go binary and report spurious errors.
+
+![Beads Troubleshooting Process Flow](assets/process-flow.webp)
+
 ## Quick Diagnosis
 
-**Start here — four commands before anything else:**
+**Start here — four commands in order:**
 
 ```bash
-# 1. Reveal engine mode, data directory, and server connection status
+# 0. Check for orphaned servers or lock contention first (prevents hanging)
+scripts/find-dolt-server.sh
+
+# 1. Read cached daemon failure if present
+cat .beads/daemon-error 2>/dev/null
+
+# 2. Reveal engine mode, data directory, and server connection status
 bd dolt show
 
-# 2. Let bd self-diagnose and suggest fixes
-bd doctor
-
-# 3. Check schema version and pending migrations (especially after a bd upgrade
-#    or when a watcher/agent fails to open the database)
+# 3. Check schema version and pending migrations
 bd migrate --inspect
 
-# 4. Read the cached failure reason if bd won't start at all
-cat .beads/daemon-error 2>/dev/null
+# 4. Now safely run doctor (lock and binary preflights cleared)
+bd doctor
 ```
 
 Then run the bundled diagnostic for deeper checks (read-only, safe):
@@ -647,3 +667,4 @@ project `AGENTS.md`.
   their working dirs and flag the one owning the current repo's `.beads/`
 - `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,
   extract Go build metadata (pseudo-versions, timestamps, git commits), and detect PATH shadowing
+- `assets/process-flow.webp` / `assets/process-flow.dot` — architectural diagram and diagnostic phase execution flowchart (Light Theme)
