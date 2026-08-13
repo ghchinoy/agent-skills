@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ai-pop",
   "version": "1.0.0",
-  "description": "Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.",
+  "description": "Virtual music artist production suite: lore planning, audio synthesis, visual design, web player compilation, and public endpoint deployment.",
   "author": {
     "name": "ghchinoy",
     "url": "https://github.com/ghchinoy"

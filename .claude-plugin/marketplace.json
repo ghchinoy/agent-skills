@@ -13,7 +13,8 @@
         "./plugins/ai-pop/skills/ai-pop-concept-planner",
         "./plugins/ai-pop/skills/ai-pop-audio-synthesizer",
         "./plugins/ai-pop/skills/ai-pop-visual-designer",
-        "./plugins/ai-pop/skills/ai-pop-compiler"
+        "./plugins/ai-pop/skills/ai-pop-compiler",
+        "./plugins/ai-pop/skills/ai-pop-publisher"
       ]
     },
     {
