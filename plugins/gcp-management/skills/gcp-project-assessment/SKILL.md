@@ -1,6 +1,7 @@
 ---
 name: gcp-project-assessment
 description: Audits, categorizes, and correlates Google Cloud & Firebase projects across billing accounts, active compute, 30-day traffic metrics, cost drivers, and Firebase services. Produces structured Markdown reports with Mermaid cost charts and actionable optimization recommendations.
+license: Apache-2.0
 ---
 
 # GCP & Firebase Project Assessment Skill
@@ -25,6 +26,7 @@ It inspects billing accounts, itemized service spend via BigQuery Billing Export
 Use this skill when:
 - Evaluating a collection of Google Cloud / Firebase projects.
 - Identifying exact 30-day dollar spend per project and per service (e.g. Vertex AI, Claude models, Gemini API, Storage).
+- Calculating month-to-date (MTD) spend and month-end projections.
 - Identifying cost drivers, running VMs, or orphaned resources (e.g., persistent disks on stopped VMs).
 - Determining which projects are receiving active user or API traffic vs. background system activity.
 - Planning project consolidations, billing unlinking, or project closures.
@@ -42,22 +44,15 @@ Ensure the following local tools are available:
 
 ---
 
-## Bundled Audit Script (`scripts/audit_portfolio.py`)
+## Bundled Assets & Scripts
 
-The skill includes a dedicated, parallelized Python script located at `scripts/audit_portfolio.py`.
+1. **Audit Script (`scripts/audit_portfolio.py`):** Parallelized, read-only discovery script capturing compute, storage, logging traffic, Firebase assets, billing budgets, and BigQuery spend.
+2. **SQL Reference (`references/billing-export-queries.sql`):** Pre-formulated BigQuery SQL queries for 30-day spend, Week-over-Week velocity, and MTD daily burn rates.
 
 ### Execution:
 ```bash
 python3 scripts/audit_portfolio.py --output gcp_audit_results.json
 ```
-
-This script:
-1. Queries all accessible GCP projects and their billing account attachment states.
-2. Queries BigQuery billing export datasets (`billingexport`) for 30-day itemized SKU/service spend per project.
-3. Concurrently scans billing-enabled projects for Compute VMs, Persistent Disks, Cloud Run services, App Engine apps, Cloud Functions, Storage buckets, and Static IPs.
-4. Checks Cloud Logging for 30-day HTTP/API request activity.
-5. Queries Firebase APIs for Firestore DBs, registered Firebase Apps, and Firebase Hosting domains.
-6. Saves the full structured data to `gcp_audit_results.json` without modifying any infrastructure.
 
 ---
 

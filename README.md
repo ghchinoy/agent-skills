@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 7 thematic plugins under `plugins/`:
+The repository is organized into 9 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -47,6 +47,16 @@ The repository is organized into 7 thematic plugins under `plugins/`:
 ### 7. 🔌 Agent Plugin Authoring (`plugins/agent-plugin-authoring`)
 *Authoring, migration, and linting tools for packaging Agent Skills into Agent Plugins v1.0.0 specification packages.*
 - **`skills-to-plugins`**: Audits flat skills repositories for conformance debt, groups co-dependent skills, generates `plugin.json` and `.claude-plugin/marketplace.json` manifests, and enforces spec containment rules. Includes audit, validation, and template assets.
+
+### 8. ⚖️ Automation Governance (`plugins/automation-governance`)
+*Framework and tooling for evaluating workflow, skill, and process automation readiness based on Google DeepMind research.*
+- **`automation-readiness`**: Evaluates candidates against Google DeepMind's *Intelligent AI Delegation* framework (arXiv:2602.11865) using an 11-axis diagnostic scorecard, hard gate veto overrides, 4 automation tiers (Full Autonomy, Monitored, HITL, Human-Led), and an operational guardrail matrix. Includes scoring engine (`scripts/score.py`), scorecard rubric, and comprehensive framework reference.
+
+### 9. ☁️ GCP Management (`plugins/gcp-management`)
+*Google Cloud Platform & Firebase portfolio assessment, itemized BigQuery cost analysis, quota governance, and project consolidation.*
+- **`gcp-project-assessment`**: Audits and categorizes 60+ GCP/Firebase projects across billing links, active compute, 30-day Cloud Logging traffic, BigQuery billing export spend, and Firebase assets. Produces structured Markdown reports with Mermaid cost diagrams. Includes parallelized audit script (`scripts/audit_portfolio.py`) and SQL queries (`references/billing-export-queries.sql`).
+- **`gcp-quota-governance`**: Analyzes API spend velocity (e.g. Vertex AI frontier Claude & Gemini models) and establishes enforceable hard request/token quotas, Cloud Run scaling caps, and event-driven automated billing circuit breakers. Includes quota inspector script (`scripts/inspect_quotas.py`), capping reference guide, and circuit breaker architecture.
+- **`gcp-project-consolidation`**: Guides the identification, cleanup, and consolidation of duplicate environments, orphaned persistent disks on terminated VMs, unattached static IPs, deletion lien removals, and safe project retirement. Includes decommissioning checklists and orphaned resource playbooks.
 
 ---
 

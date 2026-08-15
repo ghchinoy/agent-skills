@@ -69,6 +69,14 @@
       "skills": [
         "./plugins/agent-plugin-authoring/skills/skills-to-plugins"
       ]
+    },
+    {
+      "name": "automation-governance",
+      "source": "./plugins/automation-governance",
+      "description": "Automation readiness and delegation governance framework based on Google DeepMind research",
+      "skills": [
+        "./plugins/automation-governance/skills/automation-readiness"
+      ]
     }
   ]
 }
