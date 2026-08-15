@@ -14,3 +14,7 @@ okf_version: "0.2"
 # Computations
 
 * [Revenue computation](/computations/revenue.md) - sanctioned way to compute revenue
+
+# References
+
+* [Run a computation on BigQuery](/references/skills/run-on-bq.md) - executor run instructions

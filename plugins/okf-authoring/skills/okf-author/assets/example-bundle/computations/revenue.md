@@ -2,6 +2,7 @@
 type: Attested Computation
 title: Revenue for fiscal year
 description: Recognized revenue for a fiscal year, per Finance's definition.
+tags: [finance, revenue]
 status: stable
 runtime: bigquery
 parameters:

@@ -11,16 +11,20 @@ It demonstrates every core feature:
 - one concept per non-reserved `.md` file, each with a required non-empty `type`;
 - a subdirectory [`index.md`](example-bundle/tables/index.md) with **no**
   frontmatter (only the root index may carry frontmatter);
-- bundle-relative markdown links as relationship edges — including one
-  intentionally **broken** link (to `/tables/refunds.md`, not yet written) to
-  show that broken links are tolerated, not errors;
+- bundle-relative markdown links (`/path.md`) as relationship edges;
 - the full v0.2 trust vocabulary: `generated`, `verified` (human-reviewed and
   machine-confirmed tiers, **derived**, never stored), `sources` with a per-claim
   footnote citation, `status`, `stale_after`;
 - an [Attested Computation](example-bundle/computations/revenue.md) concept
   (`runtime`, `parameters`, `executor`, `attester`) linked from a
-  [Metric](example-bundle/metrics/revenue.md);
+  [Metric](example-bundle/metrics/revenue.md), with its executor and attester
+  kept as first-class `references/` concepts (§6.3);
 - a [`log.md`](example-bundle/log.md) update history.
+
+Broken links are deliberately **not** shipped here so the bundle passes strict
+external validators cleanly, but the format tolerates them: a link to a
+not-yet-written concept is an advisory, never a rejection (§6, §11). The
+`okf-validate` skill explains how to treat them.
 
 This directory is `assets/`, so its markdown files are example content, not
 skills.

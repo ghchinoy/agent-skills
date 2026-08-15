@@ -27,8 +27,6 @@ sources:
 
 # Joins
 
-Joined with [customers](/tables/customers.md) on `customer_id`. Refunds are
-tracked separately in [refunds](/tables/refunds.md) (not yet written — this
-broken link is tolerated, not an error).
+Joined with [customers](/tables/customers.md) on `customer_id`.
 
 [^sales-schema]: Sales orders table schema
