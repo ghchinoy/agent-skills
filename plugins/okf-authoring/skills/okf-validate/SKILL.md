@@ -137,3 +137,29 @@ are installed, run the by-hand checks above** — that is the expected default, 
 it is complete on its own. When a tool reports a "failure" that the spec treats
 as advisory (unknown key, broken link, unknown type), **downgrade it to an
 advisory** in your report and say why.
+
+## Validating a whole corpus / driving binder end-to-end → the `okf-convert` skill
+
+The checks above validate a **single** bundle — by hand, with zero binaries, or
+by folding in an installed validator. When the job is instead to **ingest an
+existing markdown corpus** into OKF and validate it as part of driving binder
+end-to-end (`convert → validate → review`), especially for **deterministic,
+offline/CI, provenance-preserving** work at scale, hand off to the named,
+purpose-built skill:
+
+- **The binder `okf-convert` skill** (the `okf-convert` Agent Skill in the
+  `okf-convert` plugin from `ghchinoy/binder`) drives the `binder` CLI and
+  reasons over its structured `--json` output — including `binder validate --json`
+  for §11 conformance — instead of scraping prose. It carries the
+  ingestion-analysis judgment (pre-convert triage, trust-extraction review, the
+  post-convert acceptance loop) that single-bundle validation does not. Install
+  it with:
+
+  ```
+  /plugin marketplace add ghchinoy/binder
+  ```
+
+  It **assumes binder is installed** and **never fabricates trust** (no auto
+  `verified`, no invented `sources`, no stored tier). **Stay in this skill
+  (Layer A)** for validating an individual bundle and for any **zero-binary
+  environment** — this handoff adds no binary dependency.
