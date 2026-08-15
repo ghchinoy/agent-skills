@@ -317,7 +317,10 @@ table's `id` column changed between versions). This is not corruption and it
 is not fixable with `bd migrate` on the old binary: a v49 binary cannot
 apply — or write against — a v53 schema it doesn't know.
 
-**Fix — upgrade the stranded client to match the DB (do NOT downgrade the DB):**
+**The CLI Error Recommendation Trap (`@latest` vs. `@main` & `CGO_ENABLED=0`):**
+When `bd` hits schema skew, its terminal error prompt instructs you to run `CGO_ENABLED=0 go install ...@latest`. **Do NOT follow this advice in multi-agent environments:**
+1. **`@latest` vs. `@main` Trap:** Installing `@latest` simply re-downloads an older published release tag (e.g., `v1.1.0`), leaving your client behind a database that was migrated forward by an agent running `@main` development builds.
+2. **`CGO_ENABLED=0` Trap:** Rebuilding in pure-Go mode bypasses native ICU header linking (`unicode/regex.h`), but silently disables embedded database inspection engines, causing 15+ checks in `bd doctor` to degrade with `Skipped: requires CGO`.
 
 1. **Identify what the installed binary actually is** — `bd --version` is not
    enough. A dev build shows the same version string as a published tag but may
@@ -333,13 +336,15 @@ apply — or write against — a v53 schema it doesn't know.
    go list -m -versions github.com/steveyegge/beads   # tagged releases
    go list -m github.com/steveyegge/beads@main         # main-tip pseudo-version
    ```
-2. Reinstall bd from source at that version:
+2. Reinstall bd from source at that version, or run the automated restoration script:
    ```bash
-   go install github.com/steveyegge/beads/cmd/bd@main   # or @vX.Y.Z
+   # Automated rebuild against @main with CGO + ICU support and auto-sync PATH binaries:
+   scripts/restore-bd.sh
+
+   # Or inspect module revisions across multiple installed binaries:
+   scripts/inspect-binary.sh
    ```
-   **CGO/ICU gotcha (recent bd):** the build pulls `dolthub/go-icu-regex`,
-   which needs the ICU C++ header `unicode/regex.h`. If it fails with
-   `fatal error: 'unicode/regex.h' file not found`, point CGO at a local ICU:
+   If building manually:
    ```bash
    ICU="$(brew --prefix icu4c)"        # or icu4c@<N>, e.g. icu4c@78
    CGO_CFLAGS="-I$ICU/include" CGO_CPPFLAGS="-I$ICU/include" \
@@ -360,6 +365,8 @@ apply — or write against — a v53 schema it doesn't know.
    (`bd update <id> --append-notes "..."`) succeeds. After the new binary
    applies any pending migration it may prompt `Run bd dolt push` — push so
    other clones converge.
+
+For manual macOS Homebrew / Linux package manager instructions, version revision inspection (`go version -m`), and deep-dive schema coordination rules, refer to **`references/cgo-and-schema-drift.md`**.
 
 **Read-only stopgap** if you cannot upgrade immediately: the global flag
 `--ignore-schema-skew` ("proceed despite forward schema drift; some queries
@@ -475,23 +482,43 @@ while being schema-incompatible dev builds from different points on `main`.
 
 ---
 
+## Diagnostic Architecture & Execution Flow
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Phase 3: Application Health & Issues (bd doctor)       │  ← FAILS/HANGS if Phase 1 or 0 is broken
+├────────────────────────────────────────────────────────┤
+│ Phase 2: Database Protocol & Schema (bd migrate)       │
+├────────────────────────────────────────────────────────┤
+│ Phase 1: OS Process & Lock Layer (.beads/dolt-server)  │  ← Single exclusive file lock
+├────────────────────────────────────────────────────────┤
+│ Phase 0: Binary & PATH Resolution (PATH, CGO, ICU)     │  ← Determines which binary executes
+└────────────────────────────────────────────────────────┘
+```
+
+> **Why `bd doctor` is NOT the first step:** `bd doctor` is a high-level tool that attempts to initialize an in-memory client or connect to the running Dolt server. If an orphaned `dolt sql-server` process holds the exclusive file lock on `.beads/dolt/`, `bd doctor` **blocks indefinitely on startup** without printing errors. Similarly, if multiple `bd` binaries shadow your PATH, `bd doctor` may execute an outdated pure-Go binary and report spurious errors.
+
+![Beads Troubleshooting Process Flow](assets/process-flow.webp)
+
 ## Quick Diagnosis
 
-**Start here — four commands before anything else:**
+**Start here — four commands in order:**
 
 ```bash
-# 1. Reveal engine mode, data directory, and server connection status
+# 0. Check for orphaned servers or lock contention first (prevents hanging)
+scripts/find-dolt-server.sh
+
+# 1. Read cached daemon failure if present
+cat .beads/daemon-error 2>/dev/null
+
+# 2. Reveal engine mode, data directory, and server connection status
 bd dolt show
 
-# 2. Let bd self-diagnose and suggest fixes
-bd doctor
-
-# 3. Check schema version and pending migrations (especially after a bd upgrade
-#    or when a watcher/agent fails to open the database)
+# 3. Check schema version and pending migrations
 bd migrate --inspect
 
-# 4. Read the cached failure reason if bd won't start at all
-cat .beads/daemon-error 2>/dev/null
+# 4. Now safely run doctor (lock and binary preflights cleared)
+bd doctor
 ```
 
 Then run the bundled diagnostic for deeper checks (read-only, safe):
@@ -629,10 +656,15 @@ project `AGENTS.md`.
 - `references/recovery-playbook.md` — step-by-step recovery for harder cases
   (lost writes, divergent Dolt vs JSONL, restoring from `bd backup`, and
   multi-server lock contention in Case F)
+- `references/cgo-and-schema-drift.md` — detailed runbook on CGO ICU dependencies,
+  pure-Go degraded test warnings, multi-agent `@main` schema drift, and cross-platform compilation
 - `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
 - `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes`, and exports clean JSONL
 - `scripts/repair-corrupt-backup.sh` — targeted repair for corrupt backup write-rollback loops
+- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@main` with full CGO/ICU support
+  and automatically synchronize shadowed PATH binaries across macOS and Linux
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`
 - `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,
   extract Go build metadata (pseudo-versions, timestamps, git commits), and detect PATH shadowing
+- `assets/process-flow.webp` / `assets/process-flow.dot` — architectural diagram and diagnostic phase execution flowchart (Light Theme)

@@ -71,11 +71,30 @@
       ]
     },
     {
+      "name": "okf-authoring",
+      "source": "./plugins/okf-authoring",
+      "description": "Tool-agnostic authoring and validation for conformant Open Knowledge Format (OKF) v0.2 knowledge bundles",
+      "skills": [
+        "./plugins/okf-authoring/skills/okf-author",
+        "./plugins/okf-authoring/skills/okf-validate"
+      ]
+    },
+    {
       "name": "automation-governance",
       "source": "./plugins/automation-governance",
       "description": "Automation readiness and delegation governance framework based on Google DeepMind research",
       "skills": [
         "./plugins/automation-governance/skills/automation-readiness"
+      ]
+    },
+    {
+      "name": "gcp-management",
+      "source": "./plugins/gcp-management",
+      "description": "Google Cloud Platform and Firebase project assessment, itemized BigQuery spend analysis, quota governance, and consolidation",
+      "skills": [
+        "./plugins/gcp-management/skills/gcp-project-assessment",
+        "./plugins/gcp-management/skills/gcp-quota-governance",
+        "./plugins/gcp-management/skills/gcp-project-consolidation"
       ]
     }
   ]
