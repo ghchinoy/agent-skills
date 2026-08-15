@@ -48,6 +48,11 @@ The repository is organized into 7 thematic plugins under `plugins/`:
 *Authoring, migration, and linting tools for packaging Agent Skills into Agent Plugins v1.0.0 specification packages.*
 - **`skills-to-plugins`**: Audits flat skills repositories for conformance debt, groups co-dependent skills, generates `plugin.json` and `.claude-plugin/marketplace.json` manifests, and enforces spec containment rules. Includes audit, validation, and template assets.
 
+### 8. 📖 OKF Authoring (`plugins/okf-authoring`)
+*Tool-agnostic authoring and validation for conformant Open Knowledge Format (OKF) v0.2 knowledge bundles, including the v0.2 provenance, trust, and lifecycle vocabulary.*
+- **`okf-author`**: Authors a conformant OKF v0.2 bundle by hand or from a description — one concept per markdown file with a required non-empty `type`, a root `index.md` declaring `okf_version`, bundle-relative links as relationship edges, and correct trust frontmatter (derives trust tiers, never stores a credibility score). Includes a complete example bundle.
+- **`okf-validate`**: Checks §11 conformance and trust-signal well-formedness, reporting everything as advisories and never rejecting a bundle for optional, unknown, or broken content. Works fully by hand; opportunistically shells to `okfcli`/`binder`/`factile`/`openknowledge` when installed.
+
 ---
 
 ## Installation & Usage
