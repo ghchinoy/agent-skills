@@ -69,6 +69,15 @@
       "skills": [
         "./plugins/agent-plugin-authoring/skills/skills-to-plugins"
       ]
+    },
+    {
+      "name": "okf-authoring",
+      "source": "./plugins/okf-authoring",
+      "description": "Tool-agnostic authoring and validation for conformant Open Knowledge Format (OKF) v0.2 knowledge bundles",
+      "skills": [
+        "./plugins/okf-authoring/skills/okf-author",
+        "./plugins/okf-authoring/skills/okf-validate"
+      ]
     }
   ]
 }
