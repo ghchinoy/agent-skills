@@ -175,3 +175,32 @@ hand-verify the output against the invariants above:
 
 If none are present, proceed entirely by hand — that is the expected default.
 Detect availability (e.g. `command -v binder`) rather than assuming it.
+
+## Bulk / existing-corpus ingestion → hand off to binder's `okf-convert` skill
+
+This skill authors a **single** bundle by hand. It is deliberately the wrong
+tool for turning an **existing markdown corpus** (a whole directory tree of `.md`
+files) into OKF at scale. For that, there is a named, purpose-built handoff:
+
+- **Hand off to the binder `okf-convert` skill** (the `okf-convert` Agent Skill
+  in the `okf-convert` plugin from `ghchinoy/binder`) when the job is to
+  **convert / ingest / migrate an existing corpus**, to drive binder end-to-end
+  (`convert → validate → review`), or when you need **deterministic, offline/CI,
+  provenance-preserving** ingestion at scale. That skill drives the `binder` CLI
+  and reasons over its structured `--json` output; it carries the
+  ingestion-analysis judgment (flag choice, pre-convert dry-run triage,
+  trust-extraction review, the post-convert acceptance loop) that by-hand
+  authoring cannot. Install it with:
+
+  ```
+  /plugin marketplace add ghchinoy/binder
+  ```
+
+  Like this skill, `okf-convert` **never fabricates trust** — it proposes trust
+  and defers all stamping to deterministic binder (no auto `verified`, no
+  invented `sources`, no stored tier).
+
+- **Stay in this skill (Layer A)** for hand-authoring or editing an **individual**
+  bundle or concept, and for any **zero-binary environment**: `okf-author` has no
+  binary dependency and this handoff introduces none. If binder is not installed
+  and you only need to write one bundle, author it by hand — that is the default.
