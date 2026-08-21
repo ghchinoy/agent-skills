@@ -507,6 +507,43 @@ test("fields these skills do NOT declare are rendered nowhere", async () => {
 // plausibly trip it. A control that could never have fired proves nothing,
 // which is the point §12 makes about detectors nobody has shown can fire.
 
+// ── A KNOWN, DELIBERATE RESIDUAL (F3) ──────────────────────────────────────
+//
+// This detector does not catch a banned phrase whose head is separated from
+// its quantifier by an intervening list item:
+//
+//   "It supports any skills-compatible agent, any agent, and every agent"
+//
+// The hedge is scrubbed first, which leaves "supports  , any agent, ..." —
+// and "supports" is no longer adjacent to a quantifier, so nothing fires.
+// The claim is real and the detector is silent on it.
+//
+// IT IS LEFT OPEN ON PURPOSE. The obvious closure — let the head match a
+// quantifier anywhere later in the sentence, or treat commas as skippable —
+// fires on honest prose that this project actively wants people to write:
+//
+//   "any agent that implements the spec"
+//   "the loader supports the six declared fields, and any agent may read them"
+//
+// A detector that punishes accurate hedging is the R2 failure inverted: R2 was
+// blocking precisely because the guardrail banned the one phrase §1.4 requires.
+// Trading a contrived evasion for false positives on careful writing would
+// reintroduce that defect from the other side, and the predictable result is
+// that the next developer deletes the detector rather than fights it.
+//
+// BEFORE YOU "FIX" THIS, weigh:
+//   1. Has this shape ever appeared in real copy here? It has not. The evasion
+//      requires writing the hedge AND the unhedged claim in one sentence,
+//      which is not what accidental over-claiming looks like.
+//   2. Whatever you add, run it against every negative control below AND
+//      against the repo's own SKILL.md prose. If it fires on any of them, the
+//      cure is worse than the disease.
+//   3. This gate is one of several. §12's rendered-chrome scan, the declared
+//      round trip and human review all sit downstream of it.
+//
+// The behaviour is pinned by a test below so that closing it is a deliberate,
+// visible act rather than a silent one.
+
 /** The one accurate hedge (§1.4/§12). Exempt, and asserted exempt below. */
 const HEDGE = /\bany skills-compatible agents?\b/gi;
 
@@ -743,6 +780,43 @@ test("over-claim control: an adverb between the words does not shadow the claim 
     overclaimHits("It works really truly seamlessly with any agent."),
     [],
     "the adverb bound has changed; update this control deliberately",
+  );
+});
+
+test("over-claim: the comma-list residual is a documented, deliberate gap (F3)", () => {
+  // NOT an endorsement — a pin. See the long note above HEDGE for why this is
+  // left open. If you close it, this test fails, and that is the point: you
+  // will have to come here and read the reasoning before overriding it.
+  const evasion = "It supports any skills-compatible agent, any agent, and every agent.";
+  assert.deepEqual(
+    overclaimHits(evasion),
+    [],
+    "the comma-list residual is now closed — good, if and only if every " +
+      "negative control below still passes and the honest-prose samples in " +
+      "this test still do not fire. Read the note above HEDGE, then update " +
+      "this test deliberately.",
+  );
+
+  // The prose the obvious fix would break. These must NEVER fire, whatever
+  // anyone does to the detector — they are the reason the gap is tolerated.
+  for (const honest of [
+    "Build a skill once and use it across any skills-compatible agent.",
+    "The format is readable by any agent that implements the spec.",
+    "The loader supports the six declared fields, and any agent may read them.",
+    "It is compatible with the spec, and any agent conforming to it can load the bundle.",
+  ]) {
+    assert.deepEqual(overclaimHits(honest), [], `honest prose must not fire: ${honest}`);
+  }
+
+  // And the gap is narrow: the same claim WITHOUT the intervening list item
+  // still fires, so this is a residual and not a hole.
+  assert.deepEqual(
+    overclaimHits("It supports any agent.").map((h) => h.id),
+    ["supports-any"],
+  );
+  assert.deepEqual(
+    overclaimHits("It supports every agent, and any agent, too.").map((h) => h.id),
+    ["supports-any"],
   );
 });
 

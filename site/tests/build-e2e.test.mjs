@@ -90,6 +90,18 @@ async function buildWith(mutate) {
   }
 }
 
+/**
+ * The advisory total the build reports, or `null` if it reported none.
+ *
+ * Matched against the string the build ACTUALLY emits. Pinned by the control
+ * below, because the point of F1 is that a literal nobody checks against real
+ * output is how an assertion becomes decorative.
+ */
+function advisoryCount(output) {
+  const m = /(\d+) source-repo advisories/.exec(output);
+  return m ? Number(m[1]) : null;
+}
+
 /** Appends `text` to a file in the copied repo and returns its 1-based line. */
 async function append(root, relPath, text) {
   const p = join(root, relPath);
@@ -99,8 +111,11 @@ async function append(root, relPath, text) {
   return body.split("\n").length; // the appended text lands on this line
 }
 
-// The three builds are independent, so they run concurrently and each test
-// awaits the one it needs. Sequential would triple the wall clock for nothing.
+/** Set by the `afterIndentedFence` plant; read by the test that awaits it. */
+let plantedLine = null;
+
+// The builds are independent, so they run concurrently and each test awaits
+// the one it needs. Sequential would multiply the wall clock for nothing.
 const cases = {
   // POSITIVE 1 — a bad link in an ordinary region. This one always worked;
   // it is here so a failure in the other two can be attributed to the region
@@ -117,7 +132,10 @@ const cases = {
   // the indented closing fence at line 197. Before the fix this built clean
   // and the dead link reached dist/.
   afterIndentedFence: buildWith(async (root) => {
-    await append(root, SKILL, `Planted after the indented fence: [x](${BAD})`);
+    // F2.1: keep the line the plant landed on. The whole claim about the §6.5
+    // hard error is that it names file, LINE and target; a test that plants at
+    // a line it then declines to look at is only checking two thirds of it.
+    plantedLine = await append(root, SKILL, `Planted after the indented fence: [x](${BAD})`);
   }),
 
   // NEGATIVE (near miss) — the SAME bad target, inside a fenced block, where
@@ -189,7 +207,16 @@ test("E2E: a bad link AFTER an indented closing fence fails the build too (R5)",
   );
   assert.match(output, /unresolvable link target/);
   assert.ok(output.includes(BAD));
-  assert.ok(output.includes(SKILL));
+  // F2.1: assert the LINE, which this test planted and then ignored. The line
+  // is the part of the diagnostic most likely to break silently — it survives
+  // frontmatter, the H1 strip and the fence scan, and every one of those can
+  // shift it — and it is the only part a reader acts on.
+  assert.ok(plantedLine > 200, `the plant landed at line ${plantedLine}, before the fence`);
+  assert.ok(
+    output.includes(`${SKILL}:${plantedLine}`),
+    `the error should name ${SKILL}:${plantedLine}; it says: ` +
+      `${/unresolvable link target[^\n]*/.exec(output)?.[0] ?? "(nothing)"}`,
+  );
   assert.ok(
     !existsSync(join(root, "site", "dist", "plugins")),
     "a failed build still produced pages",
@@ -230,8 +257,50 @@ test("E2E: advisory gates proven only at unit level actually fire in a real buil
     /\[UNKNOWN-FIELD\][^\n]*plugin\.json:\d+[^\n]*"tags"/,
     "the unknown MANIFEST key advisory never reached the build log (N3)",
   );
-  // Report AND ignore: neither planted key may be rendered.
-  assert.doesNotMatch(output, /Advisories: 10\b/, "the advisory count did not move");
+  // F1. This line used to read:
+  //
+  //     assert.doesNotMatch(output, /Advisories: 10\b/, "the count did not move");
+  //
+  // The build has never emitted the string "Advisories: 10" in its life — it
+  // says "10 source-repo advisories". So the assertion could not fail under
+  // any input. It is the R2 defect exactly: a check that is not a gate.
+  //
+  // Repaired rather than deleted, because there IS a real claim here that the
+  // two matches above do not make: the planted keys must ADD to the advisory
+  // total, not merely appear in the log. And it is written relationally —
+  // planted count against the count from an unplanted build — so it cannot go
+  // vacuous again if the baseline changes. A literal 12 here would be a fact
+  // about today's repo that silently stops being checked the day an advisory
+  // is fixed.
+  const planted = advisoryCount(output);
+  const baseline = advisoryCount((await cases.insideFence).output);
+  assert.equal(baseline, 10, `the unplanted baseline moved: ${baseline}`);
+  assert.equal(
+    planted,
+    baseline + 2,
+    `two keys were planted, so the total should be ${baseline + 2}, not ${planted} — ` +
+      `an advisory is being logged without being counted, or vice versa`,
+  );
+});
+
+test("E2E control: the advisory-count assertion is aimed at a string the build emits", async () => {
+  // The control F1 says the original assertion never had. Positive: the helper
+  // reads the real line out of a real build's output.
+  const { output } = await cases.insideFence;
+  assert.match(output, /\d+ source-repo advisories/, "the build no longer reports a total");
+  assert.equal(advisoryCount(output), 10);
+
+  // Negative, and the evidence for the finding: the literal the deleted
+  // assertion matched against appears in NO build output that has ever
+  // existed. Kept as a test rather than a comment so that if the build ever
+  // does start saying "Advisories: N", whoever makes that change is told that
+  // a previous assertion depended on the wording.
+  assert.doesNotMatch(output, /Advisories:/, "the build's wording changed; re-check F1");
+  assert.equal(advisoryCount("Advisories: 10"), null);
+
+  // And the helper must not match a number that is merely nearby.
+  assert.equal(advisoryCount("10 source-repo advisers"), null);
+  assert.equal(advisoryCount("no advisories at all"), null);
 });
 
 test("E2E: neither planted unknown key is rendered on the page (report AND ignore)", async () => {
@@ -252,9 +321,16 @@ test("E2E: a non-string metadata value fails with a diagnostic naming file and l
     new RegExp(`${SKILL}:6\\b`),
     "the diagnostic does not name the file and line of the offending key",
   );
-  assert.match(output, /metadata\.version is number/);
-  // The point of refusing rather than coercing: name the corruption.
-  assert.ok(output.includes("1.1"), "the error does not show what coercion would have published");
+  // F2.2: this used to be `output.includes("1.1")`, which the "1.10" already
+  // in the same sentence satisfies on its own — so it discriminated nothing.
+  // The coerced value has to be asserted where the message reports the value
+  // it actually parsed, and as a whole number so "1.10" cannot stand in for
+  // it.
+  assert.match(
+    output,
+    /metadata\.version is number \(1\.1\)(?!\d)/,
+    "the error does not show the COERCED value that refusing to coerce avoids",
+  );
   assert.doesNotMatch(
     output,
     /Invalid content entry frontmatter/,
