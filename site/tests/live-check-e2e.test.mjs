@@ -46,7 +46,7 @@ import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 import { runOnce } from "../scripts/check-live-links.mjs";
-import { BASE, ORIGIN, dist, walk } from "./_helpers.mjs";
+import { BASE, ORIGIN, dist, plantOrThrow, walk } from "./_helpers.mjs";
 
 /** A route that is never built. Planted as an absolute same-origin reference,
  *  which is the class the local suite could not see. */
@@ -194,12 +194,10 @@ async function withOrigin(localOrigin, fn) {
  * fires, and deleting it left the suite green.
  */
 export function rewriteOrThrow(body, find, replaceWith, what) {
-  const before = body.toString("utf8");
-  const after = before.replace(find, replaceWith);
-  if (after === before) {
-    throw new Error(`fixture could not plant ${what}: no match for ${find} in the served page`);
-  }
-  return Buffer.from(after);
+  // Buffer adaptation only. The rule itself lives in _helpers.mjs and is shared
+  // with the build fixtures, because two copies of "fail when you rewrite
+  // nothing" is the same mistake one level up.
+  return Buffer.from(plantOrThrow(body.toString("utf8"), find, replaceWith, `${what} in the served page`));
 }
 
 const run = async (opts) => {

@@ -155,3 +155,37 @@ export function decodeEntities(html) {
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
 }
+
+/**
+ * Apply a text rewrite, and FAIL LOUDLY if it rewrote nothing.
+ *
+ * SWEEP 3, and it is a class rather than a tidy-up. Every control in this suite
+ * that plants a defect does it by string replacement against an anchor in a real
+ * file, and when the anchor stops matching — Astro stops emitting `</head>`,
+ * frontmatter gets reformatted, a manifest is pretty-printed differently — the
+ * plant silently does nothing. The test then exercises an UNMODIFIED file. Both
+ * outcomes are bad and you cannot predict which you get: if the control expects
+ * a failure it goes green having proven nothing, and if it expects success it
+ * goes red for a reason that has nothing to do with the code under test. This
+ * phase has now seen both, in three different hands.
+ *
+ * The fix is not to be careful with anchors. It is that a rewrite which matches
+ * nothing is a broken instrument and must say so where it happens, not later and
+ * somewhere else.
+ *
+ * @param {string} source
+ * @param {string|RegExp} find
+ * @param {string} replaceWith
+ * @param {string} what  named in the error, so the failure identifies the plant
+ */
+export function plantOrThrow(source, find, replaceWith, what) {
+  const after = source.replace(find, replaceWith);
+  if (after === source) {
+    throw new Error(
+      `could not plant ${what}: no match for ${find}. The anchor this control ` +
+        `depends on is no longer in the file, so the control was about to run ` +
+        `against unmodified input and prove nothing.`,
+    );
+  }
+  return after;
+}

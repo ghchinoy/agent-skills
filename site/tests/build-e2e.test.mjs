@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { repoRoot, siteRoot } from "./_helpers.mjs";
+import { plantOrThrow, repoRoot, siteRoot } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -232,11 +232,11 @@ const cases = {
     // (a) unknown top-level SKILL.md frontmatter key — frontmatter.mjs
     const p = join(root, SKILL);
     const raw = await readFile(p, "utf8");
-    await writeFile(p, raw.replace(/^name:/m, "category: planted\nname:"));
+    await writeFile(p, plantOrThrow(raw, /^name:/m, "category: planted\nname:", "an unknown frontmatter key"));
     // (b) unknown top-level plugin.json key — enumerate.mjs (N3)
     const mp = join(root, "plugins/okf-authoring/plugin.json");
     const manifest = await readFile(mp, "utf8");
-    await writeFile(mp, manifest.replace(/^\{/, '{\n  "tags": ["planted"],'));
+    await writeFile(mp, plantOrThrow(manifest, /^\{/, '{\n  "tags": ["planted"],', "an unknown plugin.json key"));
   }),
 
   // C3 — a non-string metadata value. Used to die on Astro's generic
@@ -247,9 +247,9 @@ const cases = {
     // Unquoting the existing metadata.version makes YAML parse it as a float
     // — and 1.10 becomes 1.1, which is the whole reason this is refused
     // rather than coerced.
-    const out = raw.replace(/^(\s*)version: "1\.0\.0"$/m, '$1version: 1.10');
-    assert.notEqual(out, raw, "the metadata.version plant did not apply");
-    await writeFile(p, out);
+    // This one always had an ad-hoc no-op guard. It is now the shared one, so
+    // the property holds for every plant rather than the one someone remembered.
+    await writeFile(p, plantOrThrow(raw, /^(\s*)version: "1\.0\.0"$/m, '$1version: 1.10', "an unquoted metadata.version"));
   }),
 };
 
