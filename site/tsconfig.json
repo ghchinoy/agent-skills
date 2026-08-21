@@ -15,6 +15,7 @@
   //                src/loaders/frontmatter.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
+  //                scripts/check-live-links.mjs
   //                tests/*.mjs
   //
   // That is most of the loader. Verified, not assumed: a `@type {number}`
@@ -28,6 +29,12 @@
   // in them surfaces over there — but nothing verifies them against the .mjs
   // code they sit in. Treat them as comments that happen to be
   // machine-readable, not as a guarantee.
+  //
+  // PHASE 2 added one file to that list: scripts/check-live-links.mjs, the
+  // live-deployment link checker. Its decision-making — reference extraction,
+  // internal/external classification, dist-path-to-URL mapping — is factored
+  // out and unit-tested in tests/live-links.test.mjs precisely because the type
+  // checker is not watching it.
   //
   // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` currently surfaces 204
   // errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6

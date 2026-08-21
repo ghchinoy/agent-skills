@@ -267,15 +267,46 @@ test("R6: tsconfig.json documents exactly which files the type check covers", as
   assert.match(raw, /INERT/, "tsconfig.json does not disclose that the JSDoc typedefs are inert");
   assert.match(raw, /PHASE 5 CANDIDATE/, "widening coverage is not logged for a later phase");
 
-  // Every unchecked source file must be NAMED. A new .mjs added to src/ without
-  // a line here silently inherits a coverage claim it does not have.
-  const sources = (await walk(join(siteRoot, "src")))
-    .filter((f) => f.endsWith(".mjs"))
-    .map((f) => rel(f, siteRoot));
-  assert.ok(sources.length >= 5, "the source scan found suspiciously few .mjs files");
-  for (const s of sources) {
-    assert.ok(raw.includes(s), `${s} is not type-checked and tsconfig.json does not say so`);
+  // Every unchecked source file must be NAMED. A new .mjs added without a line
+  // here silently inherits a coverage claim it does not have.
+  //
+  // Phase 2 widened this in two ways. (a) `scripts/` is scanned as well as
+  // `src/`: the live-link checker lives there, is unchecked like the loaders,
+  // and would otherwise have been undisclosed by construction. (b) The search
+  // is now scoped to the text AFTER the "NOT CHECKED" heading — the Phase 1
+  // reviewer's FYI-1, that naming a file under the CHECKED heading also
+  // satisfied `raw.includes()`, leaving it in fact unchecked and the test
+  // green. Adding a file to this list is the moment that hole matters most, so
+  // it is closed here rather than deferred.
+  const disclosed = raw.slice(raw.indexOf("NOT CHECKED"));
+  const dirs = ["src", "scripts"];
+  const sources = [];
+  for (const d of dirs) {
+    const abs = join(siteRoot, d);
+    if (!(await exists(abs))) continue;
+    for (const f of await walk(abs)) if (f.endsWith(".mjs")) sources.push(rel(f, siteRoot));
   }
+  assert.ok(sources.length >= 6, "the source scan found suspiciously few .mjs files");
+  for (const s of sources) {
+    assert.ok(disclosed.includes(s), `${s} is not type-checked and tsconfig.json does not say so`);
+  }
+});
+
+test("type-check disclosure control: the scoped search can actually fail", () => {
+  // FYI-1's regression test. The old `raw.includes(name)` was satisfied by a
+  // filename appearing ANYWHERE in the file, including under the CHECKED
+  // heading — which is the one place that means the opposite of what the test
+  // is asserting. Proven on a fixture rather than argued.
+  const fixture = [
+    "// CHECKED      src/loaders/skills.ts",
+    "//              src/zz-new-module.mjs",
+    "// NOT CHECKED",
+    "//              src/loaders/enumerate.mjs",
+  ].join("\n");
+  const scoped = fixture.slice(fixture.indexOf("NOT CHECKED"));
+  assert.ok(fixture.includes("src/zz-new-module.mjs"), "the fixture is wrong");
+  assert.ok(!scoped.includes("src/zz-new-module.mjs"), "the scoped search still cannot fail");
+  assert.ok(scoped.includes("src/loaders/enumerate.mjs"), "the scoped search lost a real entry");
 });
 
 test("engines.node requires Node 22, and the running Node satisfies it", async () => {
@@ -346,17 +377,37 @@ test("the build touches nothing outside site/ except the plugin sources it reads
   );
 });
 
-test("no GitHub Actions workflow was added by this phase", async () => {
-  // Phase 1 builds LOCALLY ONLY. A workflow file here would be out of scope and
-  // would deploy something nobody has reviewed. Phase 2 adds them.
-  const forbidden = [".github/workflows/docs.yml", ".github/workflows/site-ci.yml"];
-  for (const f of forbidden) {
-    assert.ok(!(await exists(join(repoRoot, f))), `${f} exists — Phase 1 must not add workflows`);
+test("Phase 2's workflows are the only ones this site added", async () => {
+  // This test used to assert the OPPOSITE: Phase 1 built locally only, so a
+  // workflow file was out of scope and its absence was the check. Phase 2 adds
+  // exactly two, and their contents are gated by tests/workflows.test.mjs.
+  //
+  // What survives here is the SCOPE half — the site owns two workflow files and
+  // no others, and the repository's pre-existing validate.yml is still present.
+  // Phase 2's acceptance criterion 6 is that validate.yml still passes and was
+  // not modified; its contents are not this suite's to pin (it is not the
+  // site's file), but a site change that deleted it would be caught here.
+  for (const f of [".github/workflows/docs.yml", ".github/workflows/site-ci.yml"]) {
+    assert.ok(await exists(join(repoRoot, f)), `${f} is missing — Phase 2 adds it`);
   }
-  // …and the repo's own pre-existing workflow is untouched, which the git diff
-  // in the PR also shows. This checks it is at least still there.
   assert.ok(
     await exists(join(repoRoot, ".github/workflows/validate.yml")),
     "the repository's existing validate.yml has gone missing",
+  );
+  // Exactly two workflows may build the site. Scoped to the site's own concern
+  // deliberately: the repository is free to add workflows of its own without
+  // this suite failing, but a THIRD place that builds site/ would mean the
+  // build is configured in more than one file and they will drift.
+  const { readdir } = await import("node:fs/promises");
+  const dir = join(repoRoot, ".github/workflows");
+  const builders = [];
+  for (const f of await readdir(dir)) {
+    const text = await readFile(join(dir, f), "utf8");
+    if (/working-directory:\s*site\b/.test(text)) builders.push(f);
+  }
+  assert.deepEqual(
+    builders.sort(),
+    ["docs.yml", "site-ci.yml"],
+    "the site build is configured in a workflow this suite does not know about",
   );
 });

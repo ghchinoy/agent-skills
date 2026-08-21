@@ -1,0 +1,69 @@
+# site-ci.yml — the pull-request gate for the catalog site.
+#
+# This is the workflow proposal §9.1 exists for. The site lives INSIDE the repo
+# whose content it renders, so a pull request that edits a `SKILL.md` builds the
+# site on that pull request: malformed frontmatter, a link to a renamed
+# reference, a skill missing from `marketplace.json` all fail HERE, attributed to
+# the change that caused them, instead of surfacing later somewhere else.
+#
+# That is why `paths:` includes `plugins/**` and not only `site/**`. A
+# content-only change can break the site build, and a gate that does not run on
+# content changes is not the gate this design is built around.
+#
+# It builds and tests. It does NOT deploy — deployment is docs.yml, on `main`,
+# after review. tests/workflows.test.mjs asserts the absence of every Pages
+# deployment action and of `pages: write` here, with a positive control.
+name: site-ci
+
+on:
+  pull_request:
+    # Deliberately NOT filtered by base branch: a pull request into a working
+    # branch must be gated too, which is how this workflow was exercised before
+    # it existed on `main`.
+    paths:
+      - 'plugins/**'
+      - '.claude-plugin/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'site/**'
+      # Both workflow files, so a change to either is built and tested on the
+      # pull request that makes it. docs.yml watches only itself, because it
+      # deploys and site-ci.yml has no effect on what it deploys.
+      - '.github/workflows/site-ci.yml'
+      - '.github/workflows/docs.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: site
+
+      # Build BEFORE test, and as its own step: most of the suite asserts on the
+      # rendered bytes in dist/, and a build failure should be reported as a
+      # build failure naming the source file, not buried in a test log.
+      - name: Build the site
+        run: npm run build
+        working-directory: site
+
+      - name: Type-check and run the guardrail suite
+        run: npm test
+        working-directory: site
