@@ -1,0 +1,21 @@
+---
+// A Starlight component override, not a markdown prebuild.
+//
+// The field blocks could have been templated into the markdown body as a string
+// before rendering. They are not, deliberately: string templating is exactly
+// how `Version: ${v}` becomes a page that reads "Version:" with nothing after
+// it, and almost a third of this catalog declares no `metadata` at all. Here
+// absence is `undefined` and a JSX conditional either emits the row or does
+// not, so the empty-label failure is unrepresentable rather than merely
+// avoided.
+//
+// EntryMeta renders ABOVE the body. `<Default>` then renders the SKILL.md body
+// itself, verbatim apart from the two transformations in the loader.
+import Default from "@astrojs/starlight/components/MarkdownContent.astro";
+import EntryMeta from "./EntryMeta.astro";
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<EntryMeta entry={entry} />
+<Default><slot /></Default>
