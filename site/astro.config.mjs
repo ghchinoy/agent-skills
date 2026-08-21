@@ -2,7 +2,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
-import { BASE, PHASE_1_PLUGINS, SITE } from "./src/site.config.mjs";
+import { BASE, PHASE_1_PLUGINS, REPO_URL, SITE } from "./src/site.config.mjs";
 import { buildSidebar } from "./src/sidebar.mjs";
 
 // Hosting: the project GitHub Pages site at
@@ -63,11 +63,17 @@ export default defineConfig({
       // here.
       sidebar: await buildSidebar(PHASE_1_PLUGINS),
 
+      // REPO_URL, not a literal. site.config.mjs calls itself the constants
+      // "written once so they cannot drift apart" and exports REPO_URL as "the
+      // canonical repository" — and this line held a fourth copy of it anyway,
+      // in the production config, which is the one place a stale repo URL ships
+      // to readers. Found by the mirrored-constant class sweep, not by being
+      // named in a review: same class as F9, different instance.
       social: [
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/ghchinoy/agent-skills",
+          href: REPO_URL,
         },
       ],
     }),

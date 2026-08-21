@@ -5,12 +5,24 @@
 // workflows have to hold are now checked on every run rather than eyeballed
 // once in a pull request.
 //
-// The load-bearing one is the FIRST test. A sibling project deploys its docs on
-// `push: tags: ['v*']` and its `github-pages` environment protection rejects
-// `v*` tag refs, so the deploy fires at release time and dies at the
-// environment gate. That is an observed failure, not a hypothesis, and the only
-// thing standing between this repo and repeating it is the trigger in docs.yml.
-// A comment saying "do not use a tag trigger" is not a gate. This is.
+// The load-bearing property is the deploy lesson. A sibling project deploys its
+// docs on `push: tags: ['v*']` and its `github-pages` environment protection
+// rejects `v*` tag refs, so the deploy fires at release time and dies at the
+// environment gate. That is an observed failure, not a hypothesis.
+//
+// TWO tests hold it, and an earlier version of this comment credited the wrong
+// one. The trigger test below checks that `push:` is `main`-only and that no
+// `tags:` filter exists. THE TRIGGER LIST IS NOT WHAT CLOSES THE HOLE:
+// `workflow_dispatch` carries no ref restriction, and `gh workflow run --ref
+// v1.0.0` lands `refs/tags/...` at the environment gate through a trigger that
+// looks harmless. What actually closes it is the job-level
+// `if: github.ref == 'refs/heads/main'`, asserted by "docs.yml cannot deploy
+// from a tag ref — including via workflow_dispatch" further down. Saying the
+// trigger is "the only thing standing between this repo and repeating it" is
+// the R3 over-claim, corrected in three places last round and still surviving
+// here; it is fix-round-2 finding F5.
+//
+// A comment saying "do not use a tag trigger" is not a gate. These two are.
 //
 // Every detector here carries a control, because a detector nobody has proven
 // can fire is not a gate — the pattern the Phase 1 suite is built on.
@@ -199,14 +211,18 @@ test("Phase 2 ships docs.yml and site-ci.yml, and validate.yml is still present"
 
 // ── the deploy lesson ───────────────────────────────────────────────────────
 
-test("docs.yml deploys on push to main and CANNOT be triggered by a tag", async () => {
+// NOT titled "cannot be triggered by a tag" — that was the second surviving R3
+// over-claim (F5). This test proves the TRIGGER LIST carries no tag entry. It
+// says nothing about `workflow_dispatch`, which can be aimed at a tag; the ref
+// guard is what stops that, and it has its own test.
+test("docs.yml's push trigger is main-only and declares no tag filter", async () => {
   const wf = await load(DOCS);
   const on = triggers(wf);
   assert.deepEqual(on.push?.branches, ["main"], "docs.yml does not deploy on push to main");
   assert.deepEqual(
     tagTriggers(wf),
     [],
-    "docs.yml can be started by a tag ref — the github-pages environment rejects those",
+    "docs.yml declares a tag trigger — the github-pages environment rejects tag refs, and the job-level ref guard is the only other thing that would stop it",
   );
   // …and the branch filter is not merely present but exclusive: no second
   // branch, and no branches-ignore that would let arbitrary refs through.

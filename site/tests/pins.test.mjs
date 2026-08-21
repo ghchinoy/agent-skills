@@ -411,3 +411,162 @@ test("Phase 2's workflows are the only ones this site added", async () => {
     "the site build is configured in a workflow this suite does not know about",
   );
 });
+
+// ── the mirrored-constant class ─────────────────────────────────────────────
+//
+// Gap 2 residue. Sweep 2 was scoped to PREDICATES, so mirrored CONSTANTS were
+// out of scope by construction, and F9 was one instance of what that boundary
+// hid: `DEFAULT_URL` was a fourth hand-written copy of the deployed URL with no
+// artifact-mediated path back to `src/site.config.mjs`.
+//
+// Closing an instance is not closing a class. This is the class: NO PRODUCTION
+// FILE MAY CARRY A SECOND COPY OF A SITE CONSTANT. It found one that no review
+// named — `astro.config.mjs` hard-coded the repository URL while importing
+// `BASE` and `SITE` from the very file that exports `REPO_URL` two lines below
+// them.
+//
+// TESTS ARE DELIBERATELY EXEMPT, and the exemption is the point rather than a
+// carve-out for convenience: a test that imports the site's own constant to
+// build its expected value cannot catch the site changing that constant. It
+// asserts `x === x`. `tests/_helpers.mjs` says so at its own BASE and ORIGIN,
+// and `live-links.test.mjs`'s DEFAULT_URL test says so again — those literals
+// are the suite's INDEPENDENT copies and they must stay literals. So the rule
+// is directional: production code single-sources, test code deliberately does
+// not, and the drift between them is what makes the comparison mean anything.
+//
+// COMMENTS are exempt too. A doc comment showing `--url
+// https://ghchinoy.github.io/agent-skills/` as a usage example is documentation
+// of a value, not a second definition of it; stripping it would make the
+// example wrong.
+test("no production file carries a second copy of a site constant", async () => {
+  const config = await readFile(join(siteRoot, "src/site.config.mjs"), "utf8");
+  const constants = ["SITE", "BASE", "REPO_URL"].map((name) => {
+    const m = new RegExp(`export const ${name} = "([^"]+)"`).exec(config);
+    assert.ok(m, `src/site.config.mjs no longer exports ${name} as a string literal`);
+    return { name, value: m[1] };
+  });
+  // Nothing shorter than this is worth matching: "/agent-skills" appears inside
+  // the repo URL, so the longest values have to be checked first and the
+  // matched span removed, or every REPO_URL hit double-counts as a BASE hit.
+  constants.sort((a, b) => b.value.length - a.value.length);
+
+  const offenders = [];
+  for (const abs of await walk(join(siteRoot, "src"))) {
+    if (!abs.endsWith(".mjs") && !abs.endsWith(".js")) continue;
+    if (abs.endsWith("site.config.mjs")) continue; // the source itself
+    offenders.push(...copiesIn(await readFile(abs, "utf8"), rel(abs), constants));
+  }
+  for (const f of ["astro.config.mjs", "scripts/check-live-links.mjs"]) {
+    const abs = join(siteRoot, f);
+    offenders.push(...copiesIn(await readFile(abs, "utf8"), f, constants));
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "a site constant is written twice in production code — import it from " +
+      "src/site.config.mjs instead:\n  " + offenders.join("\n  "),
+  );
+});
+
+test("CONTROL: the mirrored-constant detector can actually fire", () => {
+  const constants = [
+    { name: "REPO_URL", value: "https://github.com/ghchinoy/agent-skills" },
+    { name: "BASE", value: "/agent-skills" },
+  ].sort((a, b) => b.value.length - a.value.length);
+
+  // The exact defect this test was written after: a literal where an import
+  // belongs.
+  assert.deepEqual(
+    copiesIn('href: "https://github.com/ghchinoy/agent-skills",', "x.mjs", constants),
+    ["x.mjs:1 REPO_URL"],
+  );
+  // …and the same value one line lower, so a detector that only reads line 1
+  // is not what is passing.
+  assert.deepEqual(
+    copiesIn('\n\nconst b = "/agent-skills";', "x.mjs", constants),
+    ["x.mjs:3 BASE"],
+  );
+  // The ordering guard: REPO_URL contains BASE as a substring. If the longest
+  // value were not stripped first this would report BASE as well, and a real
+  // BASE copy would then be indistinguishable from a REPO_URL copy.
+  assert.deepEqual(
+    copiesIn('const r = "https://github.com/ghchinoy/agent-skills";', "x.mjs", constants),
+    ["x.mjs:1 REPO_URL"],
+  );
+
+  // THE DEFECT THE FIRST VERSION OF THIS DETECTOR HAD. `https://` contains
+  // `//`; a line-oriented stripper cuts here and the constant vanishes. Two of
+  // the three constants are URLs, so that version could not fire on either.
+  assert.deepEqual(
+    copiesIn('const r = "https://github.com/ghchinoy/agent-skills"; // note', "x.mjs", constants),
+    ["x.mjs:1 REPO_URL"],
+  );
+
+  // NEGATIVE HALF. Each of these is a shape the codebase legitimately contains,
+  // and a detector that flagged any of them would be reverted within a day —
+  // which is a slower and more expensive way of not having a gate.
+  assert.deepEqual(copiesIn('import { BASE } from "./src/site.config.mjs";', "x.mjs", constants), []);
+  assert.deepEqual(copiesIn("// see https://github.com/ghchinoy/agent-skills", "x.mjs", constants), []);
+  assert.deepEqual(copiesIn("/*\n * base is /agent-skills here\n */", "x.mjs", constants), []);
+  assert.deepEqual(copiesIn("const s = BASE + \"/pagefind/\";", "x.mjs", constants), []);
+});
+
+/**
+ * Every line of `text` outside a comment that contains a constant's literal
+ * value.
+ *
+ * THE COMMENT STRIPPER IS QUOTE-AWARE, AND THE FIRST VERSION WAS NOT. It cut
+ * each line at the first `//`, which is inside `https://` for two of the three
+ * constants — so the detector could never have fired on SITE or REPO_URL. It
+ * would have passed on the day it was written, passed forever after, and been
+ * indistinguishable from a working gate. The control below caught it before it
+ * was committed, which is the entire argument for writing the control first.
+ *
+ * So this walks the line character by character, tracking whether it is inside
+ * a single-quoted, double-quoted or template string, and only treats `//` and
+ * `/*` as comment openers OUTSIDE one. Escapes are honoured. Template
+ * interpolation is not parsed — a `${...}` containing a quote could confuse it
+ * — and that residue is left deliberately rather than papered over, because the
+ * failure direction is a missed offender, and the constants at issue are never
+ * written as interpolations.
+ *
+ * @param {string} text
+ * @param {string} label
+ * @param {{name: string, value: string}[]} constants longest value FIRST
+ * @returns {string[]}
+ */
+function copiesIn(text, label, constants) {
+  const out = [];
+  let inBlock = false;
+  text.split("\n").forEach((raw, i) => {
+    let code = "";
+    let quote = null;
+    for (let j = 0; j < raw.length; j += 1) {
+      const c = raw[j];
+      if (inBlock) {
+        if (c === "*" && raw[j + 1] === "/") { inBlock = false; j += 1; }
+        continue;
+      }
+      if (quote) {
+        code += c;
+        if (c === "\\") { code += raw[j + 1] ?? ""; j += 1; continue; }
+        if (c === quote) quote = null;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === "`") { quote = c; code += c; continue; }
+      if (c === "/" && raw[j + 1] === "/") return record(code);
+      if (c === "/" && raw[j + 1] === "*") { inBlock = true; j += 1; continue; }
+      code += c;
+    }
+    record(code);
+
+    function record(line) {
+      for (const { name, value } of constants) {
+        if (!line.includes(value)) continue;
+        line = line.split(value).join(""); // strip so shorter values do not re-hit
+        out.push(`${label}:${i + 1} ${name}`);
+      }
+    }
+  });
+  return out;
+}
