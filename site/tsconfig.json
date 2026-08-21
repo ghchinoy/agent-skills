@@ -1,0 +1,52 @@
+{
+  // ───────────────────────────────────────────────────────────────────────────
+  // SCOPE OF THE TYPE CHECK — READ THIS BEFORE ASSUMING COVERAGE.
+  //
+  // `npm run typecheck` (astro check) reports 0 errors. That does NOT mean the
+  // codebase type-checks. `checkJs` is FALSE, so:
+  //
+  //   CHECKED      src/loaders/skills.ts       (the only .ts file here)
+  //                src/**/*.astro              (component script blocks)
+  //
+  //   NOT CHECKED — type errors in these are invisible to `astro check`:
+  //                src/loaders/enumerate.mjs
+  //                src/loaders/links.mjs
+  //                src/loaders/markdown.mjs
+  //                src/loaders/frontmatter.mjs
+  //                src/sidebar.mjs
+  //                src/site.config.mjs
+  //                tests/*.mjs
+  //
+  // That is most of the loader. Verified, not assumed: a `@type {number}`
+  // annotation on a string constant, planted in enumerate.mjs and again in
+  // sidebar.mjs, leaves `astro check` reporting 0 errors — while the same
+  // class of error in skills.ts reports 1.
+  //
+  // CONSEQUENCE THAT BITES: the JSDoc `@typedef` blocks in enumerate.mjs and
+  // frontmatter.mjs are INERT. They are accurate documentation, and they are
+  // load-bearing for skills.ts — which imports them and IS checked, so a lie
+  // in them surfaces over there — but nothing verifies them against the .mjs
+  // code they sit in. Treat them as comments that happen to be
+  // machine-readable, not as a guarantee.
+  //
+  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` currently surfaces 204
+  // errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
+  // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro), which are
+  // overwhelmingly missing annotations and implicit `any` under `strict`
+  // rather than latent bugs. Fixing them is real work and out of scope for
+  // Phase 1. Logged as a PHASE 5 CANDIDATE with that count so the phase can
+  // size it.
+  //
+  // If you turn it on, do it as its own change with its own review. Do not
+  // widen it as a side effect of something else, and do not restate the
+  // coverage claim anywhere without changing this comment with it.
+  // ───────────────────────────────────────────────────────────────────────────
+  "extends": "astro/tsconfigs/strict",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist"],
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "allowImportingTsExtensions": true
+  }
+}

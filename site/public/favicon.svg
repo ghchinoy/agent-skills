@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Agent Skills Catalog">
+  <!--
+    Ships the asset Starlight's default <link rel="icon" href="/favicon.svg">
+    already points at. Before this file existed the reference 404-ed on all
+    seven built pages, and the link test could not see it because it matched
+    <a href> only (fix round, R3).
+
+    Deliberately abstract: three stacked cards, the catalog's own accent over
+    its own ink. It asserts nothing about the content — an icon that implied a
+    vendor, an agent or a capability would be a claim, and this site does not
+    make claims the repository has not declared. Colours are the two values
+    from src/styles/tokens.css, written out rather than imported because an SVG
+    in public/ is copied verbatim and never sees the stylesheet.
+  -->
+  <rect width="32" height="32" rx="7" fill="#16181f"/>
+  <rect x="7" y="7" width="18" height="4.5" rx="1.5" fill="#4f5bd5"/>
+  <rect x="7" y="13.75" width="18" height="4.5" rx="1.5" fill="#8b90a3"/>
+  <rect x="7" y="20.5" width="11" height="4.5" rx="1.5" fill="#8b90a3"/>
+</svg>

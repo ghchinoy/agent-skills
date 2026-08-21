@@ -1,0 +1,416 @@
+---
+// EntryMeta.astro — the field blocks that sit above every page body.
+//
+// THE WHOLE POINT OF THIS FILE IS WHAT IT CANNOT DO.
+//
+// Every row below is written as `{value !== undefined && <row/>}`. There is no
+// `?? "n/a"`, no `|| "1.0.0"`, no `Version: ${v}` string template anywhere in
+// this component. Almost a third of the catalog declares no `metadata` at all,
+// entirely legitimately — the spec makes it optional — so those pages must
+// render no such row, not an empty one. A placeholder there would assert
+// something the standard specifically allows the author to leave unsaid.
+//
+// The declared/derived split is structural, not a convention: declared
+// `SKILL.md` fields come off `entry.data` under their own spec names, declared
+// manifest fields come off `entry.data._manifest`, and everything this build
+// COMPUTED comes off `entry.data._skill`. Derived rows say so in their label.
+//
+// Field LABELS are the declared key names themselves (`version`, `sources`,
+// `license`), so even the label is lifted rather than invented. Every label
+// element carries `data-field-label`, which is what
+// tests/no-fabrication.test.mjs scans — see AC 9.
+
+interface Props {
+  entry: any;
+}
+const { entry } = Astro.props;
+const data = (entry?.data ?? {}) as any;
+// Starlight synthesises a fallback entry for its built-in 404 route, which has
+// no collection data and therefore no fields to render. Rendering nothing is
+// the honest answer; inventing a shape for it would be the fabrication.
+const d = data._skill;
+const manifest = data._manifest ?? {};
+
+// Derived from plugin.json's own `$schema` URL, which is the only place the
+// targeted standard version is declared. No $schema, no row.
+const schemaVersion =
+  typeof manifest.$schema === "string"
+    ? (/\/schemas\/([0-9][0-9A-Za-z.\-]*)\//.exec(manifest.$schema)?.[1] ?? null)
+    : null;
+
+const metadata: Record<string, string | string[]> = data.metadata ?? {};
+const keywords: string[] = Array.isArray(manifest.keywords) ? manifest.keywords : [];
+const author = manifest.author;
+---
+
+{d && (
+<div class="entry-meta" data-entry-kind={d.kind}>
+  {
+    d.kind === "skill" && (
+      <p class="entry-description" data-skill-description>{data.description}</p>
+    )
+  }
+
+  {
+    d.kind === "plugin" && (
+      <p class="entry-description" data-plugin-description>{manifest.description}</p>
+    )
+  }
+
+  {
+    d.kind === "skill" && (
+      <div class="install">
+        <p class="derived-note">
+          Install — derived; the command form is the repository README's own:
+        </p>
+        <pre><code>{d.installCommand}</code></pre>
+      </div>
+    )
+  }
+
+  <dl class="field-list">
+    {/* ── DECLARED: SKILL.md frontmatter ─────────────────────────────────── */}
+    {
+      /* The page title is the body's H1, so the declared `name` — the
+         identifier the spec defines and the CLI takes — gets its own row
+         rather than being silently swapped for the prose title. */
+      d.kind === "skill" && typeof data.name === "string" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="skill-frontmatter">name</dt>
+          <dd><code>{data.name}</code></dd>
+        </div>
+      )
+    }
+    {
+      d.kind === "skill" &&
+        Object.entries(metadata).map(([key, value]) => (
+          <div class="field-row">
+            <dt data-field-label data-field-source="skill-frontmatter">{key}</dt>
+            <dd>
+              {Array.isArray(value) ? (
+                // D1: rendered as the list the author declared, one exact
+                // string per item — never a stringified array.
+                <ul class="value-list" data-value-list>
+                  {value.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                value
+              )}
+            </dd>
+          </div>
+        ))
+    }
+    {
+      d.kind === "skill" && data.compatibility !== undefined && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="skill-frontmatter">compatibility</dt>
+          <dd>{data.compatibility}</dd>
+        </div>
+      )
+    }
+    {
+      d.kind === "skill" && data["allowed-tools"] !== undefined && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="skill-frontmatter">allowed-tools</dt>
+          <dd>{data["allowed-tools"]}</dd>
+        </div>
+      )
+    }
+    {
+      /* Conditional even though all 23 skills declare it: the spec makes
+         `license` optional, and hardcoding it as always-present would bake a
+         property of today's data into the template. */
+      d.kind === "skill" && data.license !== undefined && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="skill-frontmatter">license</dt>
+          <dd>{data.license}</dd>
+        </div>
+      )
+    }
+
+    {/* ── DECLARED: plugin.json ──────────────────────────────────────────── */}
+    {
+      d.kind === "plugin" && typeof manifest.version === "string" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">version <span class="src">from plugin.json</span></dt>
+          <dd>{manifest.version}</dd>
+        </div>
+      )
+    }
+    {
+      d.kind === "plugin" && typeof manifest.license === "string" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">license <span class="src">from plugin.json</span></dt>
+          <dd>{manifest.license}</dd>
+        </div>
+      )
+    }
+    {
+      /* Declared manifest data. Agent Plugins §5.4 permits name/email/url, and
+         all ten plugins in this repo declare it. Dropping a real declared field
+         would be the site misrepresenting its source just as surely as
+         inventing one would. */
+      d.kind === "plugin" && author !== undefined && author !== null && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">author <span class="src">from plugin.json</span></dt>
+          <dd>
+            {typeof author === "string" ? (
+              author
+            ) : (
+              <>
+                {typeof author.name === "string" && <span>{author.name}</span>}
+                {typeof author.email === "string" && <span> · {author.email}</span>}
+                {typeof author.url === "string" && (
+                  <span> · <a href={author.url}>{author.url}</a></span>
+                )}
+              </>
+            )}
+          </dd>
+        </div>
+      )
+    }
+    {
+      d.kind === "plugin" && typeof manifest.repository === "string" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">repository <span class="src">from plugin.json</span></dt>
+          <dd><a href={manifest.repository}>{manifest.repository}</a></dd>
+        </div>
+      )
+    }
+    {
+      /* Agent Plugins §5.4 calls these "Search and discovery tags" — per
+         PLUGIN. The label says so, because a skill does not declare them; its
+         plugin does. There is no per-skill taxonomy in the data or in either
+         standard, and inventing one is the most tempting fabrication here. */
+      keywords.length > 0 && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">
+            keywords <span class="src">plugin keywords, from plugin.json</span>
+          </dt>
+          <dd>
+            <ul class="value-list keyword-list" data-value-list>
+              {keywords.map((k) => (
+                <li>{k}</li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+      )
+    }
+
+    {/* ── DERIVED: computed by this build, and labelled as computed ───────── */}
+    {
+      d.kind !== "plugin" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="derived">
+            plugin <span class="src">derived</span>
+          </dt>
+          <dd>
+            <a href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/plugins/${d.plugin}/`}>
+              {d.pluginDisplayName ?? d.plugin}
+            </a>
+            <code class="slug">{d.plugin}</code>
+          </dd>
+        </div>
+      )
+    }
+    {
+      d.kind === "plugin" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="plugin-manifest">name <span class="src">from plugin.json</span></dt>
+          <dd><code class="slug">{manifest.name}</code></dd>
+        </div>
+      )
+    }
+    {
+      schemaVersion !== null && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="derived">
+            conformance <span class="src">derived from plugin.json $schema</span>
+          </dt>
+          <dd>
+            Targets <a href="https://agent-plugins.org">Agent Plugins</a> {schemaVersion}.
+          </dd>
+        </div>
+      )
+    }
+    <div class="field-row">
+      <dt data-field-label data-field-source="derived">source <span class="src">derived</span></dt>
+      <dd><a href={d.sourceUrl}><code>{d.sourcePath}</code></a></dd>
+    </div>
+  </dl>
+
+  {/* ── The plugin page's index of what it contains ──────────────────────── */}
+  {
+    d.kind === "plugin" && d.children && (
+      <div class="children">
+        <h2 id="skills">Skills</h2>
+        <ul class="child-list">
+          {d.children.skills.map((s: any) => (
+            <li>
+              <a href={s.href}>{s.title}</a>
+              {s.title !== s.name && <code class="slug">{s.name}</code>}
+              <span class="child-desc">{s.description}</span>
+            </li>
+          ))}
+        </ul>
+        {d.children.references.length > 0 && (
+          <>
+            <h2 id="plugin-level-references">Plugin-level references</h2>
+            <p class="derived-note">
+              A plugin-level <code>references/</code> directory is not a
+              spec-defined location — Agent Plugins §6.1 fixes only{" "}
+              <code>skills/</code> and <code>mcp.json</code> — so these are
+              unspecified package data: allowed, not addressed. Titles are the
+              files' own H1s.
+            </p>
+            <ul class="child-list">
+              {d.children.references.map((r: any) => (
+                <li><a href={r.href}>{r.title}</a></li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  {/* ── The depth-1 resource inventory ───────────────────────────────────── */}
+  {
+    d.kind === "skill" && d.resources && (
+      <div class="resources">
+        {(["references", "scripts", "assets"] as const).map((group) =>
+          // `null` means the directory does not exist and the build never
+          // looked inside it; `[]` would claim it looked and found nothing.
+          // Neither renders a block.
+          d.resources[group] && d.resources[group].length > 0 ? (
+            <div class="resource-group">
+              <h2 id={`${group}`}>{group}</h2>
+              <p class="derived-note">
+                Listed by real filename — no summary is written for a file that
+                does not describe itself. Immediate children only.
+              </p>
+              <ul class="child-list">
+                {d.resources[group].map((r: any) => (
+                  <li>
+                    <a href={r.href}><code>{r.name}{r.kind === "directory" ? "/" : ""}</code></a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null,
+        )}
+      </div>
+    )
+  }
+
+  {
+    d.kind === "reference" && (
+      <p class="derived-note">
+        A plugin-level reference of <code>{d.plugin}</code>. This location is
+        not defined by Agent Plugins §6.1; the title below is this file's own
+        H1, extracted, not composed.
+      </p>
+    )
+  }
+</div>
+)}
+
+<style>
+  .entry-meta {
+    margin-block-end: 2rem;
+  }
+  .entry-description {
+    font-size: var(--sl-text-lg);
+    line-height: 1.6;
+    color: var(--sl-color-white);
+    border-inline-start: 3px solid var(--sl-color-accent);
+    padding-inline-start: 1rem;
+    margin-block: 0 1.5rem;
+  }
+  .install pre {
+    margin-block: 0.25rem 1.5rem;
+  }
+  .derived-note {
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+    margin-block: 0.25rem;
+  }
+  .field-list {
+    display: grid;
+    gap: 0;
+    margin: 0 0 1.5rem;
+    border-block-start: 1px solid var(--sl-color-gray-5);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: minmax(9rem, 14rem) 1fr;
+    gap: 0.75rem 1.25rem;
+    padding-block: 0.55rem;
+    border-block-end: 1px solid var(--sl-color-gray-5);
+  }
+  @media (max-width: 42rem) {
+    .field-row {
+      grid-template-columns: 1fr;
+      gap: 0.15rem;
+    }
+  }
+  .field-row dt {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-white);
+    font-weight: 600;
+  }
+  .field-row dd {
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .field-row .src {
+    display: block;
+    font-family: var(--sl-font);
+    font-weight: 400;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .value-list {
+    margin: 0;
+    padding-inline-start: 1.1rem;
+  }
+  .keyword-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .keyword-list li {
+    margin: 0;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    font-size: var(--sl-text-xs);
+    font-family: var(--sl-font-mono, monospace);
+  }
+  .slug {
+    margin-inline-start: 0.5rem;
+    font-size: var(--sl-text-xs);
+  }
+  .child-list {
+    padding-inline-start: 1.1rem;
+  }
+  .child-desc {
+    display: block;
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+  }
+  .resource-group h2,
+  .children h2 {
+    font-size: var(--sl-text-h4);
+    margin-block-start: 1.5rem;
+  }
+</style>
