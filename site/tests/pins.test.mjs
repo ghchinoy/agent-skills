@@ -77,6 +77,106 @@ test("there is a type check, and `npm test` runs it", async () => {
   }
 });
 
+/**
+ * Keys declared twice in the SAME object, reported by dotted path.
+ *
+ * Deliberately not a line regex over `"key":`. The same NAME in two different
+ * objects is ordinary JSON — "astro" is both a dependency and a script in this
+ * very manifest — so a detector has to track nesting, not indentation. Written
+ * as a small scanner because JSON.parse cannot help: it takes the last of two
+ * duplicates and reports nothing at all.
+ */
+function duplicateKeys(text) {
+  const dupes = [];
+  const stack = [];
+  let last = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      let s = "";
+      while (j < text.length && text[j] !== '"') {
+        if (text[j] === "\\") {
+          s += text[j + 1];
+          j += 2;
+          continue;
+        }
+        s += text[j];
+        j += 1;
+      }
+      last = s;
+      i = j;
+    } else if (c === "{") {
+      stack.push({ key: last, keys: new Set() });
+      last = null;
+    } else if (c === "[") {
+      stack.push({ key: last, keys: null });
+      last = null;
+    } else if (c === "}" || c === "]") {
+      stack.pop();
+      last = null;
+    } else if (c === ":") {
+      const top = stack[stack.length - 1];
+      if (top?.keys && last !== null) {
+        const path = [...stack.map((f) => f.key).filter(Boolean), last].join(".");
+        if (top.keys.has(last)) dupes.push(path);
+        top.keys.add(last);
+      }
+      // `last` deliberately survives the colon: it is the key a following `{`
+      // or `[` is opened under, and nulling it here is what made the first
+      // version of this report a bare "test" instead of "scripts.test".
+    } else if (c === ",") {
+      last = null;
+    }
+  }
+  return dupes;
+}
+
+test("package.json declares no key twice", async () => {
+  // JSON.parse takes the LAST of two duplicated keys and reports nothing, so a
+  // manifest can carry a stale block that every tool silently ignores and every
+  // reader has to guess about. `astro check` caught exactly this shape in
+  // skills.ts (ts(2783)); nothing type-checks JSON, so this does. The first
+  // thing it found was a duplicated `devDependencies` I had shipped myself.
+  const raw = await readFile(join(siteRoot, "package.json"), "utf8");
+  assert.deepEqual(duplicateKeys(raw), [], "package.json declares a key more than once");
+});
+
+test("duplicate-key control: the detector sees a duplicate and accepts a clean manifest", async () => {
+  // Positive: the exact shape that shipped in commit 0cb23ba.
+  assert.deepEqual(
+    duplicateKeys(
+      '{\n  "devDependencies": {\n    "typescript": "5.9.3"\n  },\n' +
+        '  "devDependencies": {\n    "typescript": "5.9.3"\n  }\n}',
+    ),
+    ["devDependencies"],
+  );
+  // …and a duplicate nested one level down is reported by its path.
+  assert.deepEqual(
+    duplicateKeys('{\n  "scripts": {\n    "test": "a",\n    "test": "b"\n  }\n}'),
+    ["scripts.test"],
+  );
+  // Negative (near miss): the same NAME in two different objects is legitimate
+  // and must not fire. This is not hypothetical — "astro" appears in both
+  // `dependencies` and `scripts` in the real manifest, and it is what caught my
+  // first attempt at this test out.
+  assert.deepEqual(
+    duplicateKeys(
+      '{\n  "scripts": {\n    "astro": "astro"\n  },\n' +
+        '  "dependencies": {\n    "astro": "7.2.4"\n  }\n}',
+    ),
+    [],
+  );
+  // Negative: a key name repeated across sibling objects INSIDE an array.
+  assert.deepEqual(
+    duplicateKeys('{\n  "a": [\n    { "n": 1 },\n    { "n": 2 }\n  ]\n}'),
+    [],
+  );
+  // And the real manifest is non-trivial enough for this to mean something.
+  const raw = await readFile(join(siteRoot, "package.json"), "utf8");
+  assert.ok(raw.split("\n").filter((l) => /"[^"]+"\s*:/.test(l)).length > 15);
+});
+
 test("engines.node requires Node 22, and the running Node satisfies it", async () => {
   const manifest = await pkg(join(siteRoot, "package.json"));
   assert.equal(manifest.engines?.node, ">=22.19.0");
