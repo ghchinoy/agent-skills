@@ -200,9 +200,16 @@ test("CONTROL: the declaration reader distinguishes on from off", () => {
   // NEAR MISS: the config contains the words "pagefind" and "false" in prose
   // explaining why the sibling project disables it. A looser reader would find
   // them and conclude this site has search switched off.
+  // The prose is LOWERCASE on purpose. It read "Pagefind" with a capital, and
+  // mutation showed the whole point of the control evaporated: a loose reader
+  // spelled `includes("pagefind") && includes("false")` is case-sensitive, so
+  // it never matched the capitalised word and the near miss passed for a reason
+  // that had nothing to do with the property being tested. A control has to
+  // fail against the weaker implementation it is defending against.
   assert.equal(
-    searchDeclaredOn("// binder disables Pagefind because false claims are bad\nstarlight({})"),
+    searchDeclaredOn("// binder disables pagefind because false claims are bad\nstarlight({})"),
     true,
     "the reader was fooled by a comment mentioning pagefind and false",
   );
+  assert.equal(searchDeclaredOn("// see docs: pagefind\nconst x = false;\nstarlight({})"), true);
 });

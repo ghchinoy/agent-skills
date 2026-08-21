@@ -402,6 +402,42 @@ async function get(url) {
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
 /**
+ * Memoise `getFn(url)` in `cache`, storing the PROMISE rather than the result.
+ *
+ * Writing this as `cache.set(url, await getFn(url))` puts an await between the
+ * has() and the set(). Sequentially there is no interleaving point, so it
+ * dedupes perfectly and is not a bug — until the calls are pooled, at which
+ * point every concurrent caller for the same URL sees has() false and issues
+ * its own request. It degrades silently: nothing fails, the counters stay
+ * plausible, and the only evidence is server-side. It would also cost the
+ * coverage claim its denominator, which is measured by counting server hits.
+ *
+ * THE REJECTION GUARD IS THE REASON THIS IS A SEPARATE, EXPORTED FUNCTION.
+ * Caching a promise memoises its rejection for the life of the run, so one
+ * transport blip would be replayed to every later caller for that URL. `get()`
+ * is written never to throw and that has been measured, but a cache whose
+ * correctness depends on an invariant of a DIFFERENT function is one edit above
+ * a try block away from being wrong. Converting here makes the dedupe correct
+ * on its own terms — and pulling it out of the closure is what makes the guard
+ * REACHABLE FROM A TEST. Left inline it was unfalsifiable: a synthetic throw
+ * lands inside get()'s own try, so the promise never rejects and removing this
+ * catch changed nothing observable. An untestable safeguard is indistinguishable
+ * from an absent one.
+ */
+export function cacheThrough(cache, url, getFn) {
+  if (!cache.has(url)) {
+    cache.set(
+      url,
+      (async () => getFn(url))().catch((err) => ({
+        ok: false,
+        error: `request threw: ${err instanceof Error ? err.message : String(err)}`,
+      })),
+    );
+  }
+  return cache.get(url);
+}
+
+/**
  * Run `fn` over `items`, at most `limit` at a time.
  *
  * THIS FUNCTION NEVER PRODUCES A VERDICT, and that is a design constraint
@@ -476,22 +512,49 @@ export async function runOnce({ liveUrl, distDir }) {
   // in artifact order, which is what makes the output readable, while making
   // the order independent of WHEN anything completed.
   const raised = [];
-  let rank = 0;
   const fail = (key, msg) => {
-    raised.push({ key, rank: rank++, msg });
+    raised.push({ key, msg });
     return msg;
   };
-  /** Findings in reporting order. */
-  const report = () =>
-    raised
+  /**
+   * Findings in reporting order.
+   *
+   * THERE IS NO TIEBREAKER, DELIBERATELY. An earlier version carried a
+   * raise-time counter for equal keys. It was unreachable — every loop
+   * iteration raises at most one finding, so keys are unique — and an
+   * unreachable branch is only harmless while it stays unreachable. The day an
+   * ordinary edit raises two findings in one iteration, that counter becomes
+   * live and reintroduces completion-order dependence in the exact place this
+   * design exists to remove it, silently, while looking like the design
+   * handling the case. Mutation confirmed it was dead: replacing it with
+   * Math.random() left the whole suite green.
+   *
+   * So the premise is asserted instead. A duplicate key means the premise has
+   * broken and that is worth hearing about, not papering over with a value that
+   * depends on scheduling.
+   */
+  const report = () => {
+    const seen = new Set();
+    for (const r of raised) {
+      const k = r.key.join(".");
+      if (seen.has(k)) {
+        throw new Error(
+          `two findings share order key ${k} — reporting order would depend on ` +
+            `completion order. Give the second one its own position in the key.`,
+        );
+      }
+      seen.add(k);
+    }
+    return raised
       .sort((a, b) => {
         for (let i = 0; i < Math.max(a.key.length, b.key.length); i += 1) {
           const d = (a.key[i] ?? -1) - (b.key[i] ?? -1);
           if (d !== 0) return d;
         }
-        return a.rank - b.rank;
+        return 0;
       })
       .map((r) => r.msg);
+  };
   // Failures that CANNOT become green by waiting, because they are computed
   // from the artifact rather than from an answer the server gave. Retrying
   // these spends the full propagation schedule — 250 seconds of sleeping — to
@@ -536,34 +599,7 @@ export async function runOnce({ liveUrl, distDir }) {
   // URL still make exactly one request. `fetched.size` is therefore the honest
   // count of distinct requests this run issued.
   const fetched = new Map();
-  const fetchCached = (url) => {
-    // CACHE THE PROMISE, NOT THE AWAITED RESULT. Writing this as
-    // `fetched.set(url, await get(url))` puts an await between the has() and
-    // the set(): sequentially there is no interleaving point so it dedupes
-    // perfectly, and under a pool every concurrent caller for the same URL
-    // sees has() false and issues its own real request. It degrades silently —
-    // nothing fails, the counts stay plausible, and the only evidence is
-    // server-side. It would also have broken the coverage instrument that
-    // measures this script by counting server hits, so the sweep's own
-    // 39-of-39 claim would have become unverifiable with no symptom.
-    //
-    // The rejection guard is NOT decoration. Caching a promise memoises its
-    // rejection for the life of the run, so every later caller for that URL
-    // replays it. get() is written never to throw, but a cache whose
-    // correctness depends on that invariant holding in a DIFFERENT function
-    // breaks the day someone adds a line above its try block. Converting here
-    // makes the dedupe correct on its own terms.
-    if (!fetched.has(url)) {
-      fetched.set(
-        url,
-        get(url).catch((err) => ({
-          ok: false,
-          error: `request threw: ${err instanceof Error ? err.message : String(err)}`,
-        })),
-      );
-    }
-    return fetched.get(url);
-  };
+  const fetchCached = (url) => cacheThrough(fetched, url, get);
   /** Warm the cache for a set of URLs, 8 at a time. */
   const prefetch = (urls) => pooled([...new Set(urls)], CONCURRENCY, (u) => fetchCached(u));
 

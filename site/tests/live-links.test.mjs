@@ -22,6 +22,7 @@ import { relative } from "node:path";
 import {
   DEFAULT_URL,
   NEGATIVE_CONTROL,
+  cacheThrough,
   classify,
   idsIn,
   liveUrlForFile,
@@ -402,4 +403,49 @@ test("CONTROL: skewing any counter the PASS line reports changes the sentence", 
       `${n} appears in the PASS line but is not one of the counters`,
     );
   }
+});
+
+// ── the request cache, now that it can be reached from a test ──────────────
+
+test("cacheThrough dedupes in-flight requests and converts rejections", async () => {
+  // WHY THIS IS A UNIT TEST AND NOT AN E2E ONE. Both properties were previously
+  // unfalsifiable where they lived. The dedupe only misbehaves under
+  // concurrency, and the rejection guard could not be reached at all: a
+  // synthetic throw injected at the fetch layer lands inside get()'s own try,
+  // so the promise resolves to a failure shape and the guard never runs.
+  // Removing the guard changed nothing observable, which mutation confirmed by
+  // leaving the suite green. An untestable safeguard is indistinguishable from
+  // an absent one, so the cache was pulled out of the closure to make both
+  // properties addressable directly.
+  let calls = 0;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const slowGet = async () => { calls += 1; await gate; return { ok: true, status: 200 }; };
+
+  const cache = new Map();
+  // Six concurrent callers for the same URL, all starting before any finishes.
+  const inflight = Array.from({ length: 6 }, () => cacheThrough(cache, "u", slowGet));
+  release();
+  const results = await Promise.all(inflight);
+  assert.equal(calls, 1, "concurrent callers for one URL issued more than one request");
+  assert.equal(cache.size, 1);
+  for (const r of results) assert.deepEqual(r, { ok: true, status: 200 });
+
+  // A throwing getFn becomes get()'s own failure shape rather than a rejection
+  // memoised for the rest of the run.
+  const boom = new Map();
+  const thrower = async () => { throw new Error("kaboom"); };
+  const first = await cacheThrough(boom, "v", thrower);
+  assert.equal(first.ok, false);
+  assert.match(first.error, /request threw: kaboom/);
+  // ...and the SECOND caller gets the same converted failure, not an unhandled
+  // rejection. This is the half that would bite: one blip poisoning a URL.
+  const second = await cacheThrough(boom, "v", thrower);
+  assert.deepEqual(second, first);
+
+  // A synchronous throw is converted too — `async () =>` around getFn is what
+  // makes that true, and it is easy to lose in a refactor.
+  const sync = new Map();
+  const syncThrower = () => { throw new Error("sync boom"); };
+  assert.match((await cacheThrough(sync, "w", syncThrower)).error, /request threw: sync boom/);
 });

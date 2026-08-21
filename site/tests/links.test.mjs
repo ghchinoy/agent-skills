@@ -433,3 +433,71 @@ function mainOf(html) {
   const m = html.match(/<main\b[\s\S]*?<\/main>/i);
   return m ? m[0] : html;
 }
+
+// ── U1: the class this suite could not see ─────────────────────────────────
+//
+// THESE TWO TESTS WERE WRITTEN DURING THE U1 FIX AND NEVER LANDED. The patch
+// script that appended them exited early on an unrelated import mismatch, the
+// import was fixed by hand, and the append was never re-run. Every suite run
+// afterwards was green, because what was missing was the CONTROL and not the
+// fix: `isExternal` was correctly origin-aware the whole time and nothing
+// asserted it. Reverting it to the broken form left the suite green, which is
+// how this was found — by mutation, from a committed baseline, not by reading.
+// The fix-round lesson generalises past this file: A PARTIALLY APPLIED PATCH
+// LEAVES THE CODE LOOKING FINISHED AND THE EVIDENCE MISSING.
+
+test("CONTROL: an absolute same-origin reference to an unbuilt route is caught", () => {
+  // THE POINT OF THIS TEST IS THAT IT DOES NOT USE THE 404 PAGE. The only real
+  // instance of this class in the artifact is the error document's canonical,
+  // and that is exempted by name a few lines above — so proving the class fix
+  // through the 404 case alone would leave an exemption carved exactly where
+  // the evidence used to be, and no way to tell the fix still worked.
+  const unbuilt = `${ORIGIN}${BASE}/no-such-route-synthetic-control/`;
+  const built = `${ORIGIN}${BASE}/plugins/${PLUGIN}/`;
+
+  // The assertion that was false before the fix: isExternal returned true for
+  // both of these, so this suite skipped the entire class.
+  assert.equal(isExternal(unbuilt), false, "a same-origin absolute URL is not external");
+  assert.equal(isExternal(built), false);
+
+  // ...and they reduce to paths the resolver can answer for.
+  assert.equal(resolvesInDist(toSitePath(unbuilt)), false, "an unbuilt route must not resolve");
+  assert.equal(resolvesInDist(toSitePath(built)), true, "a built route must resolve");
+
+  // The exemption cannot swallow it: wrong file, wrong target, no canonical.
+  const html = '<link rel="canonical" href="' + ORIGIN + BASE + '/404/"/>';
+  assert.equal(isErrorDocCanonical("index.html", toSitePath(unbuilt), html), false);
+  assert.equal(isErrorDocCanonical("404.html", toSitePath(unbuilt), html), false);
+
+  // Genuinely external references stay external.
+  assert.equal(isExternal("https://github.com/ghchinoy/agent-skills"), true);
+  assert.equal(isExternal("//cdn.example.com/x.js"), true);
+  assert.equal(isExternal("mailto:x@example.com"), true);
+  assert.equal(isExternal(`${BASE}/x/`), false);
+});
+
+test("CONTROL: the error-document exemption is exactly one reference wide", async () => {
+  const html = await read(join(dist, "404.html"));
+  const target = `${BASE}/404/`;
+
+  assert.equal(isErrorDocCanonical("404.html", target, html), true);
+
+  // And on nothing else: not another page, not another target, and not when
+  // the page's canonical says something different from the reference.
+  assert.equal(isErrorDocCanonical("index.html", target, html), false);
+  assert.equal(isErrorDocCanonical("404.html", `${BASE}/404`, html), false);
+  assert.equal(isErrorDocCanonical("404.html", `${BASE}/plugins/`, html), false);
+  assert.equal(
+    isErrorDocCanonical("404.html", target, '<link rel="canonical" href="/elsewhere/"/>'),
+    false,
+    "the exemption fired on a page whose canonical is not the exempted URL",
+  );
+
+  // The artifact still declares what we think it declares. If Starlight ever
+  // stops emitting this, the exemption should be deleted, not left lying about.
+  assert.match(
+    html,
+    new RegExp(`rel="canonical"[^>]*href="${ORIGIN}${BASE}/404/"`),
+    "dist/404.html no longer declares the canonical this exemption exists for",
+  );
+});

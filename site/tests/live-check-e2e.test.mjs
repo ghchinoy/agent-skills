@@ -78,6 +78,11 @@ const mimeFor = (p) => MIME[p.slice(p.lastIndexOf("."))] ?? "application/octet-s
  *   number of bytes and different content.
  * @param {(rel: string) => boolean} [opts.plant] inject a link to an unbuilt
  *   route into these pages.
+ * @param {(rel: string) => boolean} [opts.plantCanonical] give these pages the
+ *   error document's canonical — a reference that IS exempt on 404.html and
+ *   must not be anywhere else.
+ * @param {boolean} [opts.jitter] delay each response by a random 0-40ms, to
+ *   vary the order responses COMPLETE in.
  */
 async function serveDist(opts = {}) {
   /** Every pathname the server was asked for, in arrival order, including
@@ -97,6 +102,26 @@ async function serveDist(opts = {}) {
     return byUrlPath.get(pathname);
   };
 
+  /**
+   * Rewrite `body`, and REFUSE TO SILENTLY DO NOTHING.
+   *
+   * The first version of the canonical plant anchored on `</head>`, which this
+   * artifact does not contain — Astro emits no closing head tag. The plant
+   * matched nothing, the page was served verbatim, the run came back clean, and
+   * the control reported "a dangling canonical was not caught" while nothing
+   * had ever been planted. That is the same silent-no-op defect the mutation
+   * harness refuses to tolerate, arriving inside a control written to catch it.
+   * A fixture that mutates has to fail loudly when its mutation misses.
+   */
+  const rewrite = (body, find, replaceWith, what) => {
+    const before = body.toString("utf8");
+    const after = before.replace(find, replaceWith);
+    if (after === before) {
+      throw new Error(`fixture could not plant ${what}: no match for ${find} in the served page`);
+    }
+    return Buffer.from(after);
+  };
+
   const server = createServer(async (req, res) => {
     const { pathname } = new URL(req.url, "http://127.0.0.1");
     hits.push(pathname);
@@ -108,10 +133,18 @@ async function serveDist(opts = {}) {
     }
     let body = await readFile(hit.abs);
     if (opts.plant?.(hit.rel)) {
-      body = Buffer.from(
-        body.toString("utf8").replace("</body>", `<a href="${UNBUILT}">planted</a></body>`),
+      body = rewrite(body, "</body>", `<a href="${UNBUILT}">planted</a></body>`, "an unbuilt link");
+    }
+    if (opts.plantCanonical?.(hit.rel)) {
+      // Anchored on `<body`, because this artifact has no closing head tag.
+      body = rewrite(
+        body,
+        "<body",
+        `<link rel="canonical" href="${ORIGIN}${BASE}/404/"/><body`,
+        "the error document's canonical",
       );
     }
+    if (opts.jitter) await new Promise((r) => setTimeout(r, Math.random() * 40));
     if (opts.corrupt?.(hit.rel)) {
       // Same length, different bytes. A length check cannot tell these apart;
       // that is the point of the scenario.
@@ -355,18 +388,57 @@ test("the request cache dedupes IN-FLIGHT requests, not just completed ones", as
   );
 });
 
-test("the failure list is deterministic under the pool", async () => {
-  // A pool destroys the order results ARRIVE in. It must not touch the order
-  // they are REPORTED in: attempts are diffed against each other, and a list
-  // that reshuffles between runs makes "did this change" unanswerable. The
-  // guarantee comes from evaluating in artifact order after prefetching, not
-  // from sorting — sorting would fix it too, and would scatter each page's
-  // failures across the output.
-  const broken = { corrupt: (rel) => rel.endsWith(".css") || rel.endsWith(".html") };
+test("the failure list is ordered independently of when responses complete", async () => {
+  // WHAT THIS CLAIMS AND WHAT WOULD HAVE FAILED TO SHOW IT. The claim is that
+  // reporting order carries no scheduling information. The obvious control —
+  // run the same scenario twice and require identical arrays — does NOT
+  // establish that: on a loopback fixture with p95 at 0.030s the two runs
+  // schedule identically almost every time, so it passes whether the property
+  // holds or not. That is the flaky-test shape with the flakiness on the green
+  // side, which is the side nobody investigates.
+  //
+  // So completion order is VARIED ON PURPOSE with a random per-response delay,
+  // large enough relative to the responses themselves to reorder them. The
+  // property itself holds by construction — every order key is the item's INDEX
+  // IN ITS INPUT LIST (pageTargets, decided, sweepTargets), assigned before any
+  // request is issued, never a counter incremented where the finding is raised.
+  // This control exists to keep that true, not to discover whether it is.
+  const broken = {
+    corrupt: (rel) => rel.endsWith(".css") || rel.endsWith(".html"),
+    jitter: true,
+  };
   const a = await run(broken);
   const b = await run(broken);
   assert.ok(a.failures.length > 3, `expected several failures, got ${a.failures.length}`);
-  assert.deepEqual(a.failures, b.failures, "two identical runs produced differently-ordered lists");
+  assert.deepEqual(
+    a.failures,
+    b.failures,
+    "reporting order changed when response completion order changed",
+  );
+});
+
+test("SYNTHETIC CONTROL: the exemption is narrow AT ITS SINGLE DECISION POINT", async () => {
+  // The classify-once refactor MOVED where this exemption is applied — from the
+  // evaluation loop to the one place each reference is decided. Relocating an
+  // exemption is exactly the change that can silently widen it, and this
+  // exemption is now the only thing between a dangling canonical and a green
+  // run. So the narrowness control is re-run against the new decision point.
+  //
+  // The reference planted here is CHARACTER-FOR-CHARACTER the one that is
+  // exempt on 404.html. Only the page differs. If the exemption has decayed
+  // into "references to /404/ are not checked", this goes green and the site
+  // can ship a canonical pointing at a route that does not exist.
+  const { failures, stats } = await run({ plantCanonical: (rel) => rel === "index.html" });
+
+  assert.ok(
+    failures.some((f) => /404\/? — HTTP 404|HTTP 404 at .*\/404\//.test(f)),
+    `a dangling canonical on an ordinary page was not caught:\n${failures.join("\n")}`,
+  );
+  assert.equal(
+    stats.exemptions,
+    1,
+    "the exemption fired more than once — it is no longer one reference wide",
+  );
 });
 
 test("a fetch that THROWS is reported as a failure, not memoised as a rejection", async () => {
