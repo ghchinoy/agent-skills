@@ -1,6 +1,5 @@
 ---
 name: okf-author
-description: Author a conformant Open Knowledge Format (OKF) v0.2 knowledge bundle by hand or from a description — one concept per markdown file with a required non-empty type, a reserved root index.md declaring okf_version, bundle-relative markdown links as relationship edges, and the correct v0.2 provenance/trust/lifecycle frontmatter (sources, generated, verified, status, stale_after). Derives trust tiers rather than storing a credibility score, and preserves unknown keys for forward-compatibility. Works fully by hand with zero OKF binaries installed; opportunistically uses binder/okfcli/factile/openknowledge when present. Use when asked to create an OKF bundle, write OKF concepts, add trust or provenance frontmatter, or turn notes/a description into OKF.
 license: Apache-2.0
 metadata:
   version: "1.0.0"
