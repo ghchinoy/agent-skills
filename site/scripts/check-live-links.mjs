@@ -627,22 +627,33 @@ export async function runOnce({ liveUrl, distDir }) {
   for (const [pageUrl, html] of livePages) {
     for (const r of refsIn(html)) refWork.push({ pageUrl, html, ...r });
   }
+  // EACH REFERENCE IS DECIDED ONCE, and the prefetch and the evaluation read
+  // the SAME decision.
+  //
+  // These were two separate calls to classify() — one inside the prefetch
+  // filter, one in the loop below — and the exemption was applied only in the
+  // loop. The exemption therefore suppressed the VERDICT and not the REQUEST:
+  // the run still fetched the error document's canonical, ignored the answer,
+  // and reported a distinct-request count one higher than its own
+  // classification implied. Nothing failed, which is the point — it was
+  // visible only by counting hits on the server and diffing them against the
+  // artifact. Two spellings of one decision drift; one spelling cannot.
+  const decided = refWork.map((w) => {
+    const c = classify(w.ref, { origin, base }, w.pageUrl);
+    return { ...w, c, exempt: c.verdict === "check" && errorDocExemption(c.url, w.html, w.pageUrl, { origin, base }) };
+  });
   await prefetch(
-    refWork
-      .map((w) => classify(w.ref, { origin, base }, w.pageUrl))
-      .filter((c) => c.verdict === "check")
-      .map((c) => c.url),
+    decided.filter((d) => d.c.verdict === "check" && !d.exempt).map((d) => d.c.url),
   );
 
-  for (const [refIndex, { pageUrl, html, kind, ref }] of refWork.entries()) {
+  for (const [refIndex, { pageUrl, kind, ref, c, exempt }] of decided.entries()) {
+    const html = livePages.get(pageUrl);
     stats.refsSeen += 1;
-    const c = classify(ref, { origin, base }, pageUrl);
     if (c.verdict === "offsite") {
       stats.offsiteSkipped += 1;
       continue;
     }
     // Narrow, counted, and reported. Not a silent skip.
-    const exempt = errorDocExemption(c.url, html, pageUrl, { origin, base });
     if (exempt) {
       stats.exemptions += 1;
       continue;

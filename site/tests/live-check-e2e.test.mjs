@@ -400,3 +400,39 @@ test("a fetch that THROWS is reported as a failure, not memoised as a rejection"
     await srv.close();
   }
 });
+
+test("the request set is exactly the artifact plus the negative control", async () => {
+  // THE DENOMINATOR, PINNED. O1's claim is verified by counting server hits, so
+  // the set of URLs this run requests has to be knowable from the artifact
+  // alone. Two failures hide on either side of it and neither is visible from
+  // the exit code:
+  //
+  //   TOO FEW — the sweep exists, reports success and never executes. A green
+  //   run whose request count did not rise is a sweep that is not wired in.
+  //
+  //   TOO MANY — measured, not hypothetical. classify() was being called twice,
+  //   once in the prefetch filter and once in the evaluation loop, and the
+  //   error-document exemption was applied only in the second. The run fetched
+  //   the exempted URL, discarded the answer, and reported 41 distinct requests
+  //   against a classification that implied 40. Duplicate or surplus hits cost
+  //   the coverage instrument its denominator, so it would have been measuring
+  //   the wrong thing with no symptom.
+  const { stats, hits } = await run();
+
+  const expected = new Set([`${BASE}/${"__no-such-page-negative-control__"}/`]);
+  for (const abs of await walk(dist)) {
+    const rel = relative(dist, abs).split("\\").join("/");
+    expected.add(rel.endsWith("index.html") ? `${BASE}/${rel.slice(0, -"index.html".length)}` : `${BASE}/${rel}`);
+  }
+
+  const actual = new Set(hits);
+  const surplus = [...actual].filter((u) => !expected.has(u));
+  const missing = [...expected].filter((u) => !actual.has(u));
+  assert.deepEqual(surplus, [], `requested URLs that are not deployed files:\n${surplus.join("\n")}`);
+  assert.deepEqual(missing, [], `deployed files never requested:\n${missing.join("\n")}`);
+  assert.equal(stats.httpRequests, expected.size, "httpRequests disagrees with the artifact");
+
+  // And the exempted URL is not merely un-judged, it is never asked for.
+  assert.ok(!actual.has(`${BASE}/404/`), "the exempted URL was still fetched");
+  assert.equal(stats.exemptions, 1);
+});
