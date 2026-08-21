@@ -721,8 +721,27 @@ export async function runOnce({ liveUrl, distDir }) {
     livePages.set(url, res.body);
 
     // Freshness. Byte-identical or the deployment is not this artifact.
-    const expected = await readFile(file, "utf8");
-    if (res.body === expected) {
+    //
+    // COMPARED AS BYTES, NOT AS DECODED STRINGS, AND THE COMMENT THAT USED TO
+    // SIT AT THE ARTIFACT SWEEP WAS WRONG ABOUT THIS. It said the HTML pass's
+    // utf8 string comparison and the sweep's sha256 comparison "are both full
+    // byte identity and they agree on every verdict". They do not: utf8
+    // decoding is lossy, so DISTINCT byte sequences can decode to the SAME
+    // string. Measured rather than reasoned about — `Buffer.from([0xFF])` and
+    // `Buffer.from([0xFE])` are different bytes, the same length, and both
+    // decode to the single replacement character U+FFFD, so a string compare
+    // calls them identical. The 7 HTML pages were held to a strictly weaker
+    // predicate than the other 32 files: the two-standards problem the sweep
+    // was built to remove, surviving inside the note that claimed it removed
+    // it. Found by the independent design read; the lossiness was re-measured
+    // here before the fix rather than taken on the report's word.
+    //
+    // Realism is low — it needs a server emitting invalid UTF-8 that is
+    // byte-wrong and string-right — and the fix is free, because `get()`
+    // already computes a sha256 over the raw response bytes of EVERY response.
+    // One standard for all 39 files, actually rather than nearly.
+    const expectedBuf = await readFile(file);
+    if (res.digest === sha256(expectedBuf)) {
       stats.bytesIdentical += 1;
       verifiedUrls.add(url);
     } else {
@@ -730,7 +749,7 @@ export async function runOnce({ liveUrl, distDir }) {
       fail(
         [1, pageIndex],
         `STALE-OR-DIFFERENT ${url} — the live bytes differ from the deployed ` +
-          `artifact (${expected.length} bytes built, ${res.body.length} served). ` +
+          `artifact (${expectedBuf.length} bytes built, ${res.bytes} served). ` +
           `Usually propagation lag; if it persists, the site being served is not this build.`,
       );
     }
@@ -872,14 +891,16 @@ export async function runOnce({ liveUrl, distDir }) {
     // error body, a truncated asset padded by an intermediary, a stale build of
     // the same file — passes a length check and fails this one.
     //
-    // TWO SPELLINGS, ONE CRITERION, DELIBERATELY. The HTML pass above compares
-    // utf8 STRINGS; this compares sha256 of raw BYTES. Both are full byte
-    // identity and they agree on every verdict — the difference is that this
-    // pass also covers binaries, where there is no meaningful string to compare.
-    // The HTML path was left as it is rather than churned for symmetry. This
-    // note exists so the next reader does not mistake the duplication for the
-    // two-standards problem it was written to remove: the standard is the same
-    // for all 39 files, and applying it to only 7 was the actual defect.
+    // ONE CRITERION, ONE SPELLING, AND IT USED TO BE TWO. This comment
+    // previously said the HTML pass compared utf8 strings, that both spellings
+    // were "full byte identity", and that they "agree on every verdict". The
+    // last part was false — utf8 decoding is lossy, so the string compare was
+    // strictly weaker and the 7 HTML pages were held to a lower standard than
+    // the other 32. That is the exact two-standards defect this sweep exists to
+    // remove, asserted as absent by the note explaining its absence. The HTML
+    // pass now compares this same sha256 over raw bytes. The standard is the
+    // same for all 39 files: applying it to only 17 was the original defect,
+    // and applying a weaker one to 7 of the rest was the residue.
     if (res.digest !== sha256(expected)) {
       fail(
         [3, fileIndex],
