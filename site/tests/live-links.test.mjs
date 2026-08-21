@@ -65,11 +65,14 @@ test("the default URL is this site's, at the base the build uses", () => {
   // the origin is the consequential half, and a stale origin points the whole
   // check at another site.
   //
-  // THE GENERAL LESSON, which is not about DEFAULT_URL. "X is compared to
-  // nothing" is a claim about ABSENCE, and reading cannot establish absence.
-  // Grade coupling by mutating each COMPONENT separately: a partly-coupled
-  // constant reads as uncoupled to anyone who moves the whole thing at once, and
-  // as coupled to anyone who happens to move the other half. Standard 7.
+  // AND THE READING THAT MAKES THE OTHER TWO INTERPRETABLE. Move BOTH
+  // components at the source and propagate to every mirror, leaving DEFAULT_URL
+  // wholly stale: 168 pass, 3 FAIL — and every one of those reds comes from the
+  // BASE half. So mutating the whole object reads as COUPLED. The coupled half's
+  // red MASKS the uncoupled half, and the masking runs in the false-green
+  // direction: you conclude you have a guard you do not have, and nothing in the
+  // run says otherwise. That is why the components are moved one at a time here
+  // and not together.
   //
   // That is also why the literals below stay literals. Importing site.config
   // here would make both sides the same value and turn the assertion back into

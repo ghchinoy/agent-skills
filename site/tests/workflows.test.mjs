@@ -818,8 +818,9 @@ test("the ref that DEPLOYS runs the same suite the pull request runs", async () 
 // `DEFAULT_URL` was a hand-written fourth copy of the deployed URL, and moving
 // `SITE` while leaving it stale left 171 of 171 tests passing. Its base
 // component was already coupled — moving `BASE` the same way turned one red.
-// Graded by mutating each component separately, because "compared to nothing"
-// is a claim about absence and reading cannot establish absence.
+// Graded by mutating each component separately, one at a time: moving both at
+// once leaves 168 passing and 3 red, all of the red from the coupled half, which
+// reads as coupled and hides the gap.
 // Closing it made the checker IMPORT that file — which is right, and which gave
 // `check-live-links.mjs` its first repo-source dependency. Before F9 the script
 // imported only `node:` builtins and would have run against a checkout of
