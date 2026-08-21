@@ -621,8 +621,15 @@ export async function runOnce({ liveUrl, distDir }) {
     // requests: the same stylesheet referenced from all 7 pages is 7 here and 1
     // on the wire. This counter used to be called `urlsChecked`, and every
     // person sizing this job — including its own author — read the resulting 99
-    // as 99 requests when the run makes 19. A counter whose name overstates it
-    // fivefold is a measurement defect, not a naming preference.
+    // as 99 requests when that run made 19. A counter whose name overstated it
+    // fivefold was a measurement defect, not a naming preference.
+    //
+    // BOTH FIGURES ARE HISTORICAL and are kept because they are what the defect
+    // looked like. The artifact sweep has since changed both sides: the run now
+    // resolves 105 occurrences and issues 40 distinct requests, a ratio of 2.6
+    // rather than 5. Re-measured in fix round 2, where the stale "fivefold"
+    // was itself a finding — the sentence explaining a counting defect was
+    // carrying an uncounted number.
     refsResolved: 0,
     // DISTINCT HTTP requests actually issued. The number that governs runtime.
     httpRequests: 0,
@@ -1005,8 +1012,13 @@ export function summaryLine(stats) {
   // identity and gets its own clause and its own verb, so the two can never
   // again be collapsed under one "all".
   //
-  // Both numbers, both named. Occurrences and requests differ by 5x here, and
-  // reporting only the larger one is how "99 URLs checked" came to mean 19.
+  // Both numbers, both named. Occurrences exceed distinct requests — 105 against
+  // 40 as this build stands, and the multiple is not the point, the gap is —
+  // and reporting only the larger one is how "99 URLs checked" came to mean 19.
+  // Written as a relation rather than a ratio on purpose: the previous version
+  // said "5x", which was measured before the artifact sweep and was 2.6 by the
+  // time anyone read it. A constant that has to be re-derived whenever the crawl
+  // changes will be wrong again; the ordering will not.
   claims.push(
     `${stats.refsResolved} internal reference occurrence(s) resolve ` +
       `(${stats.httpRequests} distinct HTTP request(s))`,

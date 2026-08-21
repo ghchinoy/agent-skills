@@ -810,3 +810,90 @@ test("the ref that DEPLOYS runs the same suite the pull request runs", async () 
     "the suite runs before the build, so it would assert against an absent or stale dist/",
   );
 });
+
+// THE FIX FOR AN INSTANCE OF A CLASS CREATED A NEW INSTANCE OF THE SAME CLASS,
+// and that is the reason this test exists rather than any property of checkout.
+//
+// F9 was a mirrored constant with NO COUPLING: `DEFAULT_URL` was a hand-written
+// fourth copy of the deployed URL with no path back to `src/site.config.mjs`.
+// Closing it made the checker IMPORT that file — which is right, and which gave
+// `check-live-links.mjs` its first repo-source dependency. Before F9 the script
+// imported only `node:` builtins and would have run against a checkout of
+// nothing but itself. Now `verify-live` depends on the source tree.
+//
+// So closing a coupling gap by adding a dependency produced an IMPORT WITH NO
+// COUPLING where there had been a CONSTANT WITH NO COUPLING. Same class, new
+// instance, created by the fix. That is not a coincidence; it is what that
+// shape of fix does, and it is why the check has to follow the fix.
+//
+// The workflow already complies — `verify-live` checks out. Nothing asserted
+// it. And the failure mode is the bad kind: remove checkout on the reasoning
+// that the job "only needs the artifact" and it dies at ERR_MODULE_NOT_FOUND,
+// which does not read as a link-check failure to whoever opens the log. Latent
+// in CI, which is the ground F9 itself was elevated on.
+test("verify-live checks out the source its checker imports", async () => {
+  const docs = await load(DOCS);
+
+  // By what it DOES, as everywhere else in this file. A rename must not retire
+  // this test, and neither must moving the check into a differently-named job.
+  const checkers = Object.entries(docs.jobs).filter(([, j]) =>
+    (j.steps ?? []).some((s) => /check-live-links\.mjs/.test(String(s.run ?? ""))),
+  );
+  assert.equal(checkers.length, 1, `expected exactly one live-checking job, found ${checkers.length}`);
+  const [checkName, checkJob] = checkers[0];
+  const steps = checkJob.steps ?? [];
+
+  // The dependency is REAL and read from the script, not assumed: if the
+  // checker ever stops importing from src/, this assertion should stop being
+  // load-bearing rather than quietly persist as ritual.
+  const script = await readFile(join(repoRoot, "site/scripts/check-live-links.mjs"), "utf8");
+  const repoImports = [...script.matchAll(/^import[^\n]*from\s+"(\.\.?\/[^"]+)"/gm)].map((m) => m[1]);
+  assert.ok(
+    repoImports.length > 0,
+    "check-live-links.mjs no longer imports from the repo — delete this test rather than keep it green",
+  );
+
+  const checkoutAt = steps.findIndex((s) => /actions\/checkout@/.test(String(s.uses ?? "")));
+  assert.ok(
+    checkoutAt >= 0,
+    `${checkName} runs check-live-links.mjs, which imports ${repoImports.join(", ")} from the ` +
+      `repository, but the job never checks the repository out. It would fail at ` +
+      `ERR_MODULE_NOT_FOUND before making a single request, and the log would not look like ` +
+      `a link-check failure.`,
+  );
+
+  // ORDER, not mere presence — the same distinction the deploy-gate test makes.
+  // A checkout after the check is a checkout that did not help.
+  const runAt = steps.findIndex((s) => /check-live-links\.mjs/.test(String(s.run ?? "")));
+  assert.ok(
+    checkoutAt < runAt,
+    `${checkName} checks out AFTER running the checker, so the import is still unresolved`,
+  );
+});
+
+test("CONTROL: the verify-live checkout assertion can fail", async () => {
+  // Driven on a synthetic workflow rather than by editing the real one, because
+  // the real file complies and a control that cannot be run without breaking
+  // the tree is a control nobody runs.
+  const run = "node scripts/check-live-links.mjs --url \"$LIVE_URL\"";
+  const withCheckout = { jobs: { v: { steps: [{ uses: "actions/checkout@v4" }, { run }] } } };
+  const without = { jobs: { v: { steps: [{ uses: "actions/download-artifact@v4" }, { run }] } } };
+  const after = { jobs: { v: { steps: [{ run }, { uses: "actions/checkout@v4" }] } } };
+
+  const checkoutBeforeRun = (wf) => {
+    const job = Object.values(wf.jobs).find((j) =>
+      (j.steps ?? []).some((s) => /check-live-links\.mjs/.test(String(s.run ?? ""))),
+    );
+    const c = job.steps.findIndex((s) => /actions\/checkout@/.test(String(s.uses ?? "")));
+    const r = job.steps.findIndex((s) => /check-live-links\.mjs/.test(String(s.run ?? "")));
+    return c >= 0 && c < r;
+  };
+
+  assert.equal(checkoutBeforeRun(withCheckout), true, "the positive half stopped holding");
+  assert.equal(checkoutBeforeRun(without), false, "a job with NO checkout is not detected");
+  assert.equal(checkoutBeforeRun(after), false, "a checkout AFTER the run is not detected");
+
+  // And the same predicate on the real file, so the synthetic cases are pinned
+  // to the thing the test above actually asserts.
+  assert.equal(checkoutBeforeRun(await load(DOCS)), true);
+});

@@ -341,8 +341,11 @@ test("redirectVerdict catches a hop that leaves the site", () => {
 });
 
 test("requestTimeoutMs keeps every request inside the overall budget", () => {
-  // 39 sequential requests × 30s × 6 attempts is most of an hour. The per-
-  // request cap does not bound the run; this does.
+  // 40 sequential requests × 30s × 6 attempts is 7200s — TWO HOURS, not the
+  // "most of an hour" this comment used to claim. The old figure was arithmetic
+  // nobody did (39 × 30 × 6 = 7020s even on the old request count), and it
+  // understated the hazard the guard exists for by a factor of two. Corrected
+  // in fix round 2. The per-request cap does not bound the run; this does.
   assert.equal(requestTimeoutMs(Infinity, 30_000), 30_000, "unbudgeted runs use the per-request cap");
   assert.equal(requestTimeoutMs(120_000, 30_000), 30_000, "plenty of budget left: use the cap");
   assert.equal(requestTimeoutMs(5_000, 30_000), 5_000, "less budget than the cap: use the budget");
