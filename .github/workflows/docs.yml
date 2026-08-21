@@ -146,9 +146,17 @@ jobs:
     needs: build-deploy
     runs-on: ubuntu-latest
     # Backstop for a hung fetch. The script keeps itself inside a smaller
-    # internal budget and reports properly; this is what stops a wedged runner
-    # holding the `pages` concurrency group if that ever fails.
-    timeout-minutes: 15
+    # internal budget (15 minutes) and reports properly; this is what stops a
+    # wedged runner holding the `pages` concurrency group if that ever fails —
+    # which matters more now that `cancel-in-progress` is false, since the next
+    # deploy queues behind this job rather than replacing it.
+    #
+    # 20 rather than 15: the artifact sweep took the run from 8 requests to 39.
+    # Pooled at 8 the happy path is about 3 seconds, but the unreachable-host
+    # worst case is bounded by request count, and the script's own budget has to
+    # be able to expire BEFORE the runner kills the job or the failure arrives
+    # as a killed job with no diagnosis.
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:

@@ -84,7 +84,26 @@ const FETCH_TIMEOUT_MS = 30_000;
  * the runner prints no diagnosis. This budget makes the script bail on its own
  * and SAY SO, which is the difference between a failure and a mystery.
  */
-const TOTAL_BUDGET_MS = 10 * 60_000;
+const TOTAL_BUDGET_MS = 15 * 60_000;
+
+/**
+ * How many requests are in flight at once.
+ *
+ * The artifact sweep took the run from 8 requests per attempt to 39, and
+ * SEQUENTIALLY that is a 3.3x blow-up of the worst case, not an increment: 39 x
+ * 30s x 6 attempts plus the retry sleeps is over an hour of a runner holding
+ * the `pages` concurrency group. The happy path was never the problem — a
+ * measured 0.131s per request is about 3 seconds for the whole sweep. It is the
+ * unreachable-host case that scales, and it scales with the request COUNT.
+ *
+ * Pooling fixes the worst case rather than capping it: 8 at a time puts the
+ * doubled coverage BELOW the old sequential runtime. Each pass prefetches its
+ * distinct URLs through the pool and then evaluates them from cache, so the
+ * concurrency buys latency and nothing else — every verdict is still computed
+ * in artifact order, and the failure list is byte-identical to what the
+ * sequential version produced.
+ */
+const CONCURRENCY = 8;
 
 /** Set once in main(); Infinity keeps the helpers usable from unit tests. */
 let deadlineAt = Infinity;
@@ -98,7 +117,12 @@ export const NEGATIVE_CONTROL = "__no-such-page-negative-control__/";
 
 /** Minimal `--flag value` parsing. Unknown flags are an error, not ignored. */
 export function parseArgs(argv) {
-  const out = { url: DEFAULT_URL, dist: "dist", attempts: ATTEMPT_DELAYS.length + 1 };
+  const out = {
+    url: DEFAULT_URL,
+    dist: "dist",
+    attempts: ATTEMPT_DELAYS.length + 1,
+    deadlineMinutes: TOTAL_BUDGET_MS / 60_000,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const [flag, inline] = argv[i].split(/=(.*)/s);
     const value = inline !== undefined ? inline : argv[++i];
@@ -112,6 +136,9 @@ export function parseArgs(argv) {
       case "--attempts":
         out.attempts = Number(value);
         break;
+      case "--deadline-minutes":
+        out.deadlineMinutes = Number(value);
+        break;
       default:
         throw new Error(`unknown argument: ${argv[i]}`);
     }
@@ -120,6 +147,9 @@ export function parseArgs(argv) {
   if (!out.url) throw new Error("--url must not be empty");
   if (!Number.isInteger(out.attempts) || out.attempts < 1) {
     throw new Error(`--attempts must be a positive integer, got ${out.attempts}`);
+  }
+  if (!(out.deadlineMinutes > 0)) {
+    throw new Error(`--deadline-minutes must be positive, got ${out.deadlineMinutes}`);
   }
   return out;
 }
@@ -206,7 +236,8 @@ export function redirectVerdict(requestedUrl, finalUrl, { origin, base }) {
  *
  * Kept deliberately identical in coverage to `hrefsIn` + `assetRefsIn` in
  * tests/links.test.mjs. A live check narrower than the local one would let a
- * whole class of breakage through while reporting green.
+ * whole class of breakage through while reporting green — and the local one
+ * being narrower is exactly the defect that produced the exemption below.
  */
 export function refsIn(html) {
   const out = [];
@@ -220,6 +251,49 @@ export function refsIn(html) {
     out.push({ kind: "<link href>", ref: decodeAmp(m[1]) });
   }
   return out;
+}
+
+/** The page's `rel=canonical` href, or "". Attribute order varies by emitter,
+ *  so both orders are matched rather than the one Astro happens to produce. */
+export function canonicalOf(html) {
+  const m =
+    /<link\b[^>]*\srel="canonical"[^>]*\shref="([^"]*)"/.exec(html) ??
+    /<link\b[^>]*\shref="([^"]*)"[^>]*\srel="canonical"/.exec(html);
+  return m ? decodeAmp(m[1]) : "";
+}
+
+/**
+ * THE ONE REFERENCE ON THIS SITE THAT IS NOT REQUIRED TO RESOLVE, and the
+ * reasoning is narrow on purpose.
+ *
+ * Starlight's built-in 404 page emits `rel=canonical` pointing at
+ * `<base>/404/`. Nothing is built at `404/` — the error document is emitted as
+ * `404.html` — and GitHub Pages does not resolve `/foo/` to `foo.html`, so that
+ * URL returns 404 on the live site and always will. The crawl reaches it
+ * because Pages serves `404.html` itself at 200.
+ *
+ * Why this is an exemption and not a bug to fix here: a `rel=canonical` is an
+ * identity DECLARATION, not a resource. No browser ever fetches it, so it is
+ * not what "every internal link and asset resolves" is about. And the error
+ * document has no canonical location by nature — Pages serves it AT every URL
+ * that does not exist. Correcting the tag means either emitting a synthetic
+ * entry from the content loader, which risks the exhaustive route enumeration
+ * AC2 depends on, or overriding Starlight's Head component. Both are larger and
+ * riskier than the tag is worth; the oddity is recorded in the phase report as
+ * a site defect rather than silently accommodated.
+ *
+ * THE NARROWNESS IS THE POINT. All three of page, rel and target must match, so
+ * this cannot quietly become "404 pages are not checked" or "canonicals are not
+ * checked". Exemptions are COUNTED and reported, and a run that exempts more
+ * than one reference fails.
+ */
+export function errorDocExemption(ref, html, pageUrl, { origin, base }) {
+  if (pageUrl !== `${origin}${base}/404.html`) return null;
+  if (ref !== `${origin}${base}/404/`) return null;
+  // Derived from the document rather than asserted about it: this reference is
+  // exempt because it IS the page's canonical, not because it looks like one.
+  if (canonicalOf(html) !== ref) return null;
+  return "the error document's canonical, which names a route Pages cannot serve";
 }
 
 /** Every `id="..."` on a page, for fragment resolution. */
@@ -327,6 +401,20 @@ async function get(url) {
 
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
+/** Run `fn` over `items`, at most `limit` at a time. Preserves nothing about
+ *  order on purpose — callers pool the FETCHING and then evaluate in order. */
+async function pooled(items, limit, fn) {
+  const iter = items[Symbol.iterator]();
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const next = iter.next();
+      if (next.done) return;
+      await fn(next.value);
+    }
+  });
+  await Promise.all(workers);
+}
+
 /** Content hash of a Buffer. Exported so the sweep's comparison is testable. */
 export function sha256(buf) {
   return createHash("sha256").update(buf).digest("hex");
@@ -348,14 +436,30 @@ export function sha256(buf) {
 export async function runOnce({ liveUrl, distDir }) {
   const { origin, base } = originAndBase(liveUrl);
   const failures = [];
+  // Failures that CANNOT become green by waiting, because they are computed
+  // from the artifact rather than from an answer the server gave. Retrying
+  // these spends the full propagation schedule — 250 seconds of sleeping — to
+  // print the identical list six times.
+  const deterministic = new Set();
   const stats = {
     distPages: 0,
     livePagesFetched: 0,
     bytesIdentical: 0,
     refsSeen: 0,
-    urlsChecked: 0,
+    // REFERENCE OCCURRENCES that were resolved, which is NOT the number of HTTP
+    // requests: the same stylesheet referenced from all 7 pages is 7 here and 1
+    // on the wire. This counter used to be called `urlsChecked`, and every
+    // person sizing this job — including its own author — read the resulting 99
+    // as 99 requests when the run makes 19. A counter whose name overstates it
+    // fivefold is a measurement defect, not a naming preference.
+    refsResolved: 0,
+    // DISTINCT HTTP requests actually issued. The number that governs runtime.
+    httpRequests: 0,
     fragmentsChecked: 0,
     offsiteSkipped: 0,
+    // References deliberately not required to resolve. See errorDocExemption:
+    // this is expected to be exactly 1, and a control fails if it grows.
+    exemptions: 0,
     // The artifact sweep. `artifactFiles` is every file the deploy shipped;
     // `artifactVerified` must equal it, and the gap is a failure, not a note.
     artifactFiles: 0,
@@ -372,11 +476,16 @@ export async function runOnce({ liveUrl, distDir }) {
 
   // Fetch each page ONCE and reuse it: it is both a page to verify and the
   // source of the references to verify.
+  // Caches the PROMISE, not the result, so pooled callers racing for the same
+  // URL still make exactly one request. `fetched.size` is therefore the honest
+  // count of distinct requests this run issued.
   const fetched = new Map();
-  const fetchCached = async (url) => {
-    if (!fetched.has(url)) fetched.set(url, await get(url));
+  const fetchCached = (url) => {
+    if (!fetched.has(url)) fetched.set(url, get(url));
     return fetched.get(url);
   };
+  /** Warm the cache for a set of URLs, 8 at a time. */
+  const prefetch = (urls) => pooled([...new Set(urls)], CONCURRENCY, (u) => fetchCached(u));
 
   // URLs whose CONTENT has been confirmed against the artifact, and URLs that
   // have already been named in a failure. The artifact sweep needs both: a 200
@@ -388,9 +497,13 @@ export async function runOnce({ liveUrl, distDir }) {
 
   // ── 1. every page the deployment should be serving, is ────────────────────
   const livePages = new Map(); // url -> html
-  for (const file of htmlFiles) {
+  const pageTargets = htmlFiles.map((file) => {
     const relPath = relative(distDir, file);
-    const url = origin + routeForHtml(relPath, base);
+    return { file, relPath, url: origin + routeForHtml(relPath, base) };
+  });
+  await prefetch(pageTargets.map((t) => t.url));
+
+  for (const { file, relPath, url } of pageTargets) {
     const res = await fetchCached(url);
     if (!res.ok) {
       failures.push(`UNREACHABLE ${url} (built as ${relPath}) — ${res.error}`);
@@ -427,48 +540,67 @@ export async function runOnce({ liveUrl, distDir }) {
   }
 
   // ── 2. every reference on every LIVE page resolves ────────────────────────
+  // Collected first so the distinct URLs can be fetched through the pool, then
+  // evaluated in source order. Same verdicts, same order, fewer round trips.
+  const refWork = [];
   for (const [pageUrl, html] of livePages) {
-    for (const { kind, ref } of refsIn(html)) {
-      stats.refsSeen += 1;
-      const c = classify(ref, { origin, base }, pageUrl);
-      if (c.verdict === "offsite") {
-        stats.offsiteSkipped += 1;
-        continue;
+    for (const r of refsIn(html)) refWork.push({ pageUrl, html, ...r });
+  }
+  await prefetch(
+    refWork
+      .map((w) => classify(w.ref, { origin, base }, w.pageUrl))
+      .filter((c) => c.verdict === "check")
+      .map((c) => c.url),
+  );
+
+  for (const { pageUrl, html, kind, ref } of refWork) {
+    stats.refsSeen += 1;
+    const c = classify(ref, { origin, base }, pageUrl);
+    if (c.verdict === "offsite") {
+      stats.offsiteSkipped += 1;
+      continue;
+    }
+    // Narrow, counted, and reported. Not a silent skip.
+    const exempt = errorDocExemption(c.url, html, pageUrl, { origin, base });
+    if (exempt) {
+      stats.exemptions += 1;
+      continue;
+    }
+    if (c.verdict === "escapes") {
+      const msg = `${pageUrl} -> ${kind} ${ref} — ${c.reason}`;
+      failures.push(msg);
+      deterministic.add(msg);
+      continue;
+    }
+    if (c.verdict === "fragment") {
+      stats.fragmentsChecked += 1;
+      if (!idsIn(html).has(c.fragment)) {
+        failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}"`);
       }
-      if (c.verdict === "escapes") {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — ${c.reason}`);
-        continue;
-      }
-      if (c.verdict === "fragment") {
-        stats.fragmentsChecked += 1;
-        if (!idsIn(html).has(c.fragment)) {
-          failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}"`);
-        }
-        continue;
-      }
-      const res = await fetchCached(c.url);
-      stats.urlsChecked += 1;
-      if (!res.ok) {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${c.url}: ${res.error}`);
-        reportedUrls.add(c.url);
-        continue;
-      }
-      if (res.status !== 200) {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${c.url}`);
-        reportedUrls.add(c.url);
-        continue;
-      }
-      const hop = redirectVerdict(c.url, res.finalUrl, { origin, base });
-      if (hop) {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — ${hop}`);
-        reportedUrls.add(c.url);
-        continue;
-      }
-      if (c.fragment) {
-        stats.fragmentsChecked += 1;
-        if (!idsIn(res.body).has(c.fragment)) {
-          failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${c.url}`);
-        }
+      continue;
+    }
+    const res = await fetchCached(c.url);
+    stats.refsResolved += 1;
+    if (!res.ok) {
+      failures.push(`${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${c.url}: ${res.error}`);
+      reportedUrls.add(c.url);
+      continue;
+    }
+    if (res.status !== 200) {
+      failures.push(`${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${c.url}`);
+      reportedUrls.add(c.url);
+      continue;
+    }
+    const hop = redirectVerdict(c.url, res.finalUrl, { origin, base });
+    if (hop) {
+      failures.push(`${pageUrl} -> ${kind} ${ref} — ${hop}`);
+      reportedUrls.add(c.url);
+      continue;
+    }
+    if (c.fragment) {
+      stats.fragmentsChecked += 1;
+      if (!idsIn(res.body).has(c.fragment)) {
+        failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${c.url}`);
       }
     }
   }
@@ -487,9 +619,15 @@ export async function runOnce({ liveUrl, distDir }) {
   // passed the "every .css served as an empty 200" scenario, catching only the
   // unreferenced ones. Only a completed CONTENT comparison counts here.
   stats.artifactFiles = files.length;
-  for (const file of files) {
+  const sweepTargets = files.map((file) => {
     const relPath = relative(distDir, file).split("\\").join("/");
-    const url = origin + liveUrlForFile(relPath, base);
+    return { file, relPath, url: origin + liveUrlForFile(relPath, base) };
+  });
+  // 39 requests sequentially against a dead host is the runtime problem U2
+  // identified. Pooled, and still evaluated in artifact order below.
+  await prefetch(sweepTargets.filter((t) => !reportedUrls.has(t.url)).map((t) => t.url));
+
+  for (const { file, relPath, url } of sweepTargets) {
     const expected = await readFile(file);
 
     if (verifiedUrls.has(url)) {
@@ -549,8 +687,19 @@ export async function runOnce({ liveUrl, distDir }) {
   // ── 4. controls ───────────────────────────────────────────────────────────
   // Without these a run that checked nothing, or a host that answers 200 to
   // everything, would both report success.
-  if (stats.urlsChecked === 0) {
-    failures.push("CONTROL: zero URLs were checked — the reference extractor matched nothing");
+  stats.httpRequests = fetched.size;
+  if (stats.refsResolved === 0) {
+    failures.push("CONTROL: zero references were resolved — the reference extractor matched nothing");
+  }
+  if (stats.httpRequests === 0) {
+    failures.push("CONTROL: zero HTTP requests were issued — this run checked nothing");
+  }
+  // The exemption is allowed to exist and is NOT allowed to spread.
+  if (stats.exemptions > 1) {
+    failures.push(
+      `CONTROL: ${stats.exemptions} references were exempted from resolving. Exactly one ` +
+        `is expected (the error document's canonical) — the exemption has widened.`,
+    );
   }
   if (stats.livePagesFetched === 0) {
     failures.push("CONTROL: zero live pages were fetched");
@@ -574,7 +723,7 @@ export async function runOnce({ liveUrl, distDir }) {
     );
   }
 
-  return { failures, stats };
+  return { failures, stats, deterministic };
 }
 
 /**
@@ -613,7 +762,16 @@ export function summaryLine(stats) {
   // A reference check is a STATUS check. That is a weaker claim than byte
   // identity and gets its own clause and its own verb, so the two can never
   // again be collapsed under one "all".
-  claims.push(`${stats.urlsChecked} internal URL reference(s) resolve`);
+  //
+  // Both numbers, both named. Occurrences and requests differ by 5x here, and
+  // reporting only the larger one is how "99 URLs checked" came to mean 19.
+  claims.push(
+    `${stats.refsResolved} internal reference occurrence(s) resolve ` +
+      `(${stats.httpRequests} distinct HTTP request(s))`,
+  );
+  if (stats.exemptions > 0) {
+    claims.push(`${stats.exemptions} reference(s) exempted by name`);
+  }
 
   // Conditional clauses, so a zero is never reported as a checked zero.
   if (stats.fragmentsChecked > 0) {
@@ -641,7 +799,7 @@ async function main(argv) {
   console.log(`live URL : ${args.url}`);
   console.log(`artifact : ${distDir}`);
 
-  deadlineAt = Date.now() + TOTAL_BUDGET_MS;
+  deadlineAt = Date.now() + args.deadlineMinutes * 60_000;
 
   let last;
   for (let attempt = 1; attempt <= args.attempts; attempt += 1) {
@@ -664,12 +822,23 @@ async function main(argv) {
     last = await runOnce({ liveUrl: args.url, distDir });
     console.log(
       `attempt ${attempt}: pages ${last.stats.livePagesFetched}/${last.stats.distPages} served, ` +
-        `${last.stats.bytesIdentical} byte-identical, ${last.stats.urlsChecked} URLs checked, ` +
+        `${last.stats.bytesIdentical} byte-identical, ${last.stats.refsResolved} refs resolved ` +
+        `in ${last.stats.httpRequests} requests, ` +
         `${last.stats.fragmentsChecked} fragments, ${last.stats.offsiteSkipped} off-site refs skipped, ` +
         `${last.stats.artifactVerified}/${last.stats.artifactFiles} artifact files verified, ` +
         `${last.failures.length} failure(s)`,
     );
     if (last.failures.length === 0) break;
+
+    // Every remaining failure is one that waiting cannot fix. Propagation is
+    // the only reason to retry, and none of these are propagation.
+    if (last.failures.every((f) => last.deterministic.has(f))) {
+      console.log(
+        `-- every failure is a build-side problem that retrying cannot change; ` +
+          `stopping after attempt ${attempt} instead of waiting out the schedule --`,
+      );
+      break;
+    }
   }
 
   console.log("");

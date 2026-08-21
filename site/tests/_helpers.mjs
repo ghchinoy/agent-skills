@@ -21,6 +21,21 @@ export const dist = join(siteRoot, "dist");
  *  site's own constant could not catch the site changing it. */
 export const BASE = "/agent-skills";
 
+/**
+ * The origin the built artifact hard-codes into canonical tags and any other
+ * absolute self-reference. Duplicated for the same reason as BASE.
+ *
+ * A LOCAL FIXTURE THAT SUBSTITUTES THE ORIGIN CANNOT TEST SAME-ORIGIN ABSOLUTE
+ * URLS. This is worth stating flatly because it cost this phase a whole class
+ * of coverage: a checker that classifies references by comparing their origin
+ * to the site's origin will file every absolute self-reference as "off-site,
+ * skip" when the fixture answers on 127.0.0.1. The fixture then looks like a
+ * model of production and is a strictly weaker crawl, silently dropping exactly
+ * the class the classifier exists to catch. Phase 6's Site B has the same shape
+ * with a different base path, so the rule outlives this phase.
+ */
+export const ORIGIN = "https://ghchinoy.github.io";
+
 /** The one plugin Phase 1 renders, and the five routes it must produce. */
 export const PLUGIN = "okf-authoring";
 export const EXPECTED_ROUTES = [

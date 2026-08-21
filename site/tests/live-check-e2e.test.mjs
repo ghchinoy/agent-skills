@@ -27,6 +27,17 @@
 //
 // NO EXTERNAL NETWORK. The server is 127.0.0.1 on an ephemeral port, so this is
 // safe on a pull request alongside the offline tests.
+//
+// AND IT ANSWERS AS THE SITE'S OWN ORIGIN. The first version of this fixture
+// pointed the checker at http://127.0.0.1:PORT and was, by construction,
+// incapable of testing the thing that actually breaks: the artifact hard-codes
+// https://ghchinoy.github.io/... into seven canonical tags, and `classify()`
+// files anything whose origin differs from the site's as off-site and never
+// fetches it. Seven references silently left the crawl and the fixture still
+// looked like production. So the loopback server is presented AT THE REAL
+// ORIGIN by routing fetch, rather than by rewriting the served HTML — the bytes
+// have to stay identical to the artifact or the freshness comparison this file
+// exists to protect would have nothing to compare.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -35,7 +46,11 @@ import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 import { runOnce } from "../scripts/check-live-links.mjs";
-import { BASE, dist, walk } from "./_helpers.mjs";
+import { BASE, ORIGIN, dist, walk } from "./_helpers.mjs";
+
+/** A route that is never built. Planted as an absolute same-origin reference,
+ *  which is the class the local suite could not see. */
+const UNBUILT = `${ORIGIN}${BASE}/no-such-route-synthetic-control/`;
 
 /** Enough of a static server to be honest about content types. get() decides
  *  text-vs-binary from the header, so getting these wrong would make HTML
@@ -61,6 +76,8 @@ const mimeFor = (p) => MIME[p.slice(p.lastIndexOf("."))] ?? "application/octet-s
  * @param {(rel: string) => boolean} [opts.drop]    404 these files.
  * @param {(rel: string) => boolean} [opts.corrupt] serve these with the SAME
  *   number of bytes and different content.
+ * @param {(rel: string) => boolean} [opts.plant] inject a link to an unbuilt
+ *   route into these pages.
  */
 async function serveDist(opts = {}) {
   const files = await walk(dist);
@@ -85,6 +102,11 @@ async function serveDist(opts = {}) {
       return;
     }
     let body = await readFile(hit.abs);
+    if (opts.plant?.(hit.rel)) {
+      body = Buffer.from(
+        body.toString("utf8").replace("</body>", `<a href="${UNBUILT}">planted</a></body>`),
+      );
+    }
     if (opts.corrupt?.(hit.rel)) {
       // Same length, different bytes. A length check cannot tell these apart;
       // that is the point of the scenario.
@@ -98,15 +120,44 @@ async function serveDist(opts = {}) {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const { port } = server.address();
   return {
-    url: `http://127.0.0.1:${port}${BASE}/`,
+    localOrigin: `http://127.0.0.1:${port}`,
     close: () => new Promise((r) => server.close(r)),
   };
+}
+
+/**
+ * Run the checker against `localOrigin` while it believes it is talking to
+ * ORIGIN. Requests are routed at the last moment and the response reports the
+ * URL the CALLER asked for, so `redirectVerdict` sees the site's own origin
+ * instead of reading every response as a hop to a loopback address.
+ */
+async function withOrigin(localOrigin, fn) {
+  const realFetch = globalThis.fetch;
+  const toLocal = (u) => (u.startsWith(ORIGIN) ? localOrigin + u.slice(ORIGIN.length) : u);
+  const toPublic = (u) => (u.startsWith(localOrigin) ? ORIGIN + u.slice(localOrigin.length) : u);
+  globalThis.fetch = async (input, init) => {
+    const res = await realFetch(toLocal(String(input)), init);
+    return new Proxy(res, {
+      get(target, prop) {
+        if (prop === "url") return toPublic(target.url);
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 }
 
 const run = async (opts) => {
   const srv = await serveDist(opts);
   try {
-    return await runOnce({ liveUrl: srv.url, distDir: dist });
+    return await withOrigin(srv.localOrigin, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
   } finally {
     await srv.close();
   }
@@ -136,7 +187,16 @@ test("the live checker passes against a server that serves the artifact correctl
   assert.equal(stats.artifactFiles, total, "the sweep did not consider every file in dist");
   assert.equal(stats.artifactVerified, total, "coverage is not complete against a correct server");
   assert.equal(stats.bytesIdentical, stats.distPages, "not every page was byte-compared");
-  assert.ok(stats.urlsChecked > 0 && stats.livePagesFetched > 0);
+  assert.ok(stats.refsResolved > 0 && stats.livePagesFetched > 0);
+  // The two counters U3 separated. Occurrences must EXCEED distinct requests
+  // here — the same stylesheet is referenced from every page — and if they are
+  // ever equal, the deduplication has silently stopped and the run is making
+  // one request per reference.
+  assert.ok(
+    stats.refsResolved > stats.httpRequests,
+    `refsResolved (${stats.refsResolved}) should exceed httpRequests (${stats.httpRequests})`,
+  );
+  assert.ok(stats.httpRequests > 0, "no HTTP requests were counted");
 });
 
 test("AXIS 1: a shipped file that is never referenced and never served is caught", async () => {
@@ -199,10 +259,9 @@ test("a server that answers 200 to everything cannot pass", async () => {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const { port } = server.address();
   try {
-    const { failures } = await runOnce({
-      liveUrl: `http://127.0.0.1:${port}${BASE}/`,
-      distDir: dist,
-    });
+    const { failures } = await withOrigin(`http://127.0.0.1:${port}`, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
     assert.ok(
       failures.some((f) => f.startsWith("CONTROL:") && /never built/.test(f)),
       "the negative control did not fire against a server that 200s everything",
@@ -210,4 +269,38 @@ test("a server that answers 200 to everything cannot pass", async () => {
   } finally {
     await new Promise((r) => server.close(r));
   }
+});
+
+// ── U1: the class the fixture could not previously represent ───────────────
+
+test("SYNTHETIC CONTROL: an absolute same-origin link to an unbuilt route is caught", async () => {
+  // THIS CONTROL EXISTS BECAUSE THE EXCEPTION BELOW WOULD OTHERWISE EAT THE
+  // ONLY PROOF. The one real instance of this class in the artifact is the 404
+  // page's canonical, and that is exempted by name — so if this class were only
+  // ever demonstrated through the 404 case, the exemption and the class fix
+  // would land together and leave a widened checker whose single piece of
+  // evidence had been carved out of it.
+  //
+  // So the class is proved on an ORDINARY page, with a reference that has
+  // nothing to do with 404s, and it must stay red with the exemption in place.
+  const { failures } = await run({ plant: (rel) => rel === "index.html" });
+
+  const named = failures.filter((f) => f.includes("no-such-route-synthetic-control"));
+  assert.ok(
+    named.some((f) => /HTTP 404/.test(f)),
+    `a planted absolute same-origin link to an unbuilt route was not caught:\n${failures.join("\n")}`,
+  );
+});
+
+test("the error document's canonical is exempt, and NOTHING ELSE is", async () => {
+  // The exemption is real: dist/404.html declares rel=canonical for <base>/404/,
+  // nothing is built there, and Pages does not resolve /foo/ to foo.html. It is
+  // also the narrowest thing that works — page, rel and target must all match.
+  const { failures, stats } = await run();
+  assert.deepEqual(failures, [], `clean run should be green:\n${failures.join("\n")}`);
+  assert.equal(
+    stats.exemptions,
+    1,
+    "expected exactly one exempted reference — the error document's canonical",
+  );
 });

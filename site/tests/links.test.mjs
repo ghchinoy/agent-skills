@@ -16,6 +16,7 @@ import { existsSync, statSync } from "node:fs";
 
 import {
   BASE,
+  ORIGIN,
   PLUGIN,
   dist,
   distContentPages,
@@ -113,9 +114,11 @@ test("0 broken links: every internal href in dist resolves to a built file", asy
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
-    for (const href of hrefsIn(html)) {
-      if (isExternal(href)) continue;
+    for (const raw of hrefsIn(html)) {
+      if (isExternal(raw)) continue;
+      const href = toSitePath(raw);
       const [path] = href.split("#");
+      if (isErrorDocCanonical(from, path, html)) continue;
       if (path === "") continue; // pure fragment
       if (!path.startsWith("/")) {
         broken.push(`${from} -> ${href} (relative href; the site emits absolute ones)`);
@@ -154,10 +157,12 @@ test("0 broken assets: every src= and <link href> in dist resolves to a built fi
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
-    for (const { kind, ref } of assetRefsIn(html)) {
-      if (isExternal(ref) || ref === "") continue;
+    for (const { kind, ref: rawRef } of assetRefsIn(html)) {
+      if (isExternal(rawRef) || rawRef === "") continue;
+      const ref = toSitePath(rawRef);
       const [path] = ref.split("#");
       if (path === "") continue;
+      if (isErrorDocCanonical(from, path, html)) continue;
       checked += 1;
       if (!path.startsWith("/")) {
         broken.push(`${from} -> ${kind} ${ref} (relative; the site emits absolute ones)`);
@@ -237,8 +242,8 @@ test("0 dangling anchors: every in-page fragment names an id that exists", async
   const dangling = [];
   for (const p of pages) {
     for (const href of hrefsIn(p.html)) {
-      if (isExternal(href) || !href.includes("#")) continue;
-      const [path, frag] = href.split("#");
+      if (isExternal(href) || !toSitePath(href).includes("#")) continue;
+      const [path, frag] = toSitePath(href).split("#");
       if (!frag || frag === "top") continue;
       const targetRoute = path === "" ? `/${p.route}/` : path.slice(BASE.length) || "/";
       const html = path === "" ? p.html : byRoute.get(targetRoute);
@@ -347,8 +352,63 @@ function decodeAmp(s) {
   return s.replace(/&amp;/g, "&");
 }
 
+/**
+ * True when a reference points somewhere this suite cannot resolve.
+ *
+ * THIS FUNCTION USED TO TREAT EVERY ABSOLUTE URL AS EXTERNAL, and that is the
+ * defect that let a broken reference sit in dist through a full green run. The
+ * artifact hard-codes its own origin into `rel=canonical` on every page, so
+ * `^https?:` matched them and this suite skipped the entire class of
+ * SAME-ORIGIN ABSOLUTE references. Meanwhile the live checker's `classify()`
+ * resolves them and fetches them. Local green, live red — and the divergence,
+ * not the one link it hid, is the actual bug. See `toSitePath` below.
+ */
 function isExternal(href) {
-  return /^(https?:|mailto:|tel:|data:|\/\/)/.test(href);
+  if (/^(mailto:|tel:|data:|javascript:)/i.test(href)) return true;
+  if (/^\/\//.test(href)) return true; // protocol-relative: another origin
+  if (!/^https?:/i.test(href)) return false; // relative or root-relative: ours
+  try {
+    return new URL(href).origin !== ORIGIN;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * An absolute same-origin reference, reduced to the site-absolute path the
+ * resolver below understands. Anything else is returned unchanged.
+ *
+ * Kept separate from `isExternal` so the two questions stay separate: "is this
+ * ours" and "where does it point". Folding them together is roughly how the
+ * origin check went missing in the first place.
+ */
+function toSitePath(ref) {
+  if (!/^https?:/i.test(ref)) return ref;
+  try {
+    const u = new URL(ref);
+    return `${u.pathname}${u.hash}`;
+  } catch {
+    return ref;
+  }
+}
+
+/**
+ * The one reference on this site not required to resolve, mirrored from
+ * scripts/check-live-links.mjs so the local gate and the live gate exempt
+ * exactly the same thing. Starlight's built-in 404 page declares
+ * `rel=canonical` for `<base>/404/`; the error document is emitted as
+ * `404.html`, GitHub Pages does not resolve `/foo/` to `foo.html`, and an error
+ * document has no canonical location to declare in the first place — Pages
+ * serves it AT every URL that does not exist.
+ *
+ * Narrow by construction: the file, the target and the page's own canonical
+ * must all agree. It cannot decay into "404 pages are not checked".
+ */
+function isErrorDocCanonical(fromFile, path, html) {
+  if (fromFile !== "404.html") return false;
+  if (path !== `${BASE}/404/`) return false;
+  const m = /<link\b[^>]*\srel="canonical"[^>]*\shref="([^"]*)"/.exec(html);
+  return m?.[1] === `${ORIGIN}${BASE}/404/`;
 }
 
 /** True when a site-absolute path corresponds to something actually built:

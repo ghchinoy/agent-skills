@@ -189,7 +189,12 @@ test("idsIn finds the anchors the pages really declare", async () => {
 });
 
 test("parseArgs: defaults, overrides, and refusal", () => {
-  assert.deepEqual(parseArgs([]), { url: DEFAULT_URL, dist: "dist", attempts: 6 });
+  assert.deepEqual(parseArgs([]), {
+    url: DEFAULT_URL,
+    dist: "dist",
+    attempts: 6,
+    deadlineMinutes: 15,
+  });
   assert.equal(parseArgs(["--url", "https://x.test/y/"]).url, "https://x.test/y/");
   assert.equal(parseArgs(["--url=https://x.test/y/"]).url, "https://x.test/y/");
   assert.equal(parseArgs(["--dist", "other"]).dist, "other");
@@ -199,6 +204,12 @@ test("parseArgs: defaults, overrides, and refusal", () => {
   // different question than the one asked.
   assert.throws(() => parseArgs(["--urll", "x"]), /unknown argument/);
   assert.throws(() => parseArgs(["--attempts", "0"]), /positive integer/);
+  // The overall budget is settable, and has to stay inside the job timeout —
+  // tests/workflows.test.mjs asserts the DEFAULT does. A run that asked for
+  // zero minutes would report "out of budget" for every URL and call it a day.
+  assert.equal(parseArgs(["--deadline-minutes", "3"]).deadlineMinutes, 3);
+  assert.throws(() => parseArgs(["--deadline-minutes", "0"]), /must be positive/);
+  assert.throws(() => parseArgs(["--deadline-minutes", "x"]), /must be positive/);
   assert.throws(() => parseArgs(["--url", ""]), /must not be empty/);
 });
 
@@ -326,7 +337,8 @@ const STATS = {
   livePagesFetched: 7,
   bytesIdentical: 7,
   refsSeen: 120,
-  urlsChecked: 99,
+  refsResolved: 106,
+  httpRequests: 19,
   fragmentsChecked: 96,
   offsiteSkipped: 33,
   artifactFiles: 39,
@@ -356,10 +368,13 @@ test("the PASS line only says all when everything was actually compared", () => 
 
 test("the PASS line keeps status checks and byte comparisons as separate claims", () => {
   const line = summaryLine(STATS);
-  // The 99 resolve. They are not claimed byte-identical, which was the defect.
-  assert.match(line, /99 internal URL reference\(s\) resolve/);
-  assert.doesNotMatch(line, /all 99/);
-  assert.doesNotMatch(line, /99[^.;]*byte-identical/);
+  // The occurrences resolve. They are not claimed byte-identical, which was
+  // the defect — and the DISTINCT REQUEST COUNT is stated alongside, because
+  // reporting only the larger number is how "99 URLs checked" came to mean 19.
+  assert.match(line, /106 internal reference occurrence\(s\) resolve/);
+  assert.match(line, /19 distinct HTTP request/);
+  assert.doesNotMatch(line, /all 106/);
+  assert.doesNotMatch(line, /106[^.;]*byte-identical/);
   // Off-site references are reported as NOT checked rather than folded in.
   assert.match(line, /33 off-site reference\(s\) were NOT checked/);
 
@@ -375,7 +390,7 @@ test("CONTROL: skewing any counter the PASS line reports changes the sentence", 
   // If a counter can move without the sentence moving, that counter is being
   // reported by a literal and the defect has come back.
   const base = summaryLine(STATS);
-  for (const key of ["artifactFiles", "artifactVerified", "urlsChecked", "fragmentsChecked", "offsiteSkipped"]) {
+  for (const key of ["artifactFiles", "artifactVerified", "refsResolved", "httpRequests", "fragmentsChecked", "offsiteSkipped"]) {
     const skewed = summaryLine({ ...STATS, [key]: STATS[key] - 1 });
     assert.notEqual(skewed, base, `changing ${key} did not change the PASS line`);
   }
