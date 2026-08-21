@@ -42,7 +42,15 @@ to the change that caused it, rather than surfacing later somewhere else.
 `docs.yml` triggers on a branch push, never on a tag. The `github-pages`
 environment protection rejects `v*` tag refs, so a tag-triggered deploy fires
 and then dies at the environment gate. `tests/workflows.test.mjs` asserts the
-absence of every tag-shaped trigger, with controls.
+absence of `push.tags`, `push.tags-ignore`, `release:` and `create:`, with
+controls.
+
+Those are four cases, not the class, and this paragraph used to claim the
+class. `workflow_dispatch` has no ref restriction — the "Run workflow" selector
+and `gh workflow run --ref <tag>` both accept a tag — so the trigger list alone
+does not exclude a tag ref. What closes it is the job-level
+`if: github.ref == 'refs/heads/main'` on `build-deploy`, which mirrors the
+environment's only deployment branch policy. Both are asserted.
 
 The site is published at <https://ghchinoy.github.io/agent-skills/>. To check a
 deployment by hand:
