@@ -102,26 +102,6 @@ async function serveDist(opts = {}) {
     return byUrlPath.get(pathname);
   };
 
-  /**
-   * Rewrite `body`, and REFUSE TO SILENTLY DO NOTHING.
-   *
-   * The first version of the canonical plant anchored on `</head>`, which this
-   * artifact does not contain — Astro emits no closing head tag. The plant
-   * matched nothing, the page was served verbatim, the run came back clean, and
-   * the control reported "a dangling canonical was not caught" while nothing
-   * had ever been planted. That is the same silent-no-op defect the mutation
-   * harness refuses to tolerate, arriving inside a control written to catch it.
-   * A fixture that mutates has to fail loudly when its mutation misses.
-   */
-  const rewrite = (body, find, replaceWith, what) => {
-    const before = body.toString("utf8");
-    const after = before.replace(find, replaceWith);
-    if (after === before) {
-      throw new Error(`fixture could not plant ${what}: no match for ${find} in the served page`);
-    }
-    return Buffer.from(after);
-  };
-
   const server = createServer(async (req, res) => {
     const { pathname } = new URL(req.url, "http://127.0.0.1");
     hits.push(pathname);
@@ -133,11 +113,11 @@ async function serveDist(opts = {}) {
     }
     let body = await readFile(hit.abs);
     if (opts.plant?.(hit.rel)) {
-      body = rewrite(body, "</body>", `<a href="${UNBUILT}">planted</a></body>`, "an unbuilt link");
+      body = rewriteOrThrow(body, "</body>", `<a href="${UNBUILT}">planted</a></body>`, "an unbuilt link");
     }
     if (opts.plantCanonical?.(hit.rel)) {
       // Anchored on `<body`, because this artifact has no closing head tag.
-      body = rewrite(
+      body = rewriteOrThrow(
         body,
         "<body",
         `<link rel="canonical" href="${ORIGIN}${BASE}/404/"/><body`,
@@ -189,6 +169,37 @@ async function withOrigin(localOrigin, fn) {
   } finally {
     globalThis.fetch = realFetch;
   }
+}
+
+/**
+ * Rewrite `body`, and REFUSE TO SILENTLY DO NOTHING.
+ *
+ * THE SILENT NO-OP IS NOW A CLASS AT THREE INSTANCES IN THREE DIFFERENT HANDS
+ * on this phase: a review harness whose Python replace matched an absent
+ * pattern, a patch script of mine that exited early leaving half its edits
+ * unapplied, and this fixture, which anchored a planted canonical on a closing
+ * head tag that Astro does not emit — so it planted nothing, served the page
+ * verbatim, and reported "a dangling canonical was not caught" about a run
+ * where nothing had been planted.
+ *
+ * WHAT MAKES THE CLASS NASTY IS THAT THE DIRECTION OF THE ERROR IS NOT
+ * PREDICTABLE. The review harness's no-op produced a FALSE GREEN — a gate that
+ * looked blind. This one produced a FALSE RED — a finding against code that was
+ * correct. Whichever way the control's polarity points is the way the mistake
+ * comes out, so there is no symptom to pattern-match on. Only refusing to
+ * rewrite nothing works, and it has to be a property of every rewriting step
+ * rather than three separate fixes.
+ *
+ * Exported so the guard itself is reachable: with correct anchors it never
+ * fires, and deleting it left the suite green.
+ */
+export function rewriteOrThrow(body, find, replaceWith, what) {
+  const before = body.toString("utf8");
+  const after = before.replace(find, replaceWith);
+  if (after === before) {
+    throw new Error(`fixture could not plant ${what}: no match for ${find} in the served page`);
+  }
+  return Buffer.from(after);
 }
 
 const run = async (opts) => {
@@ -507,4 +518,24 @@ test("the request set is exactly the artifact plus the negative control", async 
   // And the exempted URL is not merely un-judged, it is never asked for.
   assert.ok(!actual.has(`${BASE}/404/`), "the exempted URL was still fetched");
   assert.equal(stats.exemptions, 1);
+});
+
+test("CONTROL: the fixture refuses to plant nothing", () => {
+  // This guard cannot fire during a normal run — the anchors match — so
+  // deleting it changed nothing observable and mutation reported it as an
+  // assertion that cannot fire. Exercised directly instead, with the exact
+  // anchor that caused the incident.
+  const page = Buffer.from("<html><head><title>x</title><body>y</body></html>");
+
+  assert.equal(
+    rewriteOrThrow(page, "<body", "<link rel=canonical><body", "a canonical").toString(),
+    "<html><head><title>x</title><link rel=canonical><body>y</body></html>",
+  );
+
+  // `</head>` is the anchor that silently matched nothing in this artifact.
+  assert.throws(
+    () => rewriteOrThrow(page, "</head>", "<x/></head>", "a canonical"),
+    /could not plant a canonical/,
+    "the fixture planted nothing and did not say so",
+  );
 });

@@ -484,6 +484,51 @@ export function sha256(buf) {
 // ── the check itself ────────────────────────────────────────────────────────
 
 /**
+ * Findings in reporting order, given `{ key, msg }` records.
+ *
+ * THERE IS NO TIEBREAKER, DELIBERATELY. An earlier version carried a raise-time
+ * counter for equal keys. It was unreachable — every loop iteration raises at
+ * most one finding, so keys are unique — and an unreachable branch is only
+ * harmless while it stays unreachable. The day an ordinary edit raises two
+ * findings in one iteration, that counter goes live and reintroduces
+ * completion-order dependence in the exact place this design exists to remove
+ * it, silently, while looking like the design handling the case. Mutation
+ * confirmed it was dead: replacing it with Math.random() left the suite green.
+ *
+ * The premise is asserted instead. A duplicate key means the premise has broken
+ * and that is worth hearing about, not papering over with a value that depends
+ * on scheduling.
+ *
+ * EXPORTED SO THE ASSERTION IS REACHABLE. Left inside runOnce it was the same
+ * defect one level up: deleting the uniqueness check changed nothing observable,
+ * because nothing in the real run produces a duplicate key. A guard that cannot
+ * be made to fire is indistinguishable from an absent one, so it is tested
+ * directly with records the real passes cannot currently produce.
+ */
+export function orderFindings(raised) {
+  const seen = new Set();
+  for (const r of raised) {
+    const k = r.key.join(".");
+    if (seen.has(k)) {
+      throw new Error(
+        `two findings share order key ${k} — reporting order would depend on ` +
+          `completion order. Give the second one its own position in the key.`,
+      );
+    }
+    seen.add(k);
+  }
+  return [...raised]
+    .sort((a, b) => {
+      for (let i = 0; i < Math.max(a.key.length, b.key.length); i += 1) {
+        const d = (a.key[i] ?? -1) - (b.key[i] ?? -1);
+        if (d !== 0) return d;
+      }
+      return 0;
+    })
+    .map((r) => r.msg);
+}
+
+/**
  * One full pass. Returns `{ failures, stats }`; the caller decides whether a
  * non-empty `failures` is fatal or merely means "try again in a minute".
  */
@@ -516,45 +561,7 @@ export async function runOnce({ liveUrl, distDir }) {
     raised.push({ key, msg });
     return msg;
   };
-  /**
-   * Findings in reporting order.
-   *
-   * THERE IS NO TIEBREAKER, DELIBERATELY. An earlier version carried a
-   * raise-time counter for equal keys. It was unreachable — every loop
-   * iteration raises at most one finding, so keys are unique — and an
-   * unreachable branch is only harmless while it stays unreachable. The day an
-   * ordinary edit raises two findings in one iteration, that counter becomes
-   * live and reintroduces completion-order dependence in the exact place this
-   * design exists to remove it, silently, while looking like the design
-   * handling the case. Mutation confirmed it was dead: replacing it with
-   * Math.random() left the whole suite green.
-   *
-   * So the premise is asserted instead. A duplicate key means the premise has
-   * broken and that is worth hearing about, not papering over with a value that
-   * depends on scheduling.
-   */
-  const report = () => {
-    const seen = new Set();
-    for (const r of raised) {
-      const k = r.key.join(".");
-      if (seen.has(k)) {
-        throw new Error(
-          `two findings share order key ${k} — reporting order would depend on ` +
-            `completion order. Give the second one its own position in the key.`,
-        );
-      }
-      seen.add(k);
-    }
-    return raised
-      .sort((a, b) => {
-        for (let i = 0; i < Math.max(a.key.length, b.key.length); i += 1) {
-          const d = (a.key[i] ?? -1) - (b.key[i] ?? -1);
-          if (d !== 0) return d;
-        }
-        return 0;
-      })
-      .map((r) => r.msg);
-  };
+  const report = () => orderFindings(raised);
   // Failures that CANNOT become green by waiting, because they are computed
   // from the artifact rather than from an answer the server gave. Retrying
   // these spends the full propagation schedule — 250 seconds of sleeping — to

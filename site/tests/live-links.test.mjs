@@ -26,6 +26,7 @@ import {
   classify,
   idsIn,
   liveUrlForFile,
+  orderFindings,
   originAndBase,
   parseArgs,
   redirectVerdict,
@@ -448,4 +449,44 @@ test("cacheThrough dedupes in-flight requests and converts rejections", async ()
   const sync = new Map();
   const syncThrower = () => { throw new Error("sync boom"); };
   assert.match((await cacheThrough(sync, "w", syncThrower)).error, /request threw: sync boom/);
+});
+
+test("orderFindings sorts by key and refuses duplicate keys", () => {
+  // ORDER BY KEY, NOT BY ARRIVAL. Keys are (pass, position-within-pass), and
+  // position is the item's INDEX IN ITS INPUT LIST, assigned before any request
+  // is issued. So reporting order carries no scheduling information by
+  // construction rather than by luck.
+  const shuffled = [
+    { key: [3, 12], msg: "artifact 12" },
+    { key: [1, 0], msg: "page 0" },
+    { key: [4, 2], msg: "control 2" },
+    { key: [2, 5], msg: "ref 5" },
+    { key: [1, 3], msg: "page 3" },
+    { key: [3, 2], msg: "artifact 2" },
+  ];
+  assert.deepEqual(orderFindings(shuffled), [
+    "page 0",
+    "page 3",
+    "ref 5",
+    "artifact 2",
+    "artifact 12",
+    "control 2",
+  ]);
+  // Numeric, not lexicographic: 2 before 12.
+  assert.ok(orderFindings(shuffled).indexOf("artifact 2") < orderFindings(shuffled).indexOf("artifact 12"));
+  // The input is not mutated — the caller keeps its own records.
+  assert.equal(shuffled[0].msg, "artifact 12");
+
+  // THE PREMISE, ASSERTED. Nothing in a real run produces a duplicate key, so
+  // deleting this check changed nothing observable and mutation reported it as
+  // an assertion that cannot fire. That is why orderFindings is exported and
+  // tested directly with records the real passes cannot currently produce: the
+  // day an edit raises two findings in one loop iteration, the design's premise
+  // has broken and the right outcome is a loud failure naming the collision,
+  // not a silent fallback to whichever finished first.
+  assert.throws(
+    () => orderFindings([{ key: [2, 7], msg: "a" }, { key: [2, 7], msg: "b" }]),
+    /two findings share order key 2\.7/,
+  );
+  assert.doesNotThrow(() => orderFindings([{ key: [2, 7], msg: "a" }, { key: [2, 8], msg: "b" }]));
 });

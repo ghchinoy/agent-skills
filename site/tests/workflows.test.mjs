@@ -642,18 +642,70 @@ test("every job in docs.yml has a timeout, and the live checker stays inside it"
     assert.ok(t <= 30, `job ${name} has a ${t}-minute timeout, which is not a bound worth having`);
   }
 
-  // The script's own budget must expire BEFORE the runner kills the job, or the
-  // failure arrives as a killed job with no diagnosis instead of a report.
-  const src = await raw(join(siteRoot, "scripts", "check-live-links.mjs"));
-  const m = src.match(/const TOTAL_BUDGET_MS = (\d+) \* 60_000/);
-  assert.ok(m, "check-live-links.mjs no longer declares an overall budget in minutes");
-  const budgetMinutes = Number(m[1]);
-  const verify = Object.entries(wf.jobs).find(([, j]) =>
+  // The relation between the script's own budget and the job timeout is the
+  // next test's job. It used to be a trailing `budget < timeout` assertion here,
+  // which is satisfied by a one-minute gap and so guards nothing.
+});
+
+test("the SCRIPT stops the run, not the job timeout", async () => {
+  // O6. The two numbers are the checker's own 15-minute budget and verify-live's
+  // timeout-minutes: 20, and they live in different files. The property is that
+  // THE SCRIPT ALWAYS GETS TO REPORT ITS OWN FAILURE. An opaque CI kill and a
+  // clean deadline failure look completely different to whoever reads the log:
+  // one says "the job was killed", the other says "0s left of the 15-minute
+  // budget, not enough for another attempt".
+  //
+  // MEASURED, not projected. Against a server that accepts connections and
+  // never answers, the whole run took 900s — 15.0 minutes exactly, exit 1, five
+  // attempts, 40 requests each. It landed on the deadline rather than near it
+  // because the budget is a SCHEDULER, not a wall: it declines to start an
+  // attempt it cannot finish. So the script cannot exceed its budget, and the
+  // gap to timeout-minutes is not headroom for the script at all.
+  //
+  // WHAT THE GAP IS FOR, AND WHY THE FLOOR IS 4. The gap covers everything the
+  // job does AROUND the script — checkout, setup-node, npm ci,
+  // download-artifact, teardown — which is inside timeout-minutes and outside
+  // the budget. A sibling project on the same workflow shape runs its entire
+  // non-script job in 32 seconds, and that figure includes two site builds that
+  // verify-live does not do, so it is an inflated upper bound. Against 32s, a
+  // floor of 4 minutes and a floor of 5 protect against nothing different; the
+  // margin is about two orders of magnitude either way. The floor is a drift
+  // guard, not a safety margin, and it is recorded here with its basis so the
+  // next person inherits the reasoning rather than the number.
+  //
+  // The one term still worth watching: npm ci against Astro, Starlight and
+  // Pagefind may be heavier than the sibling's. If a real run ever shows
+  // overhead in minutes rather than seconds, that is a dependency-caching
+  // problem, not a margin problem.
+  const wf = await load(DOCS);
+  // Found by the step that RUNS the script, not by job name: renaming the job
+  // must not silently retire this check.
+  const found = Object.entries(wf.jobs).filter(([, j]) =>
     (j.steps ?? []).some((s) => /check-live-links\.mjs/.test(String(s.run ?? ""))),
   );
+  assert.equal(found.length, 1, `expected exactly one job to run the live checker, found ${found.length}`);
+  const [jobName, job] = found[0];
+  const timeout = job["timeout-minutes"];
+  assert.equal(typeof timeout, "number", `${jobName} has no timeout-minutes — the job is unbounded`);
+
+  const script = await raw(join(siteRoot, "scripts", "check-live-links.mjs"));
+  const m = /const TOTAL_BUDGET_MS = (\d+) \* 60_000;/.exec(script);
+  assert.ok(m, "could not read the checker's overall budget from its source");
+  const budget = Number(m[1]);
+
   assert.ok(
-    budgetMinutes < verify[1]["timeout-minutes"],
-    `the checker's ${budgetMinutes}-minute budget does not fit inside verify-live's ` +
-      `${verify[1]["timeout-minutes"]}-minute timeout — the runner would kill it first`,
+    budget <= timeout - 4,
+    `the checker's ${budget}-minute budget leaves only ${timeout - budget} minute(s) in ${jobName} for ` +
+      `setup and teardown before timeout-minutes (${timeout}) kills the job instead. The job ` +
+      `timeout must stay the BACKSTOP for a wedged script, never the thing that stops a normal ` +
+      `slow run — a killed job cannot say why it stopped.`,
+  );
+
+  // ...and the CLI default must be the same budget, or a workflow that passes
+  // no flag gets a different deadline from the one asserted here.
+  assert.match(
+    script,
+    /deadlineMinutes: TOTAL_BUDGET_MS \/ 60_000/,
+    "the --deadline-minutes default is not the budget this test just checked",
   );
 });
