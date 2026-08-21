@@ -665,18 +665,26 @@ test("the SCRIPT stops the run, not the job timeout", async () => {
   // WHAT THE GAP IS FOR, AND WHY THE FLOOR IS 4. The gap covers everything the
   // job does AROUND the script — checkout, setup-node, npm ci,
   // download-artifact, teardown — which is inside timeout-minutes and outside
-  // the budget. A sibling project on the same workflow shape runs its entire
-  // non-script job in 32 seconds, and that figure includes two site builds that
-  // verify-live does not do, so it is an inflated upper bound. Against 32s, a
-  // floor of 4 minutes and a floor of 5 protect against nothing different; the
-  // margin is about two orders of magnitude either way. The floor is a drift
-  // guard, not a safety margin, and it is recorded here with its basis so the
-  // next person inherits the reasoning rather than the number.
+  // the budget.
   //
-  // The one term still worth watching: npm ci against Astro, Starlight and
-  // Pagefind may be heavier than the sibling's. If a real run ever shows
-  // overhead in minutes rather than seconds, that is a dependency-caching
-  // problem, not a margin problem.
+  // MEASURED ON THIS REPOSITORY'S OWN DEPENDENCY TREE, not inferred from a
+  // sibling. site-ci run 32525192116, per-step: checkout 1s, setup-node 2s,
+  // npm ci 6s, build 3s, typecheck + suite 20s. verify-live does not build and
+  // does not run the suite; it does checkout, setup-node, npm ci,
+  // download-artifact and teardown, so its non-script overhead is about TEN
+  // SECONDS. A 4-minute floor is roughly 24x that.
+  //
+  // This replaces an earlier estimate that leaned on a sibling project's 32s
+  // whole-job figure and carried npm ci against Astro, Starlight and Pagefind
+  // as a provisional term — the worry being that our dependency tree might be
+  // heavier than theirs. It is 6s with setup-node's cache. The term is retired
+  // rather than left standing as a caveat nobody re-checked.
+  //
+  // The floor is therefore a DRIFT GUARD, not a safety margin. 4 and 5 protect
+  // against nothing different at this scale, and the number is arbitrary — but
+  // an arbitrary constant with a documented basis is a different object from
+  // the same constant without one, so the basis is here rather than in a commit
+  // message nobody will find.
   const wf = await load(DOCS);
   // Found by the step that RUNS the script, not by job name: renaming the job
   // must not silently retire this check.
