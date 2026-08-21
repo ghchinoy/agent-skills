@@ -270,7 +270,11 @@ test("forwards: every declared frontmatter field appears on the skill page, byte
   for (const skill of SKILLS) {
     const declared = await declaredOf(skill);
     const html = pageFor(pages, `plugins/${PLUGIN}/${skill}`).html;
-    const text = decodeEntities(html).replace(/\s+/g, " ");
+    // <main> only. Starlight also writes the description into a <meta> tag in
+    // the head, so a whole-document scan would report a clipped description as
+    // present — the string is in the file, just not where a reader can see it.
+    const main = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html;
+    const text = decodeEntities(main).replace(/\s+/g, " ");
 
     for (const [key, value] of Object.entries(declared)) {
       const values =
