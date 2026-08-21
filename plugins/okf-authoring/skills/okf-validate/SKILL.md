@@ -163,3 +163,4 @@ purpose-built skill:
   `verified`, no invented `sources`, no stored tier). **Stay in this skill
   (Layer A)** for validating an individual bundle and for any **zero-binary
   environment** — this handoff adds no binary dependency.
+
