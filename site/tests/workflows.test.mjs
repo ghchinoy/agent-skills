@@ -29,7 +29,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, access } from "node:fs/promises";
+import { readFile, access, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
@@ -40,6 +40,54 @@ const WORKFLOWS = join(repoRoot, ".github", "workflows");
 const DOCS = join(WORKFLOWS, "docs.yml");
 const SITE_CI = join(WORKFLOWS, "site-ci.yml");
 const VALIDATE = join(WORKFLOWS, "validate.yml");
+
+/**
+ * EVERY workflow file in the directory, read from the directory.
+ *
+ * R1's class, found in this file by re-grepping after fixing it in pins.test.mjs:
+ * `every action is pinned to an explicit ref` iterated a hand-written list of two
+ * while the directory holds three. validate.yml belongs to the repo rather than to
+ * Phase 2 and is zero-diff by ruling — but that is a reason not to CHANGE it, and
+ * it was being used as a reason not to CHECK it. Measured before extending the
+ * scan: its two actions are already pinned, so covering it costs no diff at all.
+ * The gap was never a conflict with the ruling; nobody had looked.
+ */
+async function allWorkflows() {
+  const names = (await readdir(WORKFLOWS)).filter((f) => /\.ya?ml$/.test(f)).sort();
+  return Promise.all(names.map(async (name) => ({ name, wf: await load(join(WORKFLOWS, name)) })));
+}
+
+/**
+ * Workflows a given test does not apply to, keyed by test, each with a reason and
+ * a PREDICATE that decides applicability from the file's content rather than from
+ * its name. A named skip goes stale silently; a predicate cannot, because the
+ * tests below assert the predicate's verdict matches this list exactly.
+ */
+const APPLICABILITY = {
+  "node floor": {
+    applies: (wf) =>
+      Object.values(wf.jobs ?? {}).some((j) =>
+        (j.steps ?? []).some((s) => String(s.uses ?? "").startsWith("actions/setup-node@")),
+      ),
+    reason: "validate.yml sets up Python and never installs Node, so a Node floor says nothing about it",
+  },
+  "npm ci": {
+    applies: (wf) =>
+      Object.values(wf.jobs ?? {}).some((j) =>
+        (j.steps ?? []).some((s) => /\bnpm\b/.test(String(s.run ?? ""))),
+      ),
+    reason: "validate.yml runs a shell validator and no npm commands, so there is no install to make reproducible",
+  },
+  "content paths": {
+    applies: (wf) => {
+      const on = triggers(wf);
+      return Boolean(on.push?.paths ?? on.pull_request?.paths);
+    },
+    reason:
+      "validate.yml deliberately carries no paths filter — it runs on every push to main, " +
+      "which is a stronger trigger than the one this test checks for, not a weaker one",
+  },
+};
 
 /** The content globs both workflows must watch, independent of either file. */
 const CONTENT_PATHS = [
@@ -249,12 +297,18 @@ test("tag-trigger control: the detector fires on every tag-shaped trigger", () =
 
 // ── paths: the gate §9.1 is built around ────────────────────────────────────
 
-test("both workflows watch plugins/** — a content change builds the site", async () => {
+test("every workflow with a paths filter watches plugins/** — a content change builds the site", async () => {
   // This is the whole argument for the site living in this repo. If plugins/**
   // ever drops out of either filter, a malformed SKILL.md merges green and the
   // site breaks afterwards, detached from its cause.
-  for (const [name, file] of [["docs.yml", DOCS], ["site-ci.yml", SITE_CI]]) {
-    const wf = await load(file);
+  const { applies, reason } = APPLICABILITY["content paths"];
+  const all = await allWorkflows();
+  assert.ok(all.length >= 3, `expected at least 3 workflow files, enumerated ${all.length}`);
+  const subject = all.filter((w) => applies(w.wf));
+  const skipped = all.filter((w) => !applies(w.wf)).map((w) => w.name);
+  assert.ok(reason.length > 40, "the skip has no stated reason");
+  assert.ok(subject.length >= 2, `only ${subject.length} workflow(s) are in scope: ${skipped.join(", ")}`);
+  for (const { name, wf } of subject) {
     const on = triggers(wf);
     const paths = on.push?.paths ?? on.pull_request?.paths;
     assert.ok(Array.isArray(paths), `${name} declares no paths filter`);
@@ -376,14 +430,64 @@ test("docs.yml DOES deploy — the control for the test above", async () => {
 // ── toolchain ───────────────────────────────────────────────────────────────
 
 test("every action is pinned to an explicit ref", async () => {
-  for (const file of [DOCS, SITE_CI]) {
-    for (const u of usesIn(await load(file))) {
+  // EVERY means every, and it did not. See allWorkflows() above.
+  const all = await allWorkflows();
+  assert.ok(all.length >= 3, `expected at least 3 workflow files, enumerated ${all.length}`);
+  assert.ok(
+    all.some((w) => w.name === "validate.yml"),
+    "the enumeration no longer reaches validate.yml, which is the file the old named list missed",
+  );
+  let checked = 0;
+  for (const { name, wf } of all) {
+    for (const u of usesIn(wf)) {
+      checked += 1;
       assert.match(
         u,
         /@(v\d+(?:\.\d+){0,2}|[0-9a-f]{40})$/,
         `${u} is not pinned to a version tag or a commit sha`,
       );
     }
+  }
+  assert.ok(checked >= 6, `only ${checked} action refs were examined across ${all.length} workflows`);
+});
+
+test("CONTROL: the workflow scan is a directory read, and every skip is earned", async () => {
+  // Dimension one — the enumeration is the DIRECTORY, not a list that happens to
+  // agree with it today. Compared against an independent listing, so a regression
+  // to a hand-written array shows up as a set difference rather than as silence.
+  const onDisk = (await readdir(WORKFLOWS)).filter((f) => /\.ya?ml$/.test(f)).sort();
+  assert.deepEqual((await allWorkflows()).map((w) => w.name), onDisk);
+  assert.ok(onDisk.length >= 3, `the directory holds ${onDisk.length} workflows`);
+  assert.ok(
+    onDisk.includes("validate.yml"),
+    "validate.yml is the file every named list in this file used to miss — if it is gone, " +
+      "delete this control rather than let it pass vacuously",
+  );
+
+  // Dimension two — each applicability predicate DISCRIMINATES. A predicate that
+  // returns true for everything turns "skipped for a reason" into "skipped".
+  const nodeJob = { jobs: { a: { steps: [{ uses: "actions/setup-node@v4" }] } } };
+  const pyJob = { jobs: { a: { steps: [{ uses: "actions/setup-python@v5" }] } } };
+  const npmJob = { jobs: { a: { steps: [{ run: "npm ci" }] } } };
+  const shJob = { jobs: { a: { steps: [{ run: "./scripts/validate-plugins.sh" }] } } };
+  const pathed = { on: { push: { paths: ["site/**"] } }, jobs: {} };
+  const unpathed = { on: { push: { branches: ["main"] } }, jobs: {} };
+
+  assert.equal(APPLICABILITY["node floor"].applies(nodeJob), true);
+  assert.equal(APPLICABILITY["node floor"].applies(pyJob), false, "the Node predicate accepts a Python job");
+  assert.equal(APPLICABILITY["npm ci"].applies(npmJob), true);
+  assert.equal(APPLICABILITY["npm ci"].applies(shJob), false, "the npm predicate accepts a shell-only job");
+  assert.equal(APPLICABILITY["content paths"].applies(pathed), true);
+  assert.equal(APPLICABILITY["content paths"].applies(unpathed), false, "the paths predicate accepts a file with no filter");
+
+  // Dimension three — on the REAL files the verdicts are the ones claimed, and
+  // the skip set is exactly validate.yml. This is the assertion that would have
+  // caught the original defect: it states the denominator and the exclusions
+  // together, so covering 2 of 3 cannot read as covering all of them.
+  const all = await allWorkflows();
+  for (const key of Object.keys(APPLICABILITY)) {
+    const skipped = all.filter((w) => !APPLICABILITY[key].applies(w.wf)).map((w) => w.name);
+    assert.deepEqual(skipped, ["validate.yml"], `"${key}" skips ${skipped.join(", ") || "nothing"}`);
   }
 });
 
@@ -414,8 +518,14 @@ test("the Node the workflows install satisfies engines.node", async () => {
   const floor = manifest.engines.node.match(/^>=\s*(\d+)\./);
   assert.ok(floor, `engines.node is "${manifest.engines.node}" — expected a >=MAJOR.x floor`);
 
-  for (const [name, file] of [["docs.yml", DOCS], ["site-ci.yml", SITE_CI]]) {
-    const wf = await load(file);
+  const { applies, reason } = APPLICABILITY["node floor"];
+  const all = await allWorkflows();
+  assert.ok(all.length >= 3, `expected at least 3 workflow files, enumerated ${all.length}`);
+  const subject = all.filter((w) => applies(w.wf));
+  const skipped = all.filter((w) => !applies(w.wf)).map((w) => w.name);
+  assert.ok(reason.length > 40, "the skip has no stated reason");
+  assert.ok(subject.length >= 2, `only ${subject.length} workflow(s) are in scope: ${skipped.join(", ")}`);
+  for (const { name, wf } of subject) {
     const versions = [];
     for (const job of Object.values(wf.jobs)) {
       for (const step of job.steps ?? []) {
@@ -436,8 +546,14 @@ test("the Node the workflows install satisfies engines.node", async () => {
 });
 
 test("installs are reproducible: `npm ci` in site/, never `npm install`", async () => {
-  for (const [name, file] of [["docs.yml", DOCS], ["site-ci.yml", SITE_CI]]) {
-    const wf = await load(file);
+  const { applies, reason } = APPLICABILITY["npm ci"];
+  const all = await allWorkflows();
+  assert.ok(all.length >= 3, `expected at least 3 workflow files, enumerated ${all.length}`);
+  const subject = all.filter((w) => applies(w.wf));
+  const skipped = all.filter((w) => !applies(w.wf)).map((w) => w.name);
+  assert.ok(reason.length > 40, "the skip has no stated reason");
+  assert.ok(subject.length >= 2, `only ${subject.length} workflow(s) are in scope: ${skipped.join(", ")}`);
+  for (const { name, wf } of subject) {
     const npmSteps = runsIn(wf).filter((s) => /\bnpm\b/.test(s.run));
     assert.ok(npmSteps.length > 0, `${name} runs no npm commands`);
     for (const step of npmSteps) {
@@ -734,6 +850,67 @@ test("the SCRIPT stops the run, not the job timeout", async () => {
   );
 });
 
+// THE DEPLOY-GATE DECISION, FACTORED OUT OF THE TEST SO IT CAN BE DRIVEN ON
+// INPUT THAT IS NOT THE REAL FILE.
+//
+// It was inline, and inline is why it had no control: docs.yml complies, so the
+// only way to red the detector was to mutate the real workflow and revert it,
+// which is a thing a human does once and CI never does. The round-3 review ran
+// five such mutations by hand and all five reddened correctly — so this is not a
+// repair of a broken detector, it is the regression risk being institutionalised
+// on the pattern test 181 already set for `verify-live`.
+//
+// Returns violation CODES instead of throwing, so the test below can attach the
+// long diagnostics and the control can enumerate directions independently.
+function gradeDeployGate(docs, ci) {
+  const testStep = (j) =>
+    (j.steps ?? []).find((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
+  const codes = [];
+  const ctx = {};
+
+  const ciJob = Object.values(ci.jobs ?? {}).find((j) => testStep(j));
+  if (!ciJob) codes.push("ci-reference-gone");
+
+  // By what the job DOES, not by its name — a rename must not retire this.
+  const deployers = Object.entries(docs.jobs ?? {}).filter(([, j]) =>
+    (j.steps ?? []).some((s) => /actions\/deploy-pages@/.test(String(s.uses ?? ""))),
+  );
+  ctx.deployerCount = deployers.length;
+  if (deployers.length !== 1) {
+    codes.push("deployers-not-exactly-one");
+    return { codes, ctx };
+  }
+
+  const [deployName, deployJob] = deployers[0];
+  ctx.deployName = deployName;
+  const steps = deployJob.steps ?? [];
+  const at = (pred) => steps.findIndex(pred);
+  const testAt = at((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
+  const deployAt = at((s) => /actions\/deploy-pages@/.test(String(s.uses ?? "")));
+  const configureAt = at((s) => /actions\/configure-pages@/.test(String(s.uses ?? "")));
+  const buildAt = at((s) => /npm run build/.test(String(s.run ?? "")));
+  ctx.testAt = testAt;
+
+  if (testAt < 0) {
+    codes.push("no-suite-on-deploy-path");
+    return { codes, ctx };
+  }
+  // ORDER, NOT MERE PRESENCE. A test step after deploy-pages is a detector, not
+  // a gate, and it satisfies a presence-only assertion perfectly.
+  if (!(testAt < deployAt)) codes.push("suite-after-deploy");
+  if (!(configureAt < 0 || testAt < configureAt)) codes.push("suite-after-configure-pages");
+  // SAME COMMAND, not merely some command containing the word test. Two gates
+  // running different subsets is a gate whose coverage nobody can state, and the
+  // failure is silent: both green, one of them narrower.
+  if (ciJob && String(steps[testAt].run).trim() !== String(testStep(ciJob).run).trim()) {
+    codes.push("command-differs-from-pull-request-path");
+  }
+  if (steps[testAt]["working-directory"] !== "site") codes.push("wrong-working-directory");
+  // The suite reads dist/, so a gate placed before the build tests nothing.
+  if (!(buildAt >= 0 && buildAt < testAt)) codes.push("suite-before-build");
+  return { codes, ctx };
+}
+
 test("the ref that DEPLOYS runs the same suite the pull request runs", async () => {
   // FOUND BY THE INDEPENDENT DESIGN READ, AND IT IS STRUCTURAL RATHER THAN
   // TEXTUAL. Every other test in this file asks whether a gate is correct. This
@@ -748,67 +925,112 @@ test("the ref that DEPLOYS runs the same suite the pull request runs", async () 
   // traverse, and every one of those gates was individually green.
   //
   // Repository settings are the owner's. This asserts the part that is ours.
-  const docs = await load(DOCS);
-  const ci = await load(SITE_CI);
+  const { codes, ctx } = gradeDeployGate(await load(DOCS), await load(SITE_CI));
+  const has = (c) => codes.includes(c);
+  const job = ctx.deployName;
 
-  const testCmd = (j) =>
-    (j.steps ?? []).find((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
-
-  const ciJob = Object.values(ci.jobs).find((j) => testCmd(j));
-  assert.ok(ciJob, "site-ci.yml no longer runs `npm test` — this test's reference point is gone");
-
-  // Find the deploying job the same way test 22 finds the checking job: by what
-  // it DOES, not by its name. A job rename must not retire this.
-  const deployers = Object.entries(docs.jobs).filter(([, j]) =>
-    (j.steps ?? []).some((s) => /actions\/deploy-pages@/.test(String(s.uses ?? ""))),
-  );
-  assert.equal(deployers.length, 1, `expected exactly one deploying job, found ${deployers.length}`);
-  const [deployName, deployJob] = deployers[0];
-
-  const steps = deployJob.steps ?? [];
-  const testAt = steps.findIndex((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
   assert.ok(
-    testAt >= 0,
-    `${deployName} deploys to Pages without running the suite on the ref it deploys. ` +
+    !has("ci-reference-gone"),
+    "site-ci.yml no longer runs `npm test` — this test's reference point is gone",
+  );
+  assert.equal(ctx.deployerCount, 1, `expected exactly one deploying job, found ${ctx.deployerCount}`);
+  assert.ok(
+    !has("no-suite-on-deploy-path"),
+    `${job} deploys to Pages without running the suite on the ref it deploys. ` +
       `site-ci.yml is pull_request-only and main has no required checks, so nothing else ` +
       `guarantees these tests ran against this commit.`,
   );
-
-  // ORDER, NOT MERE PRESENCE. A test step after deploy-pages is a detector, not
-  // a gate, and it would satisfy a presence-only assertion perfectly.
-  const deployAt = steps.findIndex((s) => /actions\/deploy-pages@/.test(String(s.uses ?? "")));
-  const configureAt = steps.findIndex((s) => /actions\/configure-pages@/.test(String(s.uses ?? "")));
   assert.ok(
-    testAt < deployAt,
-    `${deployName} runs the suite AFTER deploying — that detects a bad deploy, it does not ` +
-      `prevent one`,
+    !has("suite-after-deploy"),
+    `${job} runs the suite AFTER deploying — that detects a bad deploy, it does not prevent one`,
   );
   assert.ok(
-    configureAt < 0 || testAt < configureAt,
-    `${deployName} runs the suite after Configure Pages — a red suite would leave Pages ` +
-      `deployment state already touched`,
+    !has("suite-after-configure-pages"),
+    `${job} runs the suite after Configure Pages — a red suite would leave Pages deployment ` +
+      `state already touched`,
   );
-
-  // SAME COMMAND, not merely some command containing the word test. Two gates
-  // running different subsets is a gate whose coverage nobody can state, and
-  // the failure would be silent: both green, one of them narrower.
-  assert.equal(
-    String(steps[testAt].run).trim(),
-    String(ciJob.steps.find((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? ""))).run).trim(),
+  assert.ok(
+    !has("command-differs-from-pull-request-path"),
     "the deploy path and the pull-request path run DIFFERENT test commands",
   );
-  assert.equal(
-    steps[testAt]["working-directory"],
-    "site",
+  assert.ok(
+    !has("wrong-working-directory"),
     "the suite on the deploy path runs from the wrong directory",
   );
-
-  // The suite reads dist/, so a gate placed before the build tests nothing.
-  const buildAt = steps.findIndex((s) => /npm run build/.test(String(s.run ?? "")));
   assert.ok(
-    buildAt >= 0 && buildAt < testAt,
+    !has("suite-before-build"),
     "the suite runs before the build, so it would assert against an absent or stale dist/",
   );
+
+  // EXHAUSTIVE, so a direction added to the grader cannot be reported by nobody.
+  // Without this, a future code with no matching assertion above would be
+  // computed, returned, and silently discarded — a detector that runs and is not
+  // read, which is the same as no detector.
+  assert.deepEqual(codes, [], `deploy-gate violations with no diagnostic above: ${codes.join(", ")}`);
+});
+
+test("CONTROL: the deploy-gate detector can fail, in every direction it asserts", async () => {
+  // Synthetic, for the reason test 181's control is synthetic: docs.yml complies,
+  // so reddening this against the real file means breaking the tree. The five
+  // mutations the round-3 review ran by hand are the first five rows here, plus
+  // the two the review did not run.
+  const npmTest = { run: "npm test", "working-directory": "site" };
+  const build = { run: "npm run build", "working-directory": "site" };
+  const deploy = { uses: "actions/deploy-pages@v4" };
+  const configure = { uses: "actions/configure-pages@v5" };
+  const ci = { jobs: { build: { steps: [{ run: "npm test", "working-directory": "site" }] } } };
+  const docsWith = (steps) => ({ jobs: { "build-deploy": { steps } } });
+
+  // The real docs.yml order, read from the file rather than imagined: build,
+  // npm test, configure-pages, deploy-pages. I first wrote this fixture with
+  // configure-pages FIRST and the grader reddened it, correctly — recorded here
+  // because a control whose positive half was wrong is exactly how a control
+  // gets quietly relaxed to match whatever the code does.
+  const good = [build, npmTest, configure, deploy];
+  const grade = (steps) => gradeDeployGate(docsWith(steps), ci).codes;
+
+  // The positive half. If this stops holding, every negative below is vacuous.
+  assert.deepEqual(grade(good), [], "the compliant shape no longer grades clean");
+
+  const cases = [
+    ["delete the npm test step", [build, configure, deploy], ["no-suite-on-deploy-path"]],
+    // Two codes, not one, and that is the honest reading: moving the step past
+    // deploy-pages also moves it past configure-pages.
+    ["move it after deploy-pages", [build, configure, deploy, npmTest],
+      ["suite-after-deploy", "suite-after-configure-pages"]],
+    ["change it to npm run typecheck",
+      [build, { run: "npm run typecheck", "working-directory": "site" }, configure, deploy],
+      ["no-suite-on-deploy-path"]],
+    ["move it before npm run build", [npmTest, build, configure, deploy], ["suite-before-build"]],
+    ["working-directory .", [build, { run: "npm test", "working-directory": "." }, configure, deploy],
+      ["wrong-working-directory"]],
+    ["run it after Configure Pages", [build, configure, npmTest, deploy],
+      ["suite-after-configure-pages"]],
+    ["run a narrower command", [build,
+      { run: "npm test -- tests/pins.test.mjs", "working-directory": "site" }, configure, deploy],
+      ["command-differs-from-pull-request-path"]],
+  ];
+
+  for (const [name, steps, expected] of cases) {
+    assert.deepEqual(grade(steps), expected, `mutation "${name}" was not detected as expected`);
+  }
+
+  // Structural directions, which the five hand mutations did not reach.
+  assert.deepEqual(
+    gradeDeployGate({ jobs: { a: { steps: [deploy] }, b: { steps: [deploy] } } }, ci).codes,
+    ["deployers-not-exactly-one"],
+    "two deploying jobs is not detected — the gate would grade only one of them",
+  );
+  assert.ok(
+    gradeDeployGate(docsWith(good), { jobs: { build: { steps: [build] } } }).codes.includes(
+      "ci-reference-gone",
+    ),
+    "a site-ci.yml with no npm test is not detected, so the comparison would be against nothing",
+  );
+
+  // And the real file through the same grader, pinning the synthetics to the
+  // thing the test above actually asserts.
+  assert.deepEqual(gradeDeployGate(await load(DOCS), await load(SITE_CI)).codes, []);
 });
 
 // THE FIX FOR AN INSTANCE OF A CLASS CREATED A NEW INSTANCE OF THE SAME CLASS,
