@@ -27,6 +27,8 @@ bytes in `dist/`.
 
 ## Continuous integration
 
+<!-- CI probe: a site-only diff, to observe that site-ci.yml triggers on it. Not for merge. -->
+
 Two workflows, both at the repository root in `.github/workflows/`.
 
 | Workflow | When | What it does |
