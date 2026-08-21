@@ -31,7 +31,13 @@ export default defineConfig({
 
   integrations: [
     starlight({
-      title: "Agent Skills & Plugins",
+      // The SITE title — the masthead string and the suffix Starlight appends
+      // to every <title>. Fixed by the owner as exactly "Agent Skills
+      // Catalog"; tests/chrome.test.mjs pins it against the rendered
+      // output so a later phase cannot drift it. This is the site's name and
+      // has nothing to do with PAGE titles, which come from the source (see
+      // src/loaders/skills.ts and src/sidebar.mjs).
+      title: "Agent Skills Catalog",
 
       // The theme seam. One stylesheet maps Starlight's --sl-* variables so
       // the site is visibly this catalog's own. Site B later COPIES this file

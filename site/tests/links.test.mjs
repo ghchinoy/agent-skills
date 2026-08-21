@@ -136,6 +136,101 @@ test("0 broken links control: a fabricated href is caught by the same resolver",
   assert.equal(resolvesInDist(`${BASE}/plugins/${PLUGIN}/okf-author/`), true);
 });
 
+// ── The ASSET half of the gate ──────────────────────────────────────────────
+// `hrefsIn()` matches `<a href>` and nothing else, which left `src=` and
+// `<link href>` outside the gate entirely. A real defect hid in that gap for a
+// whole phase: Starlight emits `<link rel="shortcut icon"
+// href="/agent-skills/favicon.svg">` on every page and no such file was
+// shipped, so all 7 pages 404-ed on their icon while a test named "0 broken
+// links" reported zero. Fixed both ways — the asset now exists, and the class
+// of reference is now checked. Phase 2 AC3 ("every internal link AND ASSET
+// resolves") and Phase 4 AC3 (an inline `process-flow.webp`) depend on this
+// half, not on the anchor half.
+
+test("0 broken assets: every src= and <link href> in dist resolves to a built file", async () => {
+  const files = await distHtmlFiles();
+  const broken = [];
+  let checked = 0;
+  for (const file of files) {
+    const html = await read(file);
+    const from = relative(dist, file).split("\\").join("/");
+    for (const { kind, ref } of assetRefsIn(html)) {
+      if (isExternal(ref) || ref === "") continue;
+      const [path] = ref.split("#");
+      if (path === "") continue;
+      checked += 1;
+      if (!path.startsWith("/")) {
+        broken.push(`${from} -> ${kind} ${ref} (relative; the site emits absolute ones)`);
+        continue;
+      }
+      if (!path.startsWith(BASE + "/") && path !== BASE) {
+        broken.push(`${from} -> ${kind} ${ref} (escapes the base path ${BASE})`);
+        continue;
+      }
+      if (!resolvesInDist(path)) broken.push(`${from} -> ${kind} ${ref}`);
+    }
+  }
+  // A gate that checked nothing would also report zero broken.
+  assert.ok(checked > 0, "no asset references were found at all — the extractor is not matching");
+  assert.deepEqual(broken, [], `broken asset references:\n${broken.join("\n")}`);
+});
+
+test("0 broken assets: the favicon every page references is actually shipped", async () => {
+  // The specific defect above, pinned by name rather than only by the sweep,
+  // so a regression says what broke instead of just "something 404s".
+  let rendered = 0;
+  let referenced = 0;
+  for (const file of await distHtmlFiles()) {
+    const html = await read(file);
+    // The root redirect stub is a <meta refresh> and nothing else — it has no
+    // Starlight <head> and so no icon link. Every document Starlight actually
+    // renders (the 5 content pages and its 404) does have one.
+    if (!/<main\b/i.test(html)) continue;
+    rendered += 1;
+    const icons = assetRefsIn(html).filter((r) => /favicon/i.test(r.ref));
+    assert.equal(icons.length, 1, `${relative(dist, file)} emits ${icons.length} favicon references, expected 1`);
+    assert.ok(
+      resolvesInDist(icons[0].ref.split("#")[0]),
+      `${relative(dist, file)} references ${icons[0].ref}, which is not in dist`,
+    );
+    referenced += 1;
+  }
+  assert.equal(rendered, 6, "expected 5 content pages plus the 404 to be rendered");
+  assert.equal(referenced, rendered);
+});
+
+test("0 broken assets control: the widened gate fires on a missing asset, and the old one could not", () => {
+  // POSITIVE control — a missing asset of each newly-covered shape is caught.
+  const missingIcon = '<link rel="shortcut icon" href="/agent-skills/favicon-nobody-shipped.svg" type="image/svg+xml"/>';
+  const missingImage = '<img src="/agent-skills/skill-assets/process-flow.webp" alt="x">';
+  for (const html of [missingIcon, missingImage]) {
+    const refs = assetRefsIn(html);
+    assert.equal(refs.length, 1, "the widened extractor did not see the reference at all");
+    assert.equal(
+      resolvesInDist(refs[0].ref),
+      false,
+      `the asset gate cannot fire — it accepts ${refs[0].ref}`,
+    );
+  }
+
+  // NEAR-MISS NEGATIVE control — the SAME shapes, pointing at things that do
+  // exist, are not reported. Without this the test above would pass on an
+  // extractor that called everything broken.
+  const realIcon = '<link rel="shortcut icon" href="/agent-skills/favicon.svg" type="image/svg+xml"/>';
+  const realPage = '<img src="/agent-skills/plugins/okf-authoring/okf-author/" alt="x">';
+  for (const html of [realIcon, realPage]) {
+    const refs = assetRefsIn(html);
+    assert.equal(refs.length, 1);
+    assert.equal(resolvesInDist(refs[0].ref), true, `the asset gate false-positives on ${refs[0].ref}`);
+  }
+
+  // And the reason this finding survived a phase: the anchor extractor is
+  // structurally blind to both shapes. This assertion is the regression test
+  // for the GAP, not for the favicon.
+  assert.deepEqual(hrefsIn(missingIcon), [], "hrefsIn should still be anchors-only");
+  assert.deepEqual(hrefsIn(missingImage), [], "hrefsIn should still be anchors-only");
+});
+
 test("0 dangling anchors: every in-page fragment names an id that exists", async () => {
   const pages = await distContentPages();
   const byRoute = new Map(pages.map((p) => [`/${p.route}/`.replace(/\/+$/, "/"), p.html]));
@@ -219,8 +314,29 @@ test("off-site links point at the real repository, at a pinned ref", async () =>
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
+/** NAVIGATION references: `<a href>` only. Deliberately narrow — see
+ *  `assetRefsIn` for the other half. */
 function hrefsIn(html) {
   return [...html.matchAll(/<a\b[^>]*?\shref="([^"]*)"/g)].map((m) => decodeAmp(m[1]));
+}
+
+/**
+ * ASSET references: every `src=` on any element, plus `href=` on `<link>`.
+ * Returned with the shape that produced them so a failure names it.
+ *
+ * `<a href>` is deliberately excluded so the two gates stay separately
+ * nameable. `srcset=` does not match `\ssrc="` and is not covered; this site
+ * emits none, and a covered-by-accident shape is not covered.
+ */
+function assetRefsIn(html) {
+  const out = [];
+  for (const m of html.matchAll(/<([a-zA-Z][\w-]*)\b[^>]*?\ssrc="([^"]*)"/g)) {
+    out.push({ kind: `<${m[1].toLowerCase()} src>`, ref: decodeAmp(m[2]) });
+  }
+  for (const m of html.matchAll(/<link\b[^>]*?\shref="([^"]*)"/g)) {
+    out.push({ kind: "<link href>", ref: decodeAmp(m[1]) });
+  }
+  return out;
 }
 
 function idsIn(html) {

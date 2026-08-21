@@ -23,8 +23,35 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
-import { enumerate } from "../src/loaders/enumerate.mjs";
+import { MANIFEST_FIELDS, enumerate } from "../src/loaders/enumerate.mjs";
 import { PLUGIN, repoRoot } from "./_helpers.mjs";
+
+/**
+ * Writes a minimal but valid fixture repo and returns its root. `plugin` is
+ * merged into the plugin.json, `refs` is a map of references/ filename to
+ * contents.
+ */
+async function fixture(prefix, { plugin = {}, refs = {} } = {}) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  await mkdir(join(root, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    join(root, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({ name: "f", plugins: [{ name: "p", source: "./plugins/p", skills: [] }] }),
+  );
+  await mkdir(join(root, "plugins", "p"), { recursive: true });
+  await writeFile(
+    join(root, "plugins", "p", "plugin.json"),
+    JSON.stringify({ name: "p", description: "d", ...plugin }, null, 2),
+  );
+  const names = Object.keys(refs);
+  if (names.length > 0) {
+    await mkdir(join(root, "plugins", "p", "references"), { recursive: true });
+    for (const name of names) {
+      await writeFile(join(root, "plugins", "p", "references", name), refs[name]);
+    }
+  }
+  return root;
+}
 
 /** An `fs` facade that records every path it is asked about. */
 function recorder(root) {
@@ -255,4 +282,123 @@ test("the resource inventory distinguishes 'no such directory' from 'empty direc
     ["README.md:file", "example-bundle:directory"],
     "assets/ must be inventoried at depth 1: one file and one DIRECTORY, never 11 pages",
   );
+});
+
+// ── N1: ordering is by code unit, everywhere ────────────────────────────────
+//
+// Collation is ICU- and locale-dependent. A locale difference between a
+// developer's machine and CI would silently reorder RENDERED output — the
+// plugin page's References block is built from the list below. The repo's one
+// references/ directory happens to hold two all-lowercase filenames, where
+// both orderings agree, which is how a `localeCompare` survived here through a
+// whole phase and a two-build byte comparison. This fixture removes that luck.
+
+test("N1: plugin-level references sort in code-unit order, not by locale collation", async () => {
+  const root = await fixture("skills-n1-", {
+    refs: {
+      "README.md": "# R\n",
+      "Zeta.md": "# Z\n",
+      "alpha.md": "# a\n",
+      "ähnlich.md": "# ae\n",
+    },
+  });
+  try {
+    const { fs } = recorder(root);
+    const { plugins } = await enumerate({ repoRoot: root, fs, onlyPlugins: ["p"] });
+    const got = plugins[0].references.map((r) => r.name);
+
+    // Uppercase sorts before lowercase, and a non-ASCII letter sorts after
+    // both, because that is what comparing UTF-16 code units does.
+    assert.deepEqual(got, ["README.md", "Zeta.md", "alpha.md", "ähnlich.md"]);
+
+    // POSITIVE CONTROL — the fixture genuinely discriminates. If localeCompare
+    // and code-unit order agreed on these names (as they do on the repo's real
+    // two), the assertion above would pass for the buggy implementation too.
+    const byLocale = [...got].sort((a, b) => a.localeCompare(b));
+    assert.notDeepEqual(
+      byLocale,
+      got,
+      "the fixture filenames do not distinguish the two orderings — it proves nothing",
+    );
+    assert.deepEqual(byLocale, ["ähnlich.md", "alpha.md", "README.md", "Zeta.md"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// ── N3: report and ignore unknown plugin.json keys ──────────────────────────
+//
+// Agent Plugins §5.2 requires clients to REPORT AND IGNORE unknown manifest
+// fields. SKILL.md frontmatter got exactly this treatment from the start via
+// `analyzeDeclared()`; the manifest was `z.record(z.any())` and got only the
+// "ignore" half — silently, and only because no template happened to iterate
+// it.
+
+test("N3: an unknown top-level plugin.json key is advised, with a line, and dropped", async () => {
+  const root = await fixture("skills-n3-", {
+    plugin: { category: "data", tags: ["a", "b"], keywords: ["real"] },
+  });
+  try {
+    const { fs } = recorder(root);
+    const { plugins, advisories } = await enumerate({ repoRoot: root, fs, onlyPlugins: ["p"] });
+
+    const unknown = advisories.filter((a) => a.code === "UNKNOWN-FIELD");
+    assert.deepEqual(
+      unknown.map((a) => a.file),
+      ["plugins/p/plugin.json", "plugins/p/plugin.json"],
+    );
+    assert.match(unknown[0].message, /unknown top-level plugin\.json key "category"/);
+    assert.match(unknown[1].message, /unknown top-level plugin\.json key "tags"/);
+    // An advisory names a line the reader can open (§6.5).
+    assert.deepEqual(unknown.map((a) => a.line), [4, 5]);
+
+    // IGNORE: the key is not in the object any template can reach.
+    assert.deepEqual(
+      Object.keys(plugins[0].manifest).sort(),
+      ["description", "keywords", "name"],
+      "an unknown manifest key survived into the rendered data",
+    );
+
+    // NEGATIVE CONTROL — the same run kept every KNOWN key it was given, so
+    // the detector is an allowlist and not a "drop everything".
+    assert.deepEqual(plugins[0].manifest.keywords, ["real"]);
+    assert.equal(plugins[0].manifest.description, "d");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("N3 control: the real plugin.json declares only known keys, and the vocabulary is the spec's ten", async () => {
+  // The other direction: with no unknown key present, no advisory fires — so
+  // the ten advisories this build reports are not padded by a false one.
+  const { fs } = recorder(repoRoot);
+  const { plugins, advisories } = await enumerate({ repoRoot, fs, onlyPlugins: [PLUGIN] });
+  assert.deepEqual(
+    advisories.filter((a) => a.code === "UNKNOWN-FIELD"),
+    [],
+    `${PLUGIN}/plugin.json now declares an unknown key`,
+  );
+
+  // Read independently of the loader, and checked against the closed list.
+  const raw = JSON.parse(
+    await readFile(join(repoRoot, "plugins", PLUGIN, "plugin.json"), "utf8"),
+  );
+  assert.deepEqual(
+    Object.keys(raw).filter((k) => !MANIFEST_FIELDS.includes(k)),
+    [],
+  );
+  // Nothing was dropped from the real manifest.
+  assert.deepEqual(Object.keys(plugins[0].manifest), Object.keys(raw));
+  assert.deepEqual(MANIFEST_FIELDS, [
+    "$schema",
+    "name",
+    "version",
+    "description",
+    "author",
+    "homepage",
+    "repository",
+    "license",
+    "keywords",
+    "extensions",
+  ]);
 });

@@ -18,7 +18,8 @@ cd site
 npm ci
 npm run build     # -> site/dist
 npm run dev       # local preview
-npm test          # the guardrail suites
+npm run typecheck # astro check
+npm test          # the type check, then the guardrail suites
 ```
 
 The build is entirely local. There is no GitHub Actions workflow for it yet.
@@ -33,7 +34,9 @@ The build is entirely local. There is no GitHub Actions workflow for it yet.
 | `src/loaders/links.mjs` | Resolves each link target to a routed page or a source permalink. Unrecognised shapes are a hard build error, never a guess. |
 | `src/loaders/skills.ts` | The Astro Content Layer loader that ties those together and emits entries. |
 | `src/components/EntryMeta.astro` | Renders the declared and derived field blocks above each page body. |
+| `src/sidebar.mjs` | Builds the nav from the same discovery the loader uses. Read the header: it explains why a skill entry's label is the declared `name` while its page title is the body H1. |
 | `src/styles/tokens.css` | The theme. This is the file a sibling site copies. |
+| `public/` | Copied verbatim into `dist/`. Currently one favicon, which exists because Starlight references one on every page. |
 | `tests/` | The guardrail suites. Run them before you publish anything. |
 
 ## The rule this site is built to

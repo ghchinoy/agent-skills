@@ -19,8 +19,19 @@
 //   assets/<dir>/         (link)    -> GitHub tree URL
 //   sibling <f>.md inside a ref     -> sibling reference page URL
 //   http(s):, mailto:, tel:, #frag  -> untouched
-//   a site-absolute /path           -> untouched
+//   a site-absolute /path           -> HARD BUILD ERROR (see below)
 //   text inside code                -> never reaches here at all              (D4)
+//
+// On site-absolute targets. These used to pass through untouched, which was
+// the one silent pass-through left in this file and exactly what §6.5 says
+// must never happen: a dead `/tables/customers.md` reached `dist/` with no
+// error and no advisory. There is no rule that could rewrite one correctly
+// either. A leading `/` in a SKILL.md means the filesystem root, and a skill
+// is a portable directory — it cannot know what a deployed site's root is, and
+// the site's own routes are all base-prefixed (`/agent-skills/...`) by this
+// loader after resolution, never hand-written in source. So the honest
+// treatment is the one §6.5 prescribes for a target that resolves to nothing:
+// stop the build and name the file, the line and the target.
 
 /**
  * @typedef {object} LinkContext
@@ -72,9 +83,18 @@ export function resolveTarget(target, at, ctx) {
   if (target === "" ) throw fail(target, ctx, line, "empty target.");
   if (EXTERNAL.test(target)) return target;
   if (target.startsWith("#")) return target; // in-page anchor
-  // Already site-absolute. binder's `rewriteTarget` leaves these alone and so
-  // do we; `tests/links.test.mjs` is the gate that no such href dangles.
-  if (target.startsWith("/")) return target;
+  // Site-absolute. Not passed through — see the header note.
+  if (target.startsWith("/")) {
+    throw fail(
+      target,
+      ctx,
+      line,
+      `site-absolute link targets are not resolvable from a portable skill ` +
+        `directory: a leading "/" names the filesystem root, and this site's ` +
+        `own routes are base-prefixed by the loader rather than written in ` +
+        `source. Use a path relative to the skill root, or a full URL.`,
+    );
+  }
 
   const [rawPath, anchor] = splitAnchor(target);
   const path = rawPath.replace(/^\.\//, "");

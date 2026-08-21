@@ -93,10 +93,28 @@ export function frontmatterKeyLine(fmText, fmFirstLine, key, { nested = false } 
  * @param {string} opts.fmText
  * @param {number} opts.fmFirstLine
  * @param {string} opts.expectedName  the directory name (the spec requires a match)
- * @returns {{declared: object, advisories: object[]}}
+ *
+ * The returned shape is the closed vocabulary itself. `name` and `description`
+ * are non-optional because this function throws rather than return without
+ * them; the other four are absent when undeclared, never defaulted.
+ *
+ * @typedef {object} DeclaredFields
+ * @property {string} name
+ * @property {string} description
+ * @property {string} [license]
+ * @property {string} [compatibility]
+ * @property {string} ["allowed-tools"]
+ * @property {Record<string, string|string[]>} [metadata]
+ *
+ * @returns {{declared: DeclaredFields, advisories: import("./enumerate.mjs").Advisory[]}}
  */
 export function analyzeDeclared(data, { file, fmText, fmFirstLine, expectedName }) {
+  /** @type {import("./enumerate.mjs").Advisory[]} */
   const advisories = [];
+  // Built key by key from an allowlist, so it is `any` in here and
+  // `DeclaredFields` on the way out — the two required fields are enforced by
+  // the throw below, which a structural type cannot express.
+  /** @type {any} */
   const declared = {};
 
   for (const key of Object.keys(data)) {

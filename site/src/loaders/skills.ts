@@ -82,7 +82,10 @@ const Declared = z.object({
   license: z.string().optional(),
   compatibility: z.string().optional(),
   "allowed-tools": z.string().optional(),
-  metadata: z.record(z.union([z.string(), z.array(z.string())])).optional(),
+  // Two arguments, not one: astro/zod is Zod 4, where `record` takes an
+  // explicit key type. The single-argument form silently type-checked as
+  // nothing until `astro check` was wired in.
+  metadata: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
 });
 
 /** DERIVED — computed by this build, never merged into the above. */
@@ -135,7 +138,7 @@ const Derived = z.object({
  * own namespace so it is never confused with `SKILL.md` frontmatter (a
  * different vocabulary, on a different entity) nor with derived facts.
  */
-const Manifest = z.record(z.any());
+const Manifest = z.record(z.string(), z.any());
 
 export const skillsSchema = Declared.extend({
   _skill: Derived,
@@ -250,9 +253,15 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           // in; that is a fallback to other declared data, not an invention.
           const title = stripped ?? declared.name;
 
+          // Starlight's docsSchema requires `title` and `description` at the
+          // top level. `title` is computed above and is the only key here that
+          // is not straight from the source; `description` arrives with the
+          // spread, because it is a DECLARED field and must be the declared
+          // bytes. It used to be written out explicitly as well, one line
+          // above the spread that overwrote it — same value, so no defect, but
+          // a reader could not tell which one won. `astro check` found it.
           await emit(id, skill.repoPath, {
             title,
-            description: declared.description,
             ...declared,
             _skill: derived,
             _manifest: plugin.manifest,
@@ -382,8 +391,12 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
         seen.add(k);
         return true;
       });
+      // Code-unit order, not localeCompare: this only orders log lines, but
+      // the build log is compared between runs and there is no reason for one
+      // ordering rule in this codebase and a locale-dependent one here.
+      const cmp = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
       unique.sort((a: any, b: any) =>
-        a.code.localeCompare(b.code) || a.file.localeCompare(b.file) || (a.line ?? 0) - (b.line ?? 0),
+        cmp(a.code, b.code) || cmp(a.file, b.file) || (a.line ?? 0) - (b.line ?? 0),
       );
       if (unique.length > 0) {
         logger.warn(`${unique.length} source-repo advisor${unique.length === 1 ? "y" : "ies"} (reported, not repaired):`);

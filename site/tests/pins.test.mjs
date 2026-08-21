@@ -16,6 +16,8 @@ import { repoRoot, siteRoot } from "./_helpers.mjs";
 const PINNED = {
   astro: "7.2.4",
   "@astrojs/starlight": "0.41.7",
+  "@astrojs/check": "0.9.10",
+  typescript: "5.9.3",
 };
 
 const pkg = async (p) => JSON.parse(await readFile(p, "utf8"));
@@ -55,6 +57,26 @@ test("pins control: the range detector rejects the forms it is meant to reject",
   }
 });
 
+test("there is a type check, and `npm test` runs it", async () => {
+  // The loader is a .ts file with a tsconfig.json beside it, and for a whole
+  // phase nothing type-checked either. `astro check` found 39 errors on first
+  // run, one of which was a real duplicated object key in skills.ts and two of
+  // which were `z.record()` calls that had been silently wrong since Zod 4.
+  // A check nobody runs is not a check, so it is wired into `npm test` rather
+  // than left as a script a reviewer has to know about.
+  const manifest = await pkg(join(siteRoot, "package.json"));
+  assert.equal(manifest.scripts?.typecheck, "astro check");
+  assert.match(
+    manifest.scripts?.test ?? "",
+    /\bnpm run typecheck\b/,
+    "`npm test` does not run the type check",
+  );
+  assert.match(manifest.scripts?.test ?? "", /node --test/, "`npm test` no longer runs the suite");
+  for (const dep of ["@astrojs/check", "typescript"]) {
+    assert.ok(manifest.devDependencies?.[dep], `${dep} is not a devDependency`);
+  }
+});
+
 test("engines.node requires Node 22, and the running Node satisfies it", async () => {
   const manifest = await pkg(join(siteRoot, "package.json"));
   assert.equal(manifest.engines?.node, ">=22.19.0");
@@ -79,6 +101,11 @@ test("the lockfile is present, v3, and agrees with the manifest", async () => {
     lock.packages[""].dependencies,
     manifest.dependencies,
     "the lockfile's root dependencies differ from package.json",
+  );
+  assert.deepEqual(
+    lock.packages[""].devDependencies,
+    manifest.devDependencies,
+    "the lockfile's root devDependencies differ from package.json",
   );
   for (const [name, version] of Object.entries(PINNED)) {
     assert.equal(

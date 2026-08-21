@@ -45,6 +45,37 @@ async function declaredOf(skill) {
   return parseYaml(m[1]);
 }
 
+/**
+ * Every string the REPOSITORY declares that the build legitimately injects
+ * into page chrome: skill names and body H1s (which become <title>, sidebar
+ * labels and breadcrumbs), and the plugin manifest's own prose.
+ *
+ * Read from the source files here, never from the loader. Longest first, so a
+ * subtraction cannot leave a fragment of a longer string behind.
+ */
+async function declaredStrings() {
+  const out = [];
+  for (const skill of SKILLS) {
+    const raw = await readFile(SKILL_MD(skill), "utf8");
+    const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+    const data = parseYaml(fm[1]);
+    out.push(data.name, data.description);
+    const h1 = raw.slice(fm[0].length).match(/^#\s+(.+?)\s*$/m);
+    if (h1) out.push(h1[1]);
+  }
+  const manifest = JSON.parse(
+    await readFile(join(repoRoot, "plugins", PLUGIN, "plugin.json"), "utf8"),
+  );
+  out.push(manifest.name, manifest.description, ...(manifest.keywords ?? []));
+  const readme = await readFile(join(repoRoot, "README.md"), "utf8");
+  for (const m of readme.matchAll(/^#{2,4}\s*\d+\.\s*(.+?)\s*\(`plugins\/([a-z0-9._-]+)`\)\s*$/gm)) {
+    out.push(m[1].replace(/^[^\p{L}\p{N}]+/u, "").trim());
+  }
+  return out
+    .filter((s) => typeof s === "string" && s.trim() !== "")
+    .sort((a, b) => b.length - a.length);
+}
+
 const pageFor = (pages, route) => {
   const p = pages.find((x) => x.route === route);
   assert.ok(p, `no page at ${route}`);
@@ -448,43 +479,178 @@ test("fields these skills do NOT declare are rendered nowhere", async () => {
 });
 
 // ── Over-claiming ───────────────────────────────────────────────────────────
+//
+// §12 asks for over-claim phrasing to be absent from `dist/`, "with positive
+// and negative controls — the negative controls must include the legitimate
+// phrase 'any skills-compatible agent', so the detector does not ban the
+// accurate wording along with the inaccurate ones."
+//
+// The first version of this block got that backwards: it listed "any
+// skills-compatible agent" as the FIRST BANNED pattern. §1.4 names that exact
+// phrase as the one accurate hedge — "use it across any skills-compatible
+// agent — not 'any agent'. That one word is the whole difference between
+// accurate and overclaiming." A gate that banned it would have failed the
+// build for using the correct wording and pushed the copy toward the
+// inaccurate version, which inverts what the guardrail is for. It is now the
+// mandated NEGATIVE control instead.
+//
+// The hedge is handled by NEUTRALISING it before the patterns run, rather than
+// by lookaheads bolted onto each pattern. "Works with any skills-compatible
+// agent" must not fire even though it contains "works with any"; "works with
+// any agent" must still fire in the very same document. One exemption, written
+// once, is easier to audit than seven.
+//
+// Every pattern below carries BOTH controls, and the negative control of each
+// is a NEAR MISS: legitimate wording close enough to the pattern that it could
+// plausibly trip it. A control that could never have fired proves nothing,
+// which is the point §12 makes about detectors nobody has shown can fire.
+
+/** The one accurate hedge (§1.4/§12). Exempt, and asserted exempt below. */
+const HEDGE = /\bany skills-compatible agents?\b/gi;
+
+const OVERCLAIM = [
+  {
+    id: "works-with-any",
+    re: /\bworks with (any|all|every)\b/i,
+    fires: "This catalog works with any agent.",
+    // Near miss: same three opening words, hedged correctly.
+    nearMiss: "This catalog works with any skills-compatible agent.",
+  },
+  {
+    id: "compatible-with-any",
+    re: /\bcompatible with (any|all|every)\b/i,
+    fires: "These skills are compatible with all agents.",
+    nearMiss: "These skills are compatible with any skills-compatible agent.",
+  },
+  {
+    id: "supports-any",
+    re: /\bsupports? (any|all|every)\b/i,
+    fires: "The format supports every agent on the market.",
+    // Near miss: "supports" immediately followed by a bounded noun, not a
+    // universal quantifier. One word away from firing.
+    nearMiss: "The loader supports the six fields the Agent Skills vocabulary defines.",
+  },
+  {
+    id: "agent-agnostic",
+    re: /\bagent[- ]agnostic\b/i,
+    fires: "An agent-agnostic bundle format.",
+    // Near miss: contains both words, in that order, not adjacent.
+    nearMiss: "The bundle format is agnostic about which agent reads it, within the spec.",
+  },
+  {
+    id: "guaranteed",
+    re: /\bguaranteed\b/i,
+    fires: "Correct output is guaranteed.",
+    // Near miss: same stem, and a sentence explicitly REFUSING the claim.
+    nearMiss: "This build makes no guarantee about how any agent will behave.",
+  },
+  {
+    id: "production-ready",
+    re: /\bproduction[- ]ready\b/i,
+    fires: "A production-ready plugin catalog.",
+    // Near miss: both words present, separated.
+    nearMiss: "Read it before you put any of this into production, then decide when it is ready.",
+  },
+  {
+    id: "fully-tested",
+    re: /\bfully (tested|validated|verified)\b/i,
+    fires: "Every skill here is fully tested.",
+    // Near miss: both words present, not adjacent — and the claim is scoped.
+    nearMiss: "The eleven criteria are fully enumerated, and each one is tested.",
+  },
+];
+
+/** Blanks the accurate hedge, then reports every banned pattern that matches. */
+function overclaimHits(text) {
+  const scrubbed = text.replace(HEDGE, " ");
+  return OVERCLAIM.filter((p) => p.re.test(scrubbed)).map((p) => ({
+    id: p.id,
+    match: scrubbed.match(p.re)[0],
+  }));
+}
 
 test("the site's own copy makes no capability claim the repo does not support", async () => {
-  // Scoped to the strings the SITE writes — its templates — not to the rendered
-  // page. Declared prose belongs to the repo and is rendered verbatim; a
-  // detector that policed it would be demanding the site edit its sources. What
-  // the site is answerable for is its own chrome.
-  const OVERCLAIM = [
-    /any skills-compatible agent/i,
-    /works with (any|all|every)\b/i,
-    /compatible with (any|all|every)\b/i,
-    /supports? (any|all|every)\b/i,
-    /guaranteed/i,
-    /production[- ]ready/i,
-    /fully (tested|validated|verified)/i,
-  ];
+  // Scope, half one: the strings the SITE writes — its templates.
   const templates = [
     "src/components/EntryMeta.astro",
     "src/components/MarkdownContent.astro",
     "src/sidebar.mjs",
     "src/site.config.mjs",
+    "src/loaders/skills.ts",
     "astro.config.mjs",
   ];
   const hits = [];
   for (const t of templates) {
     const text = await readFile(join(siteRoot, t), "utf8");
-    for (const re of OVERCLAIM) {
-      const m = text.match(re);
-      if (m) hits.push(`${t}: ${m[0]}`);
-    }
+    for (const h of overclaimHits(text)) hits.push(`${t}: [${h.id}] ${h.match}`);
   }
   assert.deepEqual(hits, [], `the site's own copy over-claims:\n${hits.join("\n")}`);
 });
 
-test("over-claim control: the detector fires on 'any skills-compatible agent'", () => {
-  // The exact phrase a catalog like this is most tempted to write, and cannot
-  // substantiate: nothing in this repo tests these skills against any agent.
-  const sample = "These skills run in any skills-compatible agent.";
-  assert.ok(/any skills-compatible agent/i.test(sample), "the over-claim detector cannot fire");
-  assert.ok(!/any skills-compatible agent/i.test("Install with the CLI shown above."));
+test("the site's own copy makes no capability claim in the RENDERED chrome either", async () => {
+  // Scope, half two, and the one §12 actually names: `dist/`.
+  //
+  // Not the whole page. Declared prose is rendered verbatim inside <main>, and
+  // a detector that policed it would be demanding the site edit the
+  // repository's own SKILL.md files — the "suppress declared data to keep a
+  // detector quiet" failure the brief forbids. So: everything OUTSIDE <main>,
+  // which is the masthead, sidebar, breadcrumb, footer and <title> — the
+  // strings the site is answerable for — MINUS the declared strings the build
+  // legitimately injects there (page titles, skill names). Those are read from
+  // the source files, not from the loader.
+  const declared = await declaredStrings();
+  const hits = [];
+  for (const p of await distContentPages()) {
+    let text = toText(p.html.replace(/<main\b[\s\S]*?<\/main>/gi, " "));
+    for (const d of declared) text = text.split(d).join(" ");
+    for (const h of overclaimHits(text)) hits.push(`${p.rel}: [${h.id}] ${h.match}`);
+  }
+  assert.deepEqual(hits, [], `rendered chrome over-claims:\n${hits.join("\n")}`);
+});
+
+test("over-claim controls: every pattern fires on a claim and holds on a near miss", () => {
+  // The §12 requirement, pattern by pattern. Both halves are needed: without
+  // the positive the detector might be dead, without the near-miss negative it
+  // might be a detector for the English language.
+  for (const p of OVERCLAIM) {
+    assert.equal(
+      overclaimHits(p.fires).map((h) => h.id).includes(p.id),
+      true,
+      `[${p.id}] cannot fire — it is not a gate. Sample: ${p.fires}`,
+    );
+    assert.deepEqual(
+      overclaimHits(p.nearMiss),
+      [],
+      `[${p.id}] fires on legitimate near-miss wording: ${p.nearMiss}`,
+    );
+  }
+});
+
+test("over-claim control: the accurate hedge §12 mandates is permitted, in every pattern's way", () => {
+  // The negative control §12 requires by name. This phrase must never fire.
+  const spec14 = "Build a skill once and use it across any skills-compatible agent.";
+  assert.deepEqual(overclaimHits(spec14), [], "the guardrail bans the accurate hedge");
+  assert.deepEqual(overclaimHits("any skills-compatible agent"), []);
+  assert.deepEqual(overclaimHits("Runs in any skills-compatible agents."), []);
+
+  // …and the exemption is NARROW. Dropping the hedge's one load-bearing word
+  // must bring the pattern straight back.
+  assert.deepEqual(
+    overclaimHits("Build a skill once and use it across any agent.").map((h) => h.id),
+    [],
+    "sanity: 'use it across any agent' is not one of the seven shapes",
+  );
+  assert.deepEqual(
+    overclaimHits("It works with any compatible agent.").map((h) => h.id),
+    ["works-with-any"],
+    "'any compatible agent' is not the hedge — the hedge is 'any SKILLS-compatible agent'",
+  );
+
+  // …and neutralising the hedge does not blind the scan to a real claim
+  // sitting in the same sentence.
+  assert.deepEqual(
+    overclaimHits("Use it in any skills-compatible agent; it works with any agent.").map((h) => h.id),
+    ["works-with-any"],
+    "the hedge exemption swallowed a genuine over-claim next to it",
+  );
 });
