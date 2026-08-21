@@ -169,7 +169,10 @@ export function analyzeDeclared(data, { file, fmText, fmFirstLine, expectedName 
     const meta = declared.metadata;
     if (meta === null || typeof meta !== "object" || Array.isArray(meta)) {
       throw new Error(
-        `skills-loader: ${file} declares \`metadata\` that is not a mapping.`,
+        `skills-loader: ${file}:${frontmatterKeyLine(fmText, fmFirstLine, "metadata")} ` +
+          `— \`metadata\` is ${Array.isArray(meta) ? "a sequence" : `${typeof meta}`}, ` +
+          `not a mapping. The spec defines it as a map of string keys to ` +
+          `string values.`,
       );
     }
     for (const [k, v] of Object.entries(meta)) {
@@ -186,20 +189,41 @@ export function analyzeDeclared(data, { file, fmText, fmFirstLine, expectedName 
         });
         for (const item of v) {
           if (typeof item !== "string") {
+            // Same C3 reasoning, same obligation to name a line.
             throw new Error(
-              `skills-loader: ${file} metadata.${k} contains a non-string item.`,
+              `skills-loader: ${file}:${frontmatterKeyLine(fmText, fmFirstLine, k, { nested: true })} ` +
+                `— metadata.${k} is a sequence containing a ${typeof item} ` +
+                `(${JSON.stringify(item)}). The spec allows string values; ` +
+                `this site renders the declared list rather than stringifying ` +
+                `it, but it will not coerce a non-string item. Quote it.`,
             );
           }
         }
       } else if (typeof v !== "string") {
-        advisories.push({
-          code: "D1",
-          file,
-          line: frontmatterKeyLine(fmText, fmFirstLine, k, { nested: true }),
-          message:
-            `metadata.${k} is ${typeof v}, not a string, which the spec's ` +
-            `metadata table calls for.`,
-        });
+        // C3. This used to be an advisory, and then the value fell through to
+        // a Zod schema that accepts only string | string[] — so the build died
+        // on Astro's generic "Invalid content entry frontmatter" with no file
+        // and no line, which is exactly the diagnostic quality this loader
+        // exists to avoid. It is a hard error here instead, and it names the
+        // line.
+        //
+        // Hard error rather than coercion, deliberately: `String(v)` looks
+        // harmless until `metadata.version: 1.10` renders as "1.1", because
+        // YAML parsed it as a float before this code ever saw it. Silently
+        // publishing a version number that is not the one the author wrote is
+        // worse than refusing to publish. Quoting the value fixes it and
+        // preserves the author's bytes.
+        const shown =
+          v === null ? "null (an empty YAML value)" : `${typeof v} (${JSON.stringify(v)})`;
+        throw new Error(
+          `skills-loader: ${file}:${frontmatterKeyLine(fmText, fmFirstLine, k, { nested: true })} ` +
+            `— metadata.${k} is ${shown}, but the Agent Skills spec defines ` +
+            `metadata as a map of string keys to string VALUES. This site ` +
+            `renders declared bytes and will not coerce: YAML has already ` +
+            `turned an unquoted 1.10 into 1.1 by this point, and publishing ` +
+            `that as if the author wrote it would be a fabrication. Quote the ` +
+            `value in the source frontmatter.`,
+        );
       }
     }
   }

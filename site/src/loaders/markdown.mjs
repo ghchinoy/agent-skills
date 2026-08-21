@@ -25,6 +25,52 @@
 // `` [`../../references/x.md`](../../references/x.md) `` still be rewritten:
 // its label is a code span, its target is not.
 
+// ── Fence scanning, in ONE place ───────────────────────────────────────────
+//
+// There were two copies of this logic in this file, and they disagreed. The
+// copy in `protectedRanges()` sliced with `open[1].length` — the length of the
+// BACKTICK RUN — where it needed `open[0].length`, the length of the whole
+// match INCLUDING the up-to-three spaces of indent CommonMark allows. So for
+// an indented closing fence the slice started three characters early, `after`
+// came back as the tail of the fence itself rather than "", and the fence
+// never closed. Everything to end of file stayed "inside code" and was exempt
+// from link rewriting.
+//
+// That was live in both shipped SKILL.md files (okf-author:197,
+// okf-validate:160 — both fences sit inside a list item, so both are
+// indented), and it made the §6.5 hard-error gate UNREACHABLE below those
+// lines: a site-absolute link appended at EOF built clean and reached dist,
+// while the same link higher up correctly failed the build.
+//
+// The one-character bug is fixed. The reason it is now one function is that
+// two scanners meant two chances to get this wrong, and the second copy
+// (`firstH1`) was in fact also wrong, differently: it closed a fence on any
+// sufficiently long run of the same character, ignoring info strings, so a
+// line like "```js" INSIDE a block would close it. CommonMark forbids an info
+// string on a closing fence. One implementation, one behaviour, one place to
+// fix next time.
+
+/** A fence opener/closer match on a line, or `null`. */
+function fenceMatch(line) {
+  return /^ {0,3}(`{3,}|~{3,})/.exec(line);
+}
+
+/** True when `line` closes an open `fence` ({char, len}). */
+function closesFence(line, fence) {
+  const m = fenceMatch(line);
+  if (!m) return false;
+  if (m[1][0] !== fence.char || m[1].length < fence.len) return false;
+  // A closing fence carries NO info string. Slice past the WHOLE match —
+  // indent included — or an indented fence never closes.
+  return line.slice(m[0].length).trim() === "";
+}
+
+/** The fence a line opens, or `null`. */
+function opensFence(line) {
+  const m = fenceMatch(line);
+  return m ? { char: m[1][0], len: m[1].length } : null;
+}
+
 /**
  * Byte ranges that markdown will render as code: fenced code blocks (including
  * their fence lines) and inline code spans.
@@ -43,19 +89,14 @@ export function protectedRanges(text) {
     const end = offset + line.length;
     offset = end + 1; // for the "\n" removed by split
 
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (fence) {
       ranges.push([start, end]);
-      // A closing fence is the same character, at least as long, and carries
-      // no info string.
-      if (open && open[1][0] === fence.char && open[1].length >= fence.len) {
-        const after = line.slice(open.index + open[1].length).trim();
-        if (after === "") fence = null;
-      }
+      if (closesFence(line, fence)) fence = null;
       continue;
     }
+    const open = opensFence(line);
     if (open) {
-      fence = { char: open[1][0], len: open[1].length };
+      fence = open;
       ranges.push([start, end]);
       continue;
     }
@@ -158,7 +199,7 @@ export function stripLeadingH1(body) {
 
   // A fence opener at the top means the document opens with code, not a
   // heading. Nothing is stripped.
-  if (/^ {0,3}(`{3,}|~{3,})/.test(lines[i])) {
+  if (opensFence(lines[i])) {
     return { body, stripped: null, line: null, removed: 0 };
   }
   if (!/^# +\S/.test(lines[i])) return { body, stripped: null, line: null, removed: 0 };
@@ -180,15 +221,13 @@ export function firstH1(text) {
   const lines = text.split("\n");
   let fence = null;
   for (const line of lines) {
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (fence) {
-      if (open && open[1][0] === fence.char && open[1].length >= fence.len) {
-        fence = null;
-      }
+      if (closesFence(line, fence)) fence = null;
       continue;
     }
+    const open = opensFence(line);
     if (open) {
-      fence = { char: open[1][0], len: open[1].length };
+      fence = open;
       continue;
     }
     const m = /^# +(\S.*)$/.exec(line);

@@ -29,9 +29,11 @@ import {
   decodeEntities,
   distContentPages,
   elementsWithAttr,
+  rel,
   repoRoot,
   siteRoot,
   toText,
+  walk,
 } from "./_helpers.mjs";
 
 const run = promisify(execFile);
@@ -508,27 +510,39 @@ test("fields these skills do NOT declare are rendered nowhere", async () => {
 /** The one accurate hedge (§1.4/§12). Exempt, and asserted exempt below. */
 const HEDGE = /\bany skills-compatible agents?\b/gi;
 
+// C1, verb shadowing: `works with any` was written as three literal words with
+// literal single spaces, so "works SEAMLESSLY with any agent" walked straight
+// past it. The gap below is deliberately NOT `\w+` — that would fire on "this
+// works because it deals with any of the six fields", which is honest prose.
+// It is adverbs only, which is what shadowing actually looks like in marketing
+// copy, and at most two of them.
+const ADV = String.raw`(?:\w+ly\s+){0,2}`;
+
 const OVERCLAIM = [
   {
     id: "works-with-any",
-    re: /\bworks with (any|all|every)\b/i,
+    re: new RegExp(String.raw`\bworks\s+${ADV}with\s+${ADV}(any|all|every)\b`, "i"),
     fires: "This catalog works with any agent.",
     // Near miss: same three opening words, hedged correctly.
     nearMiss: "This catalog works with any skills-compatible agent.",
+    // Shadowed positive: the evasion C1 identified.
+    shadowed: "This catalog works seamlessly with any agent.",
   },
   {
     id: "compatible-with-any",
-    re: /\bcompatible with (any|all|every)\b/i,
+    re: new RegExp(String.raw`\bcompatible\s+${ADV}with\s+${ADV}(any|all|every)\b`, "i"),
     fires: "These skills are compatible with all agents.",
     nearMiss: "These skills are compatible with any skills-compatible agent.",
+    shadowed: "These skills are compatible with virtually any agent.",
   },
   {
     id: "supports-any",
-    re: /\bsupports? (any|all|every)\b/i,
+    re: new RegExp(String.raw`\bsupports?\s+${ADV}(any|all|every)\b`, "i"),
     fires: "The format supports every agent on the market.",
     // Near miss: "supports" immediately followed by a bounded noun, not a
     // universal quantifier. One word away from firing.
     nearMiss: "The loader supports the six fields the Agent Skills vocabulary defines.",
+    shadowed: "The format supports essentially every agent on the market.",
   },
   {
     id: "agent-agnostic",
@@ -560,31 +574,107 @@ const OVERCLAIM = [
   },
 ];
 
+/**
+ * Flattens the text a claim could hide in the whitespace of.
+ *
+ * C1, line-wrap brittleness: every pattern here is a multi-word phrase, and in
+ * a source file a multi-word phrase is exactly the thing that gets wrapped
+ * across two lines by a formatter — usually with a comment leader glued to the
+ * front of the second one. `// works with\n// any agent` matched nothing. That
+ * is not a hypothetical evasion so much as the normal fate of a long sentence
+ * in a comment block, which is where most of this site's prose lives.
+ *
+ * So: drop line-leading comment markers, then collapse all runs of whitespace
+ * to one space, before any pattern runs.
+ */
+function flatten(text) {
+  return text
+    .replace(/\r\n?/g, "\n")
+    // line-leading comment markers, so a wrapped comment reads as prose
+    .replace(/^[ \t]*(?:\/\/+|\*+|#+|<!--)[ \t]?/gm, " ")
+    // a hyphenated term broken AT the hyphen: "production-\nready"
+    .replace(/-[ \t]*\n[ \t]*/g, "-")
+    .replace(/\s+/g, " ");
+}
+
 /** Blanks the accurate hedge, then reports every banned pattern that matches. */
 function overclaimHits(text) {
-  const scrubbed = text.replace(HEDGE, " ");
+  const scrubbed = flatten(text).replace(HEDGE, " ");
   return OVERCLAIM.filter((p) => p.re.test(scrubbed)).map((p) => ({
     id: p.id,
     match: scrubbed.match(p.re)[0],
   }));
 }
 
+/**
+ * Every file the site's own copy can come from, DISCOVERED rather than listed:
+ * all of `src/`, everything shipped verbatim from `public/`, the root config,
+ * and the site's README.
+ *
+ * C1: this was a hand-written list of six paths. A hardcoded list of the files
+ * that existed the day the test was written is not a scan, it is a snapshot —
+ * and it rots silently, which matters because Phase 3 adds files to `src/` and
+ * Phase 5 builds directly on this detector. Walking the tree covers a new
+ * template the moment it lands.
+ *
+ * A note on the count, because the review and I disagree about it and the
+ * disagreement should be visible rather than smoothed over: the finding says
+ * "6 of 15 template files". I scan 14, and `src/` contains 11 files, not 15.
+ * I cannot reproduce 15 and I am not going to assert a number I cannot derive,
+ * so this asserts the RULE — everything under src/ and public/, plus the two
+ * root files — which is stronger than any count and cannot drift.
+ */
+async function siteSourceFiles() {
+  const out = [];
+  for (const dir of ["src", "public"]) {
+    for (const f of await walk(join(siteRoot, dir))) out.push(rel(f, siteRoot));
+  }
+  return [...out.sort(), "astro.config.mjs", "README.md"];
+}
+
 test("the site's own copy makes no capability claim the repo does not support", async () => {
-  // Scope, half one: the strings the SITE writes — its templates.
-  const templates = [
-    "src/components/EntryMeta.astro",
-    "src/components/MarkdownContent.astro",
-    "src/sidebar.mjs",
-    "src/site.config.mjs",
-    "src/loaders/skills.ts",
-    "astro.config.mjs",
-  ];
+  // Scope, half one: the strings the SITE writes — its templates and config.
+  const templates = await siteSourceFiles();
   const hits = [];
   for (const t of templates) {
     const text = await readFile(join(siteRoot, t), "utf8");
     for (const h of overclaimHits(text)) hits.push(`${t}: [${h.id}] ${h.match}`);
   }
   assert.deepEqual(hits, [], `the site's own copy over-claims:\n${hits.join("\n")}`);
+});
+
+test("over-claim scope control: the scan covers every source file, not a stale list", async () => {
+  const scanned = await siteSourceFiles();
+  // The six that used to be hardcoded must still be in there…
+  for (const old of [
+    "src/components/EntryMeta.astro",
+    "src/components/MarkdownContent.astro",
+    "src/sidebar.mjs",
+    "src/site.config.mjs",
+    "src/loaders/skills.ts",
+    "astro.config.mjs",
+  ]) {
+    assert.ok(scanned.includes(old), `${old} dropped out of the over-claim scan`);
+  }
+  // …and so must every file the old list missed. Asserted as a SET against the
+  // filesystem, not as a count, so adding a template cannot quietly shrink the
+  // scan's coverage without failing here.
+  const onDisk = [];
+  for (const dir of ["src", "public"]) {
+    for (const f of await walk(join(siteRoot, dir))) onDisk.push(rel(f, siteRoot));
+  }
+  for (const f of onDisk) {
+    assert.ok(scanned.includes(f), `${f} is site source and is not being scanned`);
+  }
+  assert.ok(scanned.includes("README.md"), "the site's own README is not scanned");
+  // The old list covered 6. Whatever the total is, it must be more than that,
+  // and it must include the styles and the content config the old list missed.
+  assert.ok(scanned.length > 6);
+  assert.ok(scanned.includes("src/styles/tokens.css"));
+  assert.ok(scanned.includes("src/content.config.ts"));
+  // Negative: the scan must not wander outside the site's own source into the
+  // repository's declared content, which it does not author and may not police.
+  assert.ok(!scanned.some((f) => f.includes("..")), "the scan escaped site/src");
 });
 
 test("the site's own copy makes no capability claim in the RENDERED chrome either", async () => {
@@ -624,6 +714,63 @@ test("over-claim controls: every pattern fires on a claim and holds on a near mi
       `[${p.id}] fires on legitimate near-miss wording: ${p.nearMiss}`,
     );
   }
+});
+
+test("over-claim control: an adverb between the words does not shadow the claim (C1)", () => {
+  // Evasion 1. Every one of these is the same claim with a word wedged in.
+  for (const p of OVERCLAIM.filter((x) => x.shadowed)) {
+    assert.ok(
+      overclaimHits(p.shadowed).map((h) => h.id).includes(p.id),
+      `[${p.id}] is shadowed by an adverb: ${p.shadowed}`,
+    );
+  }
+  // NEGATIVE, and the reason the gap is adverbs-only rather than `\w+`: honest
+  // prose that happens to put "works" and "with any" in one sentence.
+  assert.deepEqual(
+    overclaimHits("This works because the loader deals with any of the six declared fields."),
+    [],
+    "the adverb gap is matching ordinary words and will fire on honest prose",
+  );
+  // NEGATIVE: an adverb AND the accurate hedge. Both mechanisms at once.
+  assert.deepEqual(
+    overclaimHits("This catalog works seamlessly with any skills-compatible agent."),
+    [],
+    "shadowing support broke the mandated hedge exemption",
+  );
+  // NEGATIVE: three adverbs is past the bound, and that is a deliberate limit
+  // rather than an oversight — pinned so a widening is a visible choice.
+  assert.deepEqual(
+    overclaimHits("It works really truly seamlessly with any agent."),
+    [],
+    "the adverb bound has changed; update this control deliberately",
+  );
+});
+
+test("over-claim control: a claim wrapped across lines still fires (C1)", () => {
+  // Evasion 2, and the likelier one: nobody writes an evasion, a formatter
+  // writes it for them. Every shape below is one banned phrase, wrapped the
+  // way this codebase's own comment blocks wrap.
+  const wrapped = [
+    "This catalog works with\nany agent.",
+    "// This catalog works with\n// any agent.",
+    " * These skills are compatible with\n * every agent.",
+    "The format\n  supports\n  every agent.",
+    "Output is\n\tguaranteed.",
+    "A production-\nready catalog.", // hyphen at the wrap point
+  ];
+  for (const w of wrapped) {
+    assert.ok(
+      overclaimHits(w).length > 0,
+      `a line wrap hides this claim from the detector: ${JSON.stringify(w)}`,
+    );
+  }
+  // NEGATIVE: flattening must not INVENT a claim by joining two unrelated
+  // sentences across a paragraph break.
+  assert.deepEqual(
+    overclaimHits("The loader works.\n\nAny agent reading it must parse YAML."),
+    [],
+    "whitespace flattening manufactured a claim across a sentence boundary",
+  );
 });
 
 test("over-claim control: the accurate hedge §12 mandates is permitted, in every pattern's way", () => {

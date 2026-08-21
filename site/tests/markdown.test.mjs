@@ -69,9 +69,82 @@ test("protectedRanges: fenced blocks and inline code spans are protected", () =>
   assert.ok(!isProtected(ranges, src.indexOf("tail")), "text after the fence wrongly protected");
 });
 
+test("protectedRanges: an INDENTED closing fence closes (R5)", () => {
+  // The defect: the closing check sliced past the BACKTICK RUN instead of the
+  // whole match, so the up-to-three spaces of indent CommonMark allows left
+  // the tail of the fence in `after`, `after` was never "", and the fence
+  // stayed open to end of file. Both shipped SKILL.md files hit this, because
+  // both put a fenced block inside a list item, which indents it.
+  for (const indent of ["", " ", "  ", "   "]) {
+    const src = ["intro", `${indent}\`\`\``, `${indent}code`, `${indent}\`\`\``, "tail"].join("\n");
+    const ranges = protectedRanges(src);
+    assert.ok(isProtected(ranges, src.indexOf("code")), `[indent ${indent.length}] fenced body`);
+    assert.ok(
+      !isProtected(ranges, src.lastIndexOf("tail")),
+      `[indent ${indent.length}] an indented closing fence did not close — ` +
+        `everything after it is wrongly exempt from link processing`,
+    );
+  }
+  // Same for tildes, and for a closer longer than its opener (CommonMark
+  // allows that; shorter is not a closer).
+  const tilde = ["  ~~~", "  code", "  ~~~~", "tail"].join("\n");
+  assert.ok(!isProtected(protectedRanges(tilde), tilde.lastIndexOf("tail")));
+});
+
+test("protectedRanges: R5 control — an UNCLOSED fence still protects to EOF", () => {
+  // Without this, "return false from closesFence always" would pass the test
+  // above. A fence that genuinely never closes must still swallow the rest of
+  // the document — that is what CommonMark says and what I7 relies on.
+  const src = ["intro", "  ```", "  code", "tail — still inside"].join("\n");
+  const ranges = protectedRanges(src);
+  assert.ok(isProtected(ranges, src.indexOf("tail — still inside")));
+  // And a closer with an INFO STRING is not a closer.
+  const info = ["```", "code", "```js", "tail — still inside"].join("\n");
+  assert.ok(isProtected(protectedRanges(info), info.indexOf("tail — still inside")));
+  // …nor is a run of the wrong character, or a shorter run.
+  const wrong = ["````", "code", "```", "tail — still inside"].join("\n");
+  assert.ok(isProtected(protectedRanges(wrong), wrong.indexOf("tail — still inside")));
+});
+
+test("protectedRanges: real data — every fence in both shipped SKILL.md files closes", async () => {
+  // The unit cases above use synthetic input. This one asserts the property on
+  // the actual files the defect was live in: after the last fence, the tail of
+  // each document must be ordinary prose. A synthetic-only test would have
+  // been satisfied by a fixture nobody ships.
+  for (const name of ["okf-author", "okf-validate"]) {
+    const raw = await readFile(
+      join(repoRoot, `plugins/okf-authoring/skills/${name}/SKILL.md`),
+      "utf8",
+    );
+    const ranges = protectedRanges(raw);
+    const lastNonBlank = raw.trimEnd();
+    assert.ok(
+      !isProtected(ranges, lastNonBlank.length - 1),
+      `${name}/SKILL.md ends inside an unclosed fence — an indented closing ` +
+        `fence is being missed, so link processing is disabled for the tail ` +
+        `of the file and D3 advisories there will never be reported`,
+    );
+    // Both files DO contain indented fences; if that ever stops being true the
+    // assertion above gets weaker without saying so.
+    assert.match(raw, /\n {1,3}(`{3,}|~{3,})/, `${name}/SKILL.md no longer has an indented fence`);
+  }
+});
+
 test("firstH1 is fence-aware and returns the source bytes verbatim", () => {
   assert.equal(firstH1("```\n# Fenced\n```\n\n# Real — with an em dash\n"), "Real — with an em dash");
   assert.equal(firstH1("no heading here\n"), null);
+});
+
+test("firstH1 uses the same fence scanner as protectedRanges (R5 generalisation)", () => {
+  // There were two fence implementations in markdown.mjs and they disagreed.
+  // `protectedRanges` had the indent bug; `firstH1` had a different one — it
+  // closed on any long-enough run of the same character, info string or not,
+  // so "```js" inside a block ended it early. Both now call one function.
+  // An indented closing fence must close here too:
+  assert.equal(firstH1("  ```\n  # Fenced\n  ```\n\n# Real\n"), "Real");
+  // …and an info-string line must NOT close, so the heading after it is still
+  // inside code and there is no H1 at all:
+  assert.equal(firstH1("```\n# Fenced\n```js\n# Also fenced\n"), null);
 });
 
 // ── Link rewriting ──────────────────────────────────────────────────────────

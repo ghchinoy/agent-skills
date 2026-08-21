@@ -11,7 +11,7 @@ import { readFile, access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 
-import { repoRoot, siteRoot } from "./_helpers.mjs";
+import { repoRoot, siteRoot, walk, rel } from "./_helpers.mjs";
 
 const PINNED = {
   astro: "7.2.4",
@@ -20,7 +20,36 @@ const PINNED = {
   typescript: "5.9.3",
 };
 
-const pkg = async (p) => JSON.parse(await readFile(p, "utf8"));
+/** Strips JSONC comments, leaving string literals alone. */
+function stripJsonComments(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      const nl = text.indexOf("\n", i);
+      if (nl === -1) break;
+      i = nl - 1;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 1;
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
+const pkg = async (p) => JSON.parse(stripJsonComments(await readFile(p, "utf8")));
 const exists = async (p) => {
   try {
     await access(p, constants.F_OK);
@@ -85,6 +114,12 @@ test("there is a type check, and `npm test` runs it", async () => {
  * very manifest — so a detector has to track nesting, not indentation. Written
  * as a small scanner because JSON.parse cannot help: it takes the last of two
  * duplicates and reports nothing at all.
+ *
+ * JSONC-aware, because tsconfig.json is JSONC and now carries a long comment
+ * documenting the type check's real scope (R6). A comment can contain braces,
+ * quotes and colons — this one does — so a scanner that did not skip comments
+ * would not merely miss duplicates in that file, it would desynchronise and
+ * report nonsense for the rest of it.
  */
 function duplicateKeys(text) {
   const dupes = [];
@@ -92,6 +127,17 @@ function duplicateKeys(text) {
   let last = null;
   for (let i = 0; i < text.length; i += 1) {
     const c = text[i];
+    if (c === "/" && text[i + 1] === "/") {
+      i = text.indexOf("\n", i);
+      if (i === -1) break;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 1;
+      continue;
+    }
     if (c === '"') {
       let j = i + 1;
       let s = "";
@@ -132,14 +178,22 @@ function duplicateKeys(text) {
   return dupes;
 }
 
-test("package.json declares no key twice", async () => {
+/** Every JSON/JSONC file this site owns. C2: the scanner covered one of them. */
+const OWNED_JSON = ["package.json", "tsconfig.json"];
+
+test("no JSON file this site owns declares a key twice", async () => {
   // JSON.parse takes the LAST of two duplicated keys and reports nothing, so a
-  // manifest can carry a stale block that every tool silently ignores and every
+  // config can carry a stale block that every tool silently ignores and every
   // reader has to guess about. `astro check` caught exactly this shape in
   // skills.ts (ts(2783)); nothing type-checks JSON, so this does. The first
   // thing it found was a duplicated `devDependencies` I had shipped myself.
-  const raw = await readFile(join(siteRoot, "package.json"), "utf8");
-  assert.deepEqual(duplicateKeys(raw), [], "package.json declares a key more than once");
+  //
+  // C2: this originally covered package.json only — which is the same mistake
+  // in miniature, a gate aimed at one instance of a class.
+  for (const name of OWNED_JSON) {
+    const raw = await readFile(join(siteRoot, name), "utf8");
+    assert.deepEqual(duplicateKeys(raw), [], `${name} declares a key more than once`);
+  }
 });
 
 test("duplicate-key control: the detector sees a duplicate and accepts a clean manifest", async () => {
@@ -172,9 +226,56 @@ test("duplicate-key control: the detector sees a duplicate and accepts a clean m
     duplicateKeys('{\n  "a": [\n    { "n": 1 },\n    { "n": 2 }\n  ]\n}'),
     [],
   );
-  // And the real manifest is non-trivial enough for this to mean something.
-  const raw = await readFile(join(siteRoot, "package.json"), "utf8");
-  assert.ok(raw.split("\n").filter((l) => /"[^"]+"\s*:/.test(l)).length > 15);
+  // Negative: JSONC comments are skipped, not scanned. tsconfig.json's scope
+  // comment contains quotes, colons and braces; a scanner that read it as data
+  // would desynchronise and report garbage.
+  assert.deepEqual(
+    duplicateKeys('{\n  // "a": 1 and "a": 2 in a comment\n  /* "a": 3 */\n  "a": 4\n}'),
+    [],
+  );
+  // …but a real duplicate on either side of a comment is still caught.
+  assert.deepEqual(
+    duplicateKeys('{\n  "a": 1,\n  // a comment\n  "a": 2\n}'),
+    ["a"],
+  );
+  // And the real files are non-trivial enough for this to mean something.
+  for (const name of OWNED_JSON) {
+    const raw = await readFile(join(siteRoot, name), "utf8");
+    assert.ok(
+      raw.split("\n").filter((l) => /^\s*"[^"]+"\s*:/.test(l)).length > 4,
+      `${name} has too few keys for the scan to prove anything`,
+    );
+  }
+});
+
+test("R6: tsconfig.json documents exactly which files the type check covers", async () => {
+  // The type check reports 0 errors and covers one source file. That gap is
+  // the finding; this test is what stops the documentation of it going stale.
+  const raw = await readFile(join(siteRoot, "tsconfig.json"), "utf8");
+  const config = await pkg(join(siteRoot, "tsconfig.json"));
+
+  if (config.compilerOptions?.checkJs === true) {
+    // Someone widened coverage — good, but then this comment is now wrong.
+    assert.ok(
+      !raw.includes("NOT CHECKED"),
+      "checkJs is now true but tsconfig.json still documents files as unchecked",
+    );
+    return;
+  }
+
+  assert.match(raw, /NOT CHECKED/, "tsconfig.json does not disclose the limit of the type check");
+  assert.match(raw, /INERT/, "tsconfig.json does not disclose that the JSDoc typedefs are inert");
+  assert.match(raw, /PHASE 5 CANDIDATE/, "widening coverage is not logged for a later phase");
+
+  // Every unchecked source file must be NAMED. A new .mjs added to src/ without
+  // a line here silently inherits a coverage claim it does not have.
+  const sources = (await walk(join(siteRoot, "src")))
+    .filter((f) => f.endsWith(".mjs"))
+    .map((f) => rel(f, siteRoot));
+  assert.ok(sources.length >= 5, "the source scan found suspiciously few .mjs files");
+  for (const s of sources) {
+    assert.ok(raw.includes(s), `${s} is not type-checked and tsconfig.json does not say so`);
+  }
 });
 
 test("engines.node requires Node 22, and the running Node satisfies it", async () => {
