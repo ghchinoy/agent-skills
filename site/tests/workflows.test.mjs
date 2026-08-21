@@ -814,17 +814,23 @@ test("the ref that DEPLOYS runs the same suite the pull request runs", async () 
 // THE FIX FOR AN INSTANCE OF A CLASS CREATED A NEW INSTANCE OF THE SAME CLASS,
 // and that is the reason this test exists rather than any property of checkout.
 //
-// F9 was a mirrored constant with NO COUPLING: `DEFAULT_URL` was a hand-written
-// fourth copy of the deployed URL with no path back to `src/site.config.mjs`.
+// F9 was a mirrored constant whose ORIGIN COMPONENT had no coupling:
+// `DEFAULT_URL` was a hand-written fourth copy of the deployed URL, and moving
+// `SITE` while leaving it stale left 171 of 171 tests passing. Its base
+// component was already coupled — moving `BASE` the same way turned one red.
+// Graded by mutating each component separately, because "compared to nothing"
+// is a claim about absence and reading cannot establish absence.
 // Closing it made the checker IMPORT that file — which is right, and which gave
 // `check-live-links.mjs` its first repo-source dependency. Before F9 the script
 // imported only `node:` builtins and would have run against a checkout of
 // nothing but itself. Now `verify-live` depends on the source tree.
 //
 // So closing a coupling gap by adding a dependency produced an IMPORT WITH NO
-// COUPLING where there had been a CONSTANT WITH NO COUPLING. Same class, new
-// instance, created by the fix. That is not a coincidence; it is what that
-// shape of fix does, and it is why the check has to follow the fix.
+// COUPLING where there had been a HALF-COUPLED CONSTANT. Same class, new
+// instance, created by the fix — and the new instance is the WORSE of the two,
+// because an import is uncoupled in whole rather than in half. That is not a
+// coincidence; it is what that shape of fix does, and it is why the check has
+// to follow the fix.
 //
 // The workflow already complies — `verify-live` checks out. Nothing asserted
 // it. And the failure mode is the bad kind: remove checkout on the reasoning

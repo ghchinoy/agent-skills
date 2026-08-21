@@ -55,6 +55,22 @@ test("the default URL is this site's, at the base the build uses", () => {
   // below are the suite's own independent copies, so this compares a DERIVED
   // value against an INDEPENDENT one and the comparison means something.
   //
+  // PRECISELY WHICH HALF WAS UNCOUPLED: THE ORIGIN, NOT THE WHOLE URL. Measured
+  // by component mutation on a copy at 4c6b0fa, not by reading. Move `SITE` and
+  // propagate it to the test helper, leaving DEFAULT_URL stale, and 171 of 171
+  // still PASS — the origin half was compared to nothing. Do the same to `BASE`
+  // and test 70 goes RED, because the base half was ALREADY artifact-coupled
+  // transitively through the helper. So the tree was better coupled than three
+  // successive write-ups of this finding said, and F9 was still the right grade:
+  // the origin is the consequential half, and a stale origin points the whole
+  // check at another site.
+  //
+  // THE GENERAL LESSON, which is not about DEFAULT_URL. "X is compared to
+  // nothing" is a claim about ABSENCE, and reading cannot establish absence.
+  // Grade coupling by mutating each COMPONENT separately: a partly-coupled
+  // constant reads as uncoupled to anyone who moves the whole thing at once, and
+  // as coupled to anyone who happens to move the other half. Standard 7.
+  //
   // That is also why the literals below stay literals. Importing site.config
   // here would make both sides the same value and turn the assertion back into
   // a tautology, this time silently.

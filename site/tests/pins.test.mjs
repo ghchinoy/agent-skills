@@ -416,8 +416,11 @@ test("Phase 2's workflows are the only ones this site added", async () => {
 //
 // Gap 2 residue. Sweep 2 was scoped to PREDICATES, so mirrored CONSTANTS were
 // out of scope by construction, and F9 was one instance of what that boundary
-// hid: `DEFAULT_URL` was a fourth hand-written copy of the deployed URL with no
-// artifact-mediated path back to `src/site.config.mjs`.
+// hid: `DEFAULT_URL` was a fourth hand-written copy of the deployed URL whose
+// ORIGIN component had no artifact-mediated path back to `src/site.config.mjs`.
+// Its base component already had one, transitively through the test helper —
+// established by mutating each component separately, which is the only way to
+// grade a claim about absence. See tests/live-links.test.mjs for the readings.
 //
 // Closing an instance is not closing a class. This is the class: NO PRODUCTION
 // FILE MAY CARRY A SECOND COPY OF A SITE CONSTANT. It found one that no review
