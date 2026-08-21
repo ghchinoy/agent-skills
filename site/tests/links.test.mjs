@@ -505,6 +505,45 @@ test("CONTROL: the error-document exemption is exactly one reference wide", asyn
     "the exemption fired on a page whose canonical is not the exempted URL",
   );
 
+  // F1 — THE CASE THAT ISOLATES CLAUSE 2, AND THE REASON THIS TEST'S TITLE WAS
+  // A PROMISE IT DID NOT KEEP.
+  //
+  // The exemption has three clauses: the page must be 404.html, the target must
+  // be <base>/404/, and the reference must BE that page's own canonical. Review
+  // deleted clause 2 and all 171 tests stayed green. Every wrong-target case
+  // above passes HTML whose canonical is /404/, so clause 3 rejects them all
+  // and clause 2 is never the reason for a single one — a control correct about
+  // the cases it names and blind to the clause it is named after. Same defect
+  // as everything else this phase, now inside the control written to prevent it.
+  //
+  // Isolating clause 2 requires the other two to be SATISFIED: the page is
+  // 404.html, and the canonical genuinely equals the reference. The only thing
+  // wrong is that the target is not <base>/404/. Without clause 2 this returns
+  // true and a genuinely dangling canonical on the error document is absorbed
+  // by the exemption while the run exits 0.
+  const elsewhere = `${BASE}/plugins/`;
+  assert.equal(
+    isErrorDocCanonical(
+      "404.html",
+      elsewhere,
+      `<link rel="canonical" href="${ORIGIN}${elsewhere}"/>`,
+    ),
+    false,
+    "clause 2 is not doing anything: the error document exempted a self-consistent " +
+      "canonical pointing somewhere other than <base>/404/, which is how a real " +
+      "dangling canonical would get absorbed",
+  );
+
+  // ...and the same input with the target corrected IS exempt, which is what
+  // makes the assertion above about clause 2 rather than about the page or the
+  // canonical. Without this pair the case could pass for either of the other
+  // two reasons and nobody would know which.
+  assert.equal(
+    isErrorDocCanonical("404.html", target, `<link rel="canonical" href="${ORIGIN}${target}"/>`),
+    true,
+    "the positive half of the clause-2 pair stopped holding",
+  );
+
   // The artifact still declares what we think it declares. If Starlight ever
   // stops emitting this, the exemption should be deleted, not left lying about.
   assert.match(

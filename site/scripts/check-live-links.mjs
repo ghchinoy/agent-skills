@@ -60,12 +60,40 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The site's single source of truth for origin and base path. See DEFAULT_URL.
+import { BASE as SITE_BASE, SITE } from "../src/site.config.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = join(here, "..");
 
-/** The deployed URL of site A. Overridable with --url; docs.yml passes the URL
- *  the deploy step itself reported. */
-export const DEFAULT_URL = "https://ghchinoy.github.io/agent-skills/";
+/**
+ * The deployed URL of site A. Overridable with --url; docs.yml passes the URL
+ * the deploy step itself reported.
+ *
+ * F9. THIS WAS A HAND-WRITTEN LITERAL, and it was the single outlier among the
+ * site URL's three mirrors. The other two — `ORIGIN` and `BASE` in
+ * tests/_helpers.mjs — are duplicated ON PURPOSE, as an oracle independent of
+ * the value under test, and they are closed transitively through the artifact:
+ * links.test.mjs asserts the BUILT dist/404.html canonical against them, and
+ * that canonical is emitted from `SITE`. So those two cannot drift from the
+ * source without a test going red. **That design works and must not be
+ * "fixed".**
+ *
+ * This one had no such path. Its only assertion compared it against another
+ * hard-coded copy of the same string, and a test that checks a constant against
+ * its own twin cannot see the pair drift together away from their source. The
+ * tree already knows how to couple constants — `node-version` to
+ * `engines.node`, the checker's budget to the job timeout — so this was a
+ * demonstrated internal inconsistency rather than a general absence of
+ * checking, which is what makes it worth one import rather than an argument.
+ *
+ * Note the direction: this is PRODUCTION code, so it reads the single source of
+ * truth. The duplicated copies live in the TESTS, where independence is the
+ * point. Composing here does not weaken the oracle; it gives the oracle
+ * something real to check, because live-links.test.mjs now compares a derived
+ * value against independent literals rather than one literal against another.
+ */
+export const DEFAULT_URL = `${SITE}${SITE_BASE}/`;
 
 /** Waits, in seconds, BEFORE attempts 2..N. Attempt 1 runs immediately.
  *  Total bounded wait: 250s of sleeping across 6 attempts. */
@@ -108,6 +136,23 @@ const CONCURRENCY = 8;
 /** Set once in main(); Infinity keeps the helpers usable from unit tests. */
 let deadlineAt = Infinity;
 const remainingMs = () => deadlineAt - Date.now();
+
+/**
+ * The budget ACTUALLY IN FORCE, for the diagnostics that report it.
+ *
+ * F6. Three messages used to interpolate `TOTAL_BUDGET_MS / 60_000` — the
+ * DEFAULT — while the deadline itself came from `args.deadlineMinutes`. Pass
+ * `--deadline-minutes 5` and the run would stop correctly at five minutes and
+ * announce a fifteen-minute budget. Latent in CI, because docs.yml never passes
+ * the flag; the reason it is still worth fixing is that the flag exists for the
+ * operator debugging a stuck deploy by hand, which is exactly the moment a
+ * message that misstates the rule it just enforced does the most damage.
+ *
+ * Same shape as the F2 fix below and the same remedy: one value, set once,
+ * every reader taking it from there rather than re-deriving it.
+ */
+let budgetMs = TOTAL_BUDGET_MS;
+const budgetMinutes = () => budgetMs / 60_000;
 
 /** A path under the base that must NOT exist. The 404 it produces is what
  *  proves the 200s elsewhere are load-bearing. */
@@ -368,7 +413,7 @@ async function get(url) {
   if (timeout === 0) {
     return {
       ok: false,
-      error: `the check's ${TOTAL_BUDGET_MS / 60_000}-minute overall budget ran out before this request`,
+      error: `the check's ${budgetMinutes()}-minute overall budget ran out before this request`,
     };
   }
   try {
@@ -592,11 +637,39 @@ export async function runOnce({ liveUrl, distDir }) {
     artifactVerified: 0,
   };
 
+  // F2. ONE construction site for the result, so no return path can omit part
+  // of the contract. The early return below used to be `{ failures, stats }`,
+  // and `main` dereferences `last.deterministic.has(...)` — so on an empty dist
+  // the process died with `Cannot read properties of undefined (reading 'has')`
+  // and threw away the diagnostic written for precisely that case.
+  //
+  // The gate did not fail open: exit was still 1, so a crash still blocked the
+  // deploy. What was lost was the explanation, on the one failure mode where an
+  // operator most needs it — an empty dist means the artifact hand-off produced
+  // nothing, which is the exact condition the three `site/dist` assertions in
+  // docs.yml exist to guard. They got a Node stack trace instead of
+  // "no HTML files found ... nothing to check against".
+  //
+  // A second identifier would have fixed the instance. A single construction
+  // site fixes the class: divergence between return paths is now not
+  // expressible, rather than merely tested for.
+  const result = () => ({ failures: report(), stats, deterministic });
+
   const files = await walk(distDir);
   const htmlFiles = files.filter((f) => f.endsWith(".html"));
   if (htmlFiles.length === 0) {
-    fail([0, 0], `no HTML files found in ${distDir} — nothing to check against`);
-    return { failures: report(), stats };
+    // F2b — FOUND BY THE F2 CONTROL, NOT BY THE F2 REVIEW. The empty-dist
+    // failure was never registered as deterministic, so `main` treated "the
+    // artifact contains no HTML" as a condition that might resolve itself and
+    // sat through the full six-attempt propagation schedule — 250 seconds of
+    // sleeping — re-walking a directory that cannot gain files while we wait.
+    // Exit was still 1, so this cost time and not correctness, but it is the
+    // most certainly-final failure the script can raise and it was the one
+    // failure class treated as possibly transient.
+    deterministic.add(
+      fail([0, 0], `no HTML files found in ${distDir} — nothing to check against`),
+    );
+    return result();
   }
   stats.distPages = htmlFiles.length;
 
@@ -871,7 +944,7 @@ export async function runOnce({ liveUrl, distDir }) {
     );
   }
 
-  return { failures: report(), stats, deterministic };
+  return result();
 }
 
 /**
@@ -947,7 +1020,8 @@ async function main(argv) {
   console.log(`live URL : ${args.url}`);
   console.log(`artifact : ${distDir}`);
 
-  deadlineAt = Date.now() + args.deadlineMinutes * 60_000;
+  budgetMs = args.deadlineMinutes * 60_000;
+  deadlineAt = Date.now() + budgetMs;
 
   let last;
   for (let attempt = 1; attempt <= args.attempts; attempt += 1) {
@@ -959,7 +1033,7 @@ async function main(argv) {
       if (remainingMs() < wait * 1000 + 30_000) {
         console.log(
           `\n-- stopping after attempt ${attempt - 1}: ${Math.round(remainingMs() / 1000)}s left of ` +
-            `the ${TOTAL_BUDGET_MS / 60_000}-minute budget, not enough for another attempt --`,
+            `the ${budgetMinutes()}-minute budget, not enough for another attempt --`,
         );
         break;
       }

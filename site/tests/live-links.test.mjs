@@ -17,7 +17,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { relative } from "node:path";
+import { execFile } from "node:child_process";
+import { join, relative } from "node:path";
+import { promisify } from "node:util";
 
 import {
   DEFAULT_URL,
@@ -36,15 +38,34 @@ import {
   sha256,
   summaryLine,
 } from "../scripts/check-live-links.mjs";
-import { BASE, dist, distContentPages, walk } from "./_helpers.mjs";
+import { BASE, dist, distContentPages, siteRoot, walk } from "./_helpers.mjs";
+
+const run = promisify(execFile);
 
 const LIVE = { origin: "https://ghchinoy.github.io", base: "/agent-skills" };
 const PAGE = "https://ghchinoy.github.io/agent-skills/plugins/okf-authoring/okf-author/";
 
 test("the default URL is this site's, at the base the build uses", () => {
+  // F9. THIS TEST ONLY BECAME AN ORACLE WHEN DEFAULT_URL STOPPED BEING A
+  // LITERAL. It used to compare one hard-coded copy of the site URL against
+  // another hard-coded copy of the same string — which cannot detect the pair
+  // drifting together away from `src/site.config.mjs`, the actual source. Now
+  // DEFAULT_URL is composed from `SITE` and `BASE` there, and the literals
+  // below are the suite's own independent copies, so this compares a DERIVED
+  // value against an INDEPENDENT one and the comparison means something.
+  //
+  // That is also why the literals below stay literals. Importing site.config
+  // here would make both sides the same value and turn the assertion back into
+  // a tautology, this time silently.
   const { origin, base } = originAndBase(DEFAULT_URL);
   assert.equal(base, BASE, "the checker's default URL does not carry the site's base path");
   assert.equal(origin, "https://ghchinoy.github.io");
+  assert.equal(
+    DEFAULT_URL,
+    "https://ghchinoy.github.io/agent-skills/",
+    "DEFAULT_URL no longer composes to the deployed URL — src/site.config.mjs moved and " +
+      "this is the coupling that is supposed to notice",
+  );
   // A trailing slash on the URL must not become part of the base, or every
   // internal path would be compared against "/agent-skills/" and none would
   // match a page at "/agent-skills".
@@ -489,4 +510,61 @@ test("orderFindings sorts by key and refuses duplicate keys", () => {
     /two findings share order key 2\.7/,
   );
   assert.doesNotThrow(() => orderFindings([{ key: [2, 7], msg: "a" }, { key: [2, 8], msg: "b" }]));
+});
+
+test("the budget the run REPORTS is the budget the run was GIVEN (F6)", async () => {
+  // F6. THE DIAGNOSTIC USED TO LIE ABOUT ITS OWN CONFIGURATION.
+  //
+  // Two messages tell an operator how long the check waited before giving up.
+  // Both interpolated `TOTAL_BUDGET_MS / 60_000` — the compile-time DEFAULT —
+  // while the deadline actually enforced came from `args.deadlineMinutes`. Pass
+  // `--deadline-minutes 5` and the run stopped correctly at five minutes and
+  // announced a fifteen-minute budget. The behaviour was right and the
+  // explanation of the behaviour was wrong, which is the worse of the two to
+  // ship: an operator debugging a timeout is reading the message, not the
+  // source, and the message sent them looking for a fifteen-minute wait that
+  // never happened.
+  //
+  // Fixed by the same rule as F2 and as classify(): decide once, have every
+  // caller read the decision. `budgetMs` is now assigned from the parsed
+  // argument and both messages derive from it. There is no second copy left to
+  // disagree.
+  //
+  // WHY THIS RUNS THE REAL CLI AS A SUBPROCESS. The bug lived in the seam
+  // between `parseArgs` and module state that only `main` writes, and `main` is
+  // deliberately not exported. Any in-process test would have had to reach past
+  // that seam and would therefore have tested something other than the thing
+  // that was broken. A microscopic budget makes it cheap: `requestTimeoutMs`
+  // returns 0 the moment the budget is spent, so every request short-circuits
+  // before touching the network and the URL below is never actually resolved.
+  const { stdout, stderr } = await run(
+    process.execPath,
+    [
+      join(siteRoot, "scripts/check-live-links.mjs"),
+      "--url",
+      "https://this-host-is-never-contacted.invalid/agent-skills/",
+      "--dist",
+      "dist",
+      "--attempts",
+      "1",
+      "--deadline-minutes",
+      "0.0001",
+    ],
+    { cwd: siteRoot },
+  ).catch((err) => err); // a spent budget is a failing run; exit 1 is expected
+  const out = `${stdout}${stderr}`;
+
+  assert.match(
+    out,
+    /0\.0001-minute overall budget/,
+    `the run did not report the budget it was given:\n${out}`,
+  );
+  // The isolating half. Before the fix the message read "15-minute" here, and
+  // an assertion that only looked for the true number would have passed
+  // against the broken code the moment the true number appeared anywhere.
+  assert.doesNotMatch(
+    out,
+    /\b15-minute\b/,
+    `the run reported the DEFAULT budget while running on a different one:\n${out}`,
+  );
 });

@@ -42,7 +42,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
 import { runOnce } from "../scripts/check-live-links.mjs";
@@ -447,6 +448,64 @@ test("SYNTHETIC CONTROL: the exemption is narrow AT ITS SINGLE DECISION POINT", 
     stats.exemptions,
     1,
     "the exemption fired more than once — it is no longer one reference wide",
+  );
+});
+
+test("CONTROL: an empty dist returns the WHOLE contract, and keeps its diagnostic (F2)", async () => {
+  // F2. THE POSITIVE CONTROL FOR THE SINGLE CONSTRUCTION SITE.
+  //
+  // runOnce had two return paths. The main one returned
+  // `{ failures, stats, deterministic }`; the empty-dist early return omitted
+  // `deterministic`. `main` then does `last.deterministic.has(f)`, so on an
+  // empty dist the process died with a TypeError and threw away the one
+  // diagnostic written for that exact condition — "no HTML files found".
+  //
+  // Nothing exercised this path. Every runOnce test in this file serves the
+  // real `dist`, which is never empty, so the divergence was reachable only in
+  // production and only in the case the artifact hand-off had already failed.
+  //
+  // This control does not assert the fix; it asserts the CONTRACT, which is why
+  // it is written as a comparison against the populated path rather than as a
+  // hand-written list of three key names. A hand-written list is another mirror
+  // of the same decision and would drift the same way the return did.
+  const empty = await mkdtemp(join(tmpdir(), "live-empty-dist-"));
+  const out = await runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: empty });
+
+  const srv = await serveDist();
+  let populated;
+  try {
+    populated = await withOrigin(srv.localOrigin, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
+  } finally {
+    await srv.close();
+  }
+
+  assert.deepEqual(
+    Object.keys(out).sort(),
+    Object.keys(populated).sort(),
+    "the empty-dist return and the populated return are different shapes — this is the " +
+      "F2 defect, and it is a crash in `main`, not a missing field",
+  );
+
+  // The specific dereference that crashed, performed here exactly as `main`
+  // performs it. Shape equality alone would pass if both paths returned a
+  // `deterministic` that was not a Set.
+  assert.doesNotThrow(
+    () => out.failures.every((f) => out.deterministic.has(f)),
+    "main's deterministic-failure check cannot run against the empty-dist result",
+  );
+
+  // And the thing the crash destroyed: the explanation.
+  assert.ok(
+    out.failures.some((f) => /no HTML files found/.test(f)),
+    `the empty-dist diagnostic did not survive:\n${out.failures.join("\n")}`,
+  );
+  assert.equal(
+    out.failures.every((f) => out.deterministic.has(f)),
+    true,
+    "an empty dist is a build-side problem: retrying cannot conjure files, so the run " +
+      "must stop rather than wait out the retry schedule",
   );
 });
 
