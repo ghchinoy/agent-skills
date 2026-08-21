@@ -17,17 +17,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { relative } from "node:path";
+
 import {
   DEFAULT_URL,
   NEGATIVE_CONTROL,
   classify,
   idsIn,
+  liveUrlForFile,
   originAndBase,
   parseArgs,
+  redirectVerdict,
   refsIn,
+  requestTimeoutMs,
   routeForHtml,
+  sha256,
+  summaryLine,
 } from "../scripts/check-live-links.mjs";
-import { BASE, distContentPages } from "./_helpers.mjs";
+import { BASE, dist, distContentPages, walk } from "./_helpers.mjs";
 
 const LIVE = { origin: "https://ghchinoy.github.io", base: "/agent-skills" };
 const PAGE = "https://ghchinoy.github.io/agent-skills/plugins/okf-authoring/okf-author/";
@@ -204,6 +211,180 @@ test("the negative control targets a path the build cannot produce", async () =>
     assert.ok(
       !`${p.route}/`.includes(NEGATIVE_CONTROL),
       `a real page exists at the negative control path ${NEGATIVE_CONTROL}`,
+    );
+  }
+});
+
+// ── Fix round 1: the artifact sweep's pure parts ────────────────────────────
+
+test("liveUrlForFile maps every shape in the artifact, not just the HTML", () => {
+  // The reference crawl only ever requested what a page linked to, so 22 of the
+  // artifact's 39 files were never fetched — the whole search bundle among them.
+  // The sweep is artifact-driven instead, which means it needs a URL for file
+  // shapes the crawl never had to think about.
+  assert.equal(liveUrlForFile("index.html", BASE), `${BASE}/`);
+  assert.equal(liveUrlForFile("plugins/index.html", BASE), `${BASE}/plugins/`);
+
+  // Assets are served where they sit. No directory-route rewriting.
+  assert.equal(liveUrlForFile("pagefind/pagefind.js", BASE), `${BASE}/pagefind/pagefind.js`);
+  assert.equal(liveUrlForFile("sitemap-0.xml", BASE), `${BASE}/sitemap-0.xml`);
+  assert.equal(liveUrlForFile("_astro/x.css", BASE), `${BASE}/_astro/x.css`);
+  assert.equal(liveUrlForFile("favicon.svg", BASE), `${BASE}/favicon.svg`);
+
+  // A file whose name merely CONTAINS .html is not an HTML route.
+  assert.equal(liveUrlForFile("assets/a.html.js", BASE), `${BASE}/assets/a.html.js`);
+
+  // Windows separators, since relative() is platform-dependent and a backslash
+  // in a URL path is not a separator at all.
+  assert.equal(liveUrlForFile("pagefind\\pagefind.js", BASE), `${BASE}/pagefind/pagefind.js`);
+});
+
+test("liveUrlForFile covers every file the build actually emits", async () => {
+  // A mapping tested only against hand-written examples is tested against the
+  // author's imagination. This walks the REAL dist and asserts the sweep can
+  // address all of it — including the file types that caused the finding.
+  const files = await walk(dist);
+  assert.ok(files.length > 30, `dist has only ${files.length} files — did the build run?`);
+
+  const urls = files.map((f) => liveUrlForFile(relative(dist, f).split("\\").join("/"), BASE));
+  for (const u of urls) {
+    assert.ok(u.startsWith(`${BASE}/`), `${u} is not under the base path`);
+    assert.ok(!u.includes("\\"), `${u} contains a backslash`);
+    assert.ok(!u.includes("//"), `${u} has a doubled slash`);
+    assert.ok(!/index\.html$/.test(u), `${u} addresses index.html directly instead of its route`);
+  }
+  assert.equal(new Set(urls).size, urls.length, "two artifact files map to the same URL");
+
+  // The specific blind spots, named. If the build stops emitting these the test
+  // should be updated deliberately, not pass by silently covering nothing.
+  assert.ok(urls.some((u) => u.includes("/pagefind/")), "no pagefind files in dist");
+  assert.ok(urls.some((u) => u.endsWith(".xml")), "no sitemap in dist");
+  assert.ok(urls.some((u) => u.endsWith(".js")), "no JS in dist");
+});
+
+test("sha256 distinguishes same-length content", () => {
+  // Axis 2, in one assertion. The brief specified a LENGTH match; these two
+  // buffers are the same length and are not the same file. A length check
+  // cannot tell a corrupted asset from a correct one, and this same script
+  // already demands full byte identity of every HTML page.
+  const a = Buffer.from("body{color:red}");
+  const b = Buffer.from("body{color:731}");
+  assert.equal(a.length, b.length);
+  assert.notEqual(sha256(a), sha256(b));
+
+  // And it is stable, or the comparison would fail at random.
+  assert.equal(sha256(a), sha256(Buffer.from("body{color:red}")));
+  // An empty 200 — the corrupt-asset scenario — is not any real file.
+  assert.notEqual(sha256(Buffer.alloc(0)), sha256(a));
+});
+
+test("redirectVerdict catches a hop that leaves the site", () => {
+  const at = { origin: "https://ghchinoy.github.io", base: BASE };
+  const url = `https://ghchinoy.github.io${BASE}/okf-validate/`;
+
+  // No redirect, and a redirect that stays inside the base: both fine.
+  assert.equal(redirectVerdict(url, url, at), null);
+  assert.equal(redirectVerdict(url, `https://ghchinoy.github.io${BASE}/okf-validate`, at), null);
+  assert.equal(redirectVerdict(url, undefined, at), null);
+
+  // Off-origin, and off-base. get() follows redirects and records only the
+  // FINAL status, so without this a link that 302s to a working page elsewhere
+  // is an invisible 200.
+  assert.match(redirectVerdict(url, "https://example.com/x", at), /off-origin/);
+  assert.match(redirectVerdict(url, "https://ghchinoy.github.io/outside/", at), /outside the base/);
+
+  // NEAR MISS: a sibling path that merely starts with the same characters is
+  // NOT inside the base. A prefix test without the boundary would pass this.
+  assert.match(
+    redirectVerdict(url, "https://ghchinoy.github.io/agent-skills-extra/", at),
+    /outside the base/,
+  );
+  // The base root itself is inside the base.
+  assert.equal(redirectVerdict(url, `https://ghchinoy.github.io${BASE}`, at), null);
+
+  assert.match(redirectVerdict(url, "not a url", at), /unparseable/);
+});
+
+test("requestTimeoutMs keeps every request inside the overall budget", () => {
+  // 39 sequential requests × 30s × 6 attempts is most of an hour. The per-
+  // request cap does not bound the run; this does.
+  assert.equal(requestTimeoutMs(Infinity, 30_000), 30_000, "unbudgeted runs use the per-request cap");
+  assert.equal(requestTimeoutMs(120_000, 30_000), 30_000, "plenty of budget left: use the cap");
+  assert.equal(requestTimeoutMs(5_000, 30_000), 5_000, "less budget than the cap: use the budget");
+
+  // CONTROL: exhausted must be exactly 0, which is the caller's signal to not
+  // issue the request at all. A negative would become an instant-abort signal
+  // and a confusing "timeout" failure instead of an honest "out of budget".
+  assert.equal(requestTimeoutMs(0, 30_000), 0);
+  assert.equal(requestTimeoutMs(-10_000, 30_000), 0);
+});
+
+// ── N1: the PASS line is derived, not written ──────────────────────────────
+
+const STATS = {
+  distPages: 7,
+  livePagesFetched: 7,
+  bytesIdentical: 7,
+  refsSeen: 120,
+  urlsChecked: 99,
+  fragmentsChecked: 96,
+  offsiteSkipped: 33,
+  artifactFiles: 39,
+  artifactVerified: 39,
+};
+
+test("the PASS line only says all when everything was actually compared", () => {
+  // The old line read "99 internal URLs and 7 pages resolve ... all
+  // byte-identical to the deployed artifact". 99 were status-checked and 7 were
+  // byte-compared, and "all" attached to both. This line lands in the CI log AS
+  // AC3's evidence, so the tool was over-claiming about itself.
+  const full = summaryLine(STATS);
+  assert.match(full, /all 39 deployed files are served byte-identical/);
+
+  // The scope word is COMPUTED. One unverified file and "all" is gone, with the
+  // shortfall named — no one has to remember to update a sentence.
+  const short = summaryLine({ ...STATS, artifactVerified: 38 });
+  assert.doesNotMatch(short, /\ball\b/);
+  assert.match(short, /38 of 39/);
+  assert.match(short, /1 NOT byte-compared/);
+
+  // Nothing was compared at all: the strongest claim available is none.
+  const none = summaryLine({ ...STATS, artifactFiles: 0, artifactVerified: 0 });
+  assert.match(none, /NO deployed files were compared/);
+  assert.doesNotMatch(none, /\ball\b/);
+});
+
+test("the PASS line keeps status checks and byte comparisons as separate claims", () => {
+  const line = summaryLine(STATS);
+  // The 99 resolve. They are not claimed byte-identical, which was the defect.
+  assert.match(line, /99 internal URL reference\(s\) resolve/);
+  assert.doesNotMatch(line, /all 99/);
+  assert.doesNotMatch(line, /99[^.;]*byte-identical/);
+  // Off-site references are reported as NOT checked rather than folded in.
+  assert.match(line, /33 off-site reference\(s\) were NOT checked/);
+
+  // A zero is never printed as a checked zero — the clause disappears, so a
+  // stale "0 fragments" can never sit in the evidence line looking verified.
+  const noFrags = summaryLine({ ...STATS, fragmentsChecked: 0, offsiteSkipped: 0 });
+  assert.doesNotMatch(noFrags, /fragment/);
+  assert.doesNotMatch(noFrags, /off-site/);
+});
+
+test("CONTROL: skewing any counter the PASS line reports changes the sentence", () => {
+  // The point of deriving the line is that it cannot drift from the numbers.
+  // If a counter can move without the sentence moving, that counter is being
+  // reported by a literal and the defect has come back.
+  const base = summaryLine(STATS);
+  for (const key of ["artifactFiles", "artifactVerified", "urlsChecked", "fragmentsChecked", "offsiteSkipped"]) {
+    const skewed = summaryLine({ ...STATS, [key]: STATS[key] - 1 });
+    assert.notEqual(skewed, base, `changing ${key} did not change the PASS line`);
+  }
+
+  // And every number in the sentence traces to a stat, so nothing is invented.
+  for (const n of base.match(/\d+/g) ?? []) {
+    assert.ok(
+      Object.values(STATS).includes(Number(n)) || Number(n) === 0,
+      `${n} appears in the PASS line but is not one of the counters`,
     );
   }
 });

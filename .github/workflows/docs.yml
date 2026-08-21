@@ -3,9 +3,21 @@
 # TRIGGER: push to `main`. Deliberately NOT a tag (proposal §10.1). A sibling
 # project triggers its equivalent workflow on `push: tags: ['v*']`, and its
 # `github-pages` environment protection REJECTS `v*` tag refs — so the deploy
-# fires at release time and dies at the environment gate. `main` is an allowed
-# ref under the default protection rules, so this one reaches the deployment.
-# Do not "improve" this into a tag or release trigger.
+# fires at release time and dies at the environment gate. Do not "improve" this
+# into a tag or release trigger.
+#
+# THE TRIGGER LIST IS NOT THE WHOLE STORY, and an earlier version of this
+# comment claimed it was. `workflow_dispatch` below has no ref restriction:
+# GitHub's "Run workflow" selector and `gh workflow run --ref <tag>` both accept
+# a TAG, which lands `refs/tags/...` at the environment gate and reproduces
+# §10.1's failure through the one trigger that looks harmless. The job-level
+# `if:` on build-deploy is what actually closes that, not the trigger list.
+#
+# This repo's `github-pages` environment has exactly ONE deployment branch
+# policy — `{name: main, type: branch}`, no reviewers, no wait timer (read from
+# the API, and independently confirmed in review). So `refs/heads/main` is the
+# only ref this environment will ever admit, and the guard below mirrors that
+# exactly rather than merely excluding tags.
 #
 # SCOPE: this workflow deploys. It does not test. `site-ci.yml` is the gate that
 # runs `npm test` on the pull request, before anything reaches `main`.
@@ -32,15 +44,33 @@ permissions:
   pages: write
   id-token: write
 
-# One deployment at a time. A queued run is superseded by the newer one rather
-# than racing it onto the same Pages site.
+# One deployment at a time, and an in-flight one is allowed to FINISH.
+#
+# `cancel-in-progress: false` DEVIATES FROM PROPOSAL §10.2, which prescribes
+# `true`. This is deliberate, ruled by the EM in Phase 2 review, and recorded
+# here so a later phase reading §10.2 does not helpfully "restore" it: GitHub's
+# own "Deploy static content to Pages" starter ships `false` with the comment
+# "do NOT cancel in-progress runs as we want to allow these production
+# deployments to complete". The concrete hazard with `true` is that a second
+# push to `main` inside the window kills run #1 part-way through `deploy-pages`
+# or inside verify-live's retry window, leaving a deployment in flight and an
+# AC3 check that never reported. A cancelled run is neither green nor red.
+# Superseding a queued BUILD is cheap; superseding a running DEPLOY is not the
+# same trade.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    # THE REF GUARD. `push` above can only be `main`, so this exists for
+    # `workflow_dispatch`, which accepts any ref including a tag. It mirrors the
+    # environment's deployment branch policy exactly: refs the environment would
+    # reject never reach it, so a mis-aimed dispatch is a skipped job with the
+    # reason visible here, not a red run at the environment gate.
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -106,9 +136,19 @@ jobs:
   # reported, and fails loudly rather than skipping when the site is
   # unreachable. Propagation delay is handled inside the script by a bounded
   # retry — see site/scripts/check-live-links.mjs.
+  #
+  # This job carries NO `continue-on-error:` and NO `if:` on purpose, and
+  # tests/workflows.test.mjs asserts their absence across the whole file. Either
+  # one would leave the workflow green while AC3 verified nothing, which is the
+  # "gate that cannot fire" shape the rest of this suite is written against —
+  # and review found both mutations passed silently before that test existed.
   verify-live:
     needs: build-deploy
     runs-on: ubuntu-latest
+    # Backstop for a hung fetch. The script keeps itself inside a smaller
+    # internal budget and reports properly; this is what stops a wedged runner
+    # holding the `pages` concurrency group if that ever fails.
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:

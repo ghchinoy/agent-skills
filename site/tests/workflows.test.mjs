@@ -82,6 +82,68 @@ export function tagTriggers(wf) {
   return found;
 }
 
+/**
+ * Every place a failure could be SWALLOWED: `continue-on-error` at job level or
+ * at step level. Returns the offending paths so a failure names the spot.
+ *
+ * Review found that adding `continue-on-error: true` to the live-check job left
+ * the whole suite green — the AC3 gate could be neutered and nothing noticed,
+ * which is the "gate that cannot fire" shape one level up. Anything truthy
+ * counts, including an `${{ }}` expression, because a condition nobody has
+ * evaluated is not a promise that the step is hard-failing.
+ */
+export function softFailures(wf) {
+  const out = [];
+  for (const [jobName, job] of Object.entries(wf.jobs ?? {})) {
+    if (job["continue-on-error"]) out.push(jobName);
+    for (const [i, step] of (job.steps ?? []).entries()) {
+      if (step["continue-on-error"]) {
+        out.push(`${jobName}.steps[${i}] (${step.name ?? step.uses ?? step.run ?? "?"})`);
+      }
+    }
+  }
+  return out;
+}
+
+/** Job name -> its `if:`, for the jobs that have one. `if: false` is a job that
+ *  never runs, so the VALUE matters and not merely the key's presence. */
+export function jobConditions(wf) {
+  const out = {};
+  for (const [name, job] of Object.entries(wf.jobs ?? {})) {
+    if (job.if !== undefined) out[name] = job.if;
+  }
+  return out;
+}
+
+/**
+ * Does this condition confine the job to BRANCH refs?
+ *
+ * The trigger list is not enough on its own: `workflow_dispatch` has no ref
+ * restriction, and `gh workflow run --ref v1.2.3` lands `refs/tags/v1.2.3` at
+ * the environment gate — reproducing §10.1's failure through the one trigger
+ * that looks harmless. Only a job-level `if:` closes that.
+ *
+ * Accepts equality against a specific branch ref, or the `refs/heads/` prefix
+ * test. Deliberately REJECTS `startsWith(github.ref, 'refs/')`, which admits
+ * every tag while looking like a guard.
+ */
+export function guardsAgainstTagRefs(cond) {
+  const c = String(cond ?? "").replace(/\s+/g, "");
+  if (/github\.ref==['"]refs\/heads\/[^'"]+['"]/.test(c)) return true;
+  if (/startsWith\(github\.ref,['"]refs\/heads\/['"]\)/.test(c)) return true;
+  return false;
+}
+
+/** First step whose `uses:` starts with `prefix`. */
+function stepWith(wf, prefix) {
+  for (const job of Object.values(wf.jobs ?? {})) {
+    for (const step of job.steps ?? []) {
+      if (String(step.uses ?? "").startsWith(prefix)) return step;
+    }
+  }
+  return undefined;
+}
+
 /** Every `uses:` in a workflow, as written. */
 export function usesIn(wf) {
   const out = [];
@@ -411,4 +473,187 @@ test("docs.yml checks the live deployment after deploying, and the checker exist
     "the live check is not pointed at the URL the deploy reported",
   );
   assert.equal(wf.jobs["build-deploy"].outputs?.page_url?.includes("page_url"), true);
+});
+
+// ── Fix round 1: the findings review raised, each with its control ──────────
+
+test("docs.yml publishes the BUILD OUTPUT, and the live check compares the same bytes", async () => {
+  // R1. `path: site/dist` on the Pages upload was asserted by NOTHING: review
+  // mutated it to `site` — which publishes the SOURCE tree, node_modules and
+  // all, and no site at the URL — and the whole suite stayed green. The deploy
+  // path is the one thing in this workflow that cannot be caught by a test of
+  // the built output, because it decides what the built output even is.
+  const wf = await load(DOCS);
+
+  const pages = stepWith(wf, "actions/upload-pages-artifact@");
+  assert.ok(pages, "docs.yml never uploads a Pages artifact");
+  assert.equal(
+    pages.with?.path,
+    "site/dist",
+    "the Pages artifact is not the build output — this deploys the wrong directory",
+  );
+
+  // verify-live has to compare against the bytes that were DEPLOYED, so the
+  // hand-off has to actually connect. A name mismatch here makes the download
+  // fail; a path mismatch makes the checker compare against an empty dir.
+  const up = stepWith(wf, "actions/upload-artifact@");
+  assert.ok(up, "the deployed dist is never uploaded for the live check");
+  assert.equal(up.with?.path, "site/dist", "the live check is handed something other than the deploy");
+  const down = stepWith(wf, "actions/download-artifact@");
+  assert.ok(down, "verify-live never downloads the deployed dist");
+  assert.equal(
+    down.with?.name,
+    up.with?.name,
+    "the artifact uploaded and the artifact downloaded are different names — the hand-off is broken",
+  );
+  assert.equal(down.with?.path, "site/dist", "the downloaded dist does not land where the checker looks");
+});
+
+test("no job or step in docs.yml can fail quietly, and only the deploy job is conditional", async () => {
+  // R2. Review neutered the AC3 gate two ways — `continue-on-error: true` on
+  // verify-live, and `if: false` — and the suite passed both times. A gate that
+  // can be switched off without any test noticing is decoration.
+  const wf = await load(DOCS);
+
+  assert.deepEqual(
+    softFailures(wf),
+    [],
+    "something in the deploy workflow is allowed to fail without failing the run",
+  );
+
+  // Exactly one job may carry an `if:`, and it is the ref guard on the deploy.
+  // Anything else conditional is a job that might silently not run.
+  assert.deepEqual(
+    Object.keys(jobConditions(wf)).sort(),
+    ["build-deploy"],
+    "an unexpected job in docs.yml is conditional — a job that can skip is a check that can vanish",
+  );
+  const verify = Object.entries(wf.jobs).find(([, j]) =>
+    (j.steps ?? []).some((s) => /check-live-links\.mjs/.test(String(s.run ?? ""))),
+  );
+  assert.equal(
+    verify[1].if,
+    undefined,
+    "the live check is conditional — AC3 must not be skippable",
+  );
+});
+
+test("soft-failure control: the detector fires on every shape of swallowed failure", () => {
+  // Positives.
+  const jobLevel = { jobs: { a: { "continue-on-error": true, steps: [] } } };
+  assert.deepEqual(softFailures(jobLevel), ["a"]);
+
+  const stepLevel = {
+    jobs: { a: { steps: [{ name: "ok" }, { name: "soft", "continue-on-error": true }] } },
+  };
+  assert.equal(softFailures(stepLevel).length, 1);
+  assert.match(softFailures(stepLevel)[0], /steps\[1\]/);
+
+  // An expression is not a promise. Nobody has evaluated it here, so it counts.
+  const expr = { jobs: { a: { steps: [{ run: "x", "continue-on-error": "${{ github.event_name }}" }] } } };
+  assert.equal(expr.jobs.a.steps.length, 1);
+  assert.equal(softFailures(expr).length, 1);
+
+  // Near misses that must NOT fire: explicitly hard-failing, and absent.
+  assert.deepEqual(softFailures({ jobs: { a: { "continue-on-error": false, steps: [] } } }), []);
+  assert.deepEqual(softFailures({ jobs: { a: { steps: [{ run: "x", "continue-on-error": false }] } } }), []);
+  assert.deepEqual(softFailures({ jobs: { a: { steps: [{ run: "x" }] } } }), []);
+  assert.deepEqual(softFailures({}), []);
+});
+
+test("docs.yml cannot deploy from a tag ref — including via workflow_dispatch", async () => {
+  // R3. The trigger list bans tags, and the existing test above proves it. But
+  // `workflow_dispatch` accepts ANY ref: `gh workflow run docs.yml --ref v1.0.0`
+  // is a supported invocation, and review pointed out that the negative control
+  // for the tag-trigger detector explicitly whitelists `workflow_dispatch` —
+  // so the one trigger that can carry a tag was the one nothing checked.
+  const wf = await load(DOCS);
+  const deploy = wf.jobs["build-deploy"];
+  assert.ok(deploy, "docs.yml has no build-deploy job");
+  assert.ok(
+    guardsAgainstTagRefs(deploy.if),
+    `build-deploy does not confine itself to branch refs (if: ${deploy.if}) — ` +
+      "a dispatch against a tag would reach the environment gate and fail there",
+  );
+});
+
+test("ref-guard control: the detector accepts real guards and rejects lookalikes", () => {
+  // Positives — both spellings that actually exclude tags.
+  assert.equal(guardsAgainstTagRefs("github.ref == 'refs/heads/main'"), true);
+  assert.equal(guardsAgainstTagRefs("github.ref=='refs/heads/main'"), true);
+  assert.equal(guardsAgainstTagRefs('github.ref == "refs/heads/main"'), true);
+  assert.equal(guardsAgainstTagRefs("startsWith(github.ref, 'refs/heads/')"), true);
+
+  // THE KEY NEAR MISS. This looks like a ref guard, reads like a ref guard, and
+  // admits every tag in the repository. If the detector accepts this it is not
+  // a gate.
+  assert.equal(guardsAgainstTagRefs("startsWith(github.ref, 'refs/')"), false);
+
+  // Other lookalikes.
+  assert.equal(guardsAgainstTagRefs("github.ref != 'refs/tags/v1'"), false);
+  assert.equal(guardsAgainstTagRefs("github.event_name == 'push'"), false);
+  assert.equal(guardsAgainstTagRefs("startsWith(github.ref, 'refs/tags/')"), false);
+  assert.equal(guardsAgainstTagRefs(undefined), false);
+  assert.equal(guardsAgainstTagRefs(""), false);
+});
+
+test("an in-flight Pages deploy is allowed to finish; a superseded PR build is not", async () => {
+  // O2, and a DELIBERATE DEVIATION FROM PROPOSAL §10.2, which prescribes
+  // `cancel-in-progress: true` for the deploy. Ruled in Phase 2 review and
+  // asserted here so that a later phase reading §10.2 cannot helpfully restore
+  // `true` without this going red and pointing at the reason. With `true`, a
+  // second push to main inside the window kills run #1 mid-`deploy-pages` or
+  // inside verify-live's retry window: a deployment in flight and an AC3 check
+  // that never reported. A cancelled run is neither green nor red.
+  const docs = await load(DOCS);
+  assert.equal(docs.concurrency?.group, "pages");
+  assert.equal(
+    docs.concurrency?.["cancel-in-progress"],
+    false,
+    "a running Pages DEPLOY can now be cancelled part-way — see the comment at the " +
+      "concurrency block in docs.yml before changing this back",
+  );
+
+  // The other direction, so this is a statement about the trade and not a
+  // blanket preference: superseding a queued PR BUILD is cheap and correct.
+  const ci = await load(SITE_CI);
+  assert.equal(
+    ci.concurrency?.["cancel-in-progress"],
+    true,
+    "PR builds no longer supersede each other — stale runs will pile up",
+  );
+  assert.notEqual(
+    ci.concurrency?.group,
+    docs.concurrency?.group,
+    "the PR workflow shares a concurrency group with the deploy — a PR would cancel a deploy",
+  );
+});
+
+test("every job in docs.yml has a timeout, and the live checker stays inside it", async () => {
+  // O6. The live check retries against a site that may not be up yet. Against a
+  // server that accepts connections and never answers, per-request timeouts
+  // alone do not bound the run, and a wedged job holds the `pages` concurrency
+  // group — which, with cancel-in-progress now false, means the NEXT deploy
+  // waits behind it rather than replacing it. The two settings are related.
+  const wf = await load(DOCS);
+  for (const [name, job] of Object.entries(wf.jobs)) {
+    const t = job["timeout-minutes"];
+    assert.equal(typeof t, "number", `job ${name} has no timeout-minutes — it can hang for 6 hours`);
+    assert.ok(t <= 30, `job ${name} has a ${t}-minute timeout, which is not a bound worth having`);
+  }
+
+  // The script's own budget must expire BEFORE the runner kills the job, or the
+  // failure arrives as a killed job with no diagnosis instead of a report.
+  const src = await raw(join(siteRoot, "scripts", "check-live-links.mjs"));
+  const m = src.match(/const TOTAL_BUDGET_MS = (\d+) \* 60_000/);
+  assert.ok(m, "check-live-links.mjs no longer declares an overall budget in minutes");
+  const budgetMinutes = Number(m[1]);
+  const verify = Object.entries(wf.jobs).find(([, j]) =>
+    (j.steps ?? []).some((s) => /check-live-links\.mjs/.test(String(s.run ?? ""))),
+  );
+  assert.ok(
+    budgetMinutes < verify[1]["timeout-minutes"],
+    `the checker's ${budgetMinutes}-minute budget does not fit inside verify-live's ` +
+      `${verify[1]["timeout-minutes"]}-minute timeout — the runner would kill it first`,
+  );
 });

@@ -101,6 +101,15 @@ async function tempParent() {
  * real package — so note what the build actually writes into `node_modules`:
  * `.astro` and `.vite`, both of which it CREATES. New files get new inodes and
  * touch nothing shared. Nothing in the build rewrites a package file in place.
+ *
+ * THE INVARIANT THAT MAKES THAT SAFE IS A PROPERTY OF THE TOOLCHAIN, NOT OF
+ * THIS FILE (review O4). It holds for Astro, Vite and Starlight as pinned, and
+ * no counterexample was found. But any future dependency that rewrites a file
+ * under `node_modules` IN PLACE during a build — as opposed to creating a new
+ * one, or writing-then-renaming, both of which break the link harmlessly —
+ * writes straight through into the developer's real install. On CI that tree is
+ * disposable; on a laptop it is their `npm ci`. If you are ever staring at a
+ * `node_modules` that changed without you touching it, this is the thread.
  */
 async function privateNodeModules(dest) {
   const src = join(siteRoot, "node_modules");
@@ -111,6 +120,13 @@ async function privateNodeModules(dest) {
   } catch {
     // BSD cp, or a hard link that could not be made. Correct but slow; better
     // a slow suite than a suite that quietly stops covering the build.
+    //
+    // `dest` MUST be removed first (review O3). GNU `cp -a --link` creates the
+    // destination and THEN fails per-entry on a cross-device link, so by the
+    // time we get here `dest` usually exists and is partially populated — and
+    // `cp -a src dest` onto an existing directory copies INTO it, producing
+    // `node_modules/node_modules/...` and a tree that resolves nothing.
+    await rm(dest, { recursive: true, force: true });
     await run("cp", ["-a", src, dest]);
   }
   // Each case must start from a cold cache; a copied one would bleed state.
