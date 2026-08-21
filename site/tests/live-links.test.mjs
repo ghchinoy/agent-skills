@@ -25,6 +25,7 @@ import {
   DEFAULT_URL,
   NEGATIVE_CONTROL,
   cacheThrough,
+  canonicalOf,
   classify,
   idsIn,
   liveUrlForFile,
@@ -38,7 +39,7 @@ import {
   sha256,
   summaryLine,
 } from "../scripts/check-live-links.mjs";
-import { BASE, dist, distContentPages, siteRoot, walk } from "./_helpers.mjs";
+import { BASE, dist, distContentPages, read, siteRoot, walk } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -566,5 +567,40 @@ test("the budget the run REPORTS is the budget the run was GIVEN (F6)", async ()
     out,
     /\b15-minute\b/,
     `the run reported the DEFAULT budget while running on a different one:\n${out}`,
+  );
+});
+
+test("DEFAULT_URL closes through the BUILT artifact, not through a second copy of itself", async () => {
+  // F9, THE HALF THAT MAKES THE FIX A COUPLING RATHER THAN A RELOCATION.
+  //
+  // The import moved DEFAULT_URL onto src/site.config.mjs, which is the right
+  // source — but on its own that is a literal in a new place, and the test
+  // above still compares it against the suite's own hard-coded twin. Two
+  // hand-written strings agreeing proves only that two people typed the same
+  // thing; it cannot see them drift together away from the source.
+  //
+  // This closes the loop the way the BASE/ORIGIN duplication comment says the
+  // other two mirrors close it: through something the BUILD produced. Astro
+  // emits dist/404.html's canonical from `site` and `base` in astro.config.mjs,
+  // by a code path sharing no line with this script. If site.config.mjs and
+  // astro.config.mjs ever disagree, or the script stops deriving from
+  // site.config.mjs, the two sides move independently and this fails.
+  //
+  // NOT ASSERTED: that either value is the URL GitHub Pages actually serves.
+  // Nothing here can know that before a deploy; AC3 measures it after.
+  const canonical = canonicalOf(await read(join(dist, "404.html")));
+  assert.ok(canonical, "dist/404.html declares no canonical — the oracle is absent, not passing");
+
+  // DEFAULT_URL is the site root with a trailing slash, so the error document's
+  // own canonical is exactly it plus `404/`. Compared whole rather than
+  // component-wise: origin and base are both derived from the same two
+  // constants, so checking them separately would report one disagreement twice
+  // and could pass on a URL that reassembled wrongly.
+  assert.equal(
+    canonical,
+    `${DEFAULT_URL}404/`,
+    "the URL the checker would fetch under and the URL the build wrote into its own " +
+      "pages are not the same site — src/site.config.mjs and astro.config.mjs disagree, " +
+      "or the checker stopped deriving from site.config.mjs",
   );
 });

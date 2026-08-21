@@ -717,3 +717,80 @@ test("the SCRIPT stops the run, not the job timeout", async () => {
     "the --deadline-minutes default is not the budget this test just checked",
   );
 });
+
+test("the ref that DEPLOYS runs the same suite the pull request runs", async () => {
+  // FOUND BY THE INDEPENDENT DESIGN READ, AND IT IS STRUCTURAL RATHER THAN
+  // TEXTUAL. Every other test in this file asks whether a gate is correct. This
+  // one asks whether the gate is on the path.
+  //
+  // `main` has no branch protection and no rulesets — the design read checked
+  // the API rather than assuming — and `site-ci.yml` triggers only on
+  // `pull_request`. So nothing required the suite to have RUN on the commit
+  // docs.yml deploys. A direct push to `main`, an admin merge, or a merge whose
+  // paths filter did not match, each reaches `deploy-pages` having executed
+  // zero tests. Two rounds of gate-building sat on a path the deploy did not
+  // traverse, and every one of those gates was individually green.
+  //
+  // Repository settings are the owner's. This asserts the part that is ours.
+  const docs = await load(DOCS);
+  const ci = await load(SITE_CI);
+
+  const testCmd = (j) =>
+    (j.steps ?? []).find((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
+
+  const ciJob = Object.values(ci.jobs).find((j) => testCmd(j));
+  assert.ok(ciJob, "site-ci.yml no longer runs `npm test` — this test's reference point is gone");
+
+  // Find the deploying job the same way test 22 finds the checking job: by what
+  // it DOES, not by its name. A job rename must not retire this.
+  const deployers = Object.entries(docs.jobs).filter(([, j]) =>
+    (j.steps ?? []).some((s) => /actions\/deploy-pages@/.test(String(s.uses ?? ""))),
+  );
+  assert.equal(deployers.length, 1, `expected exactly one deploying job, found ${deployers.length}`);
+  const [deployName, deployJob] = deployers[0];
+
+  const steps = deployJob.steps ?? [];
+  const testAt = steps.findIndex((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? "")));
+  assert.ok(
+    testAt >= 0,
+    `${deployName} deploys to Pages without running the suite on the ref it deploys. ` +
+      `site-ci.yml is pull_request-only and main has no required checks, so nothing else ` +
+      `guarantees these tests ran against this commit.`,
+  );
+
+  // ORDER, NOT MERE PRESENCE. A test step after deploy-pages is a detector, not
+  // a gate, and it would satisfy a presence-only assertion perfectly.
+  const deployAt = steps.findIndex((s) => /actions\/deploy-pages@/.test(String(s.uses ?? "")));
+  const configureAt = steps.findIndex((s) => /actions\/configure-pages@/.test(String(s.uses ?? "")));
+  assert.ok(
+    testAt < deployAt,
+    `${deployName} runs the suite AFTER deploying — that detects a bad deploy, it does not ` +
+      `prevent one`,
+  );
+  assert.ok(
+    configureAt < 0 || testAt < configureAt,
+    `${deployName} runs the suite after Configure Pages — a red suite would leave Pages ` +
+      `deployment state already touched`,
+  );
+
+  // SAME COMMAND, not merely some command containing the word test. Two gates
+  // running different subsets is a gate whose coverage nobody can state, and
+  // the failure would be silent: both green, one of them narrower.
+  assert.equal(
+    String(steps[testAt].run).trim(),
+    String(ciJob.steps.find((s) => /(^|&&|;|\s)npm test(\s|$)/.test(String(s.run ?? ""))).run).trim(),
+    "the deploy path and the pull-request path run DIFFERENT test commands",
+  );
+  assert.equal(
+    steps[testAt]["working-directory"],
+    "site",
+    "the suite on the deploy path runs from the wrong directory",
+  );
+
+  // The suite reads dist/, so a gate placed before the build tests nothing.
+  const buildAt = steps.findIndex((s) => /npm run build/.test(String(s.run ?? "")));
+  assert.ok(
+    buildAt >= 0 && buildAt < testAt,
+    "the suite runs before the build, so it would assert against an absent or stale dist/",
+  );
+});

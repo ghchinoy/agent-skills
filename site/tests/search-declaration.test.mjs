@@ -38,7 +38,8 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EXPECTED_ROUTES, dist, read, siteRoot } from "./_helpers.mjs";
+import { EXPECTED_ROUTES, BASE, dist, read, siteRoot, walk } from "./_helpers.mjs";
+import { liveUrlForFile } from "../scripts/check-live-links.mjs";
 
 /**
  * Is site search DECLARED on?
@@ -212,4 +213,237 @@ test("CONTROL: the declaration reader distinguishes on from off", () => {
     "the reader was fooled by a comment mentioning pagefind and false",
   );
   assert.equal(searchDeclaredOn("// see docs: pagefind\nconst x = false;\nstarlight({})"), true);
+});
+
+/**
+ * The source text of one expression starting at `at`, ending at the first comma
+ * or closing bracket that is NOT inside a nested bracket, string or regex.
+ *
+ * A plain `/[^,}]+/` is not good enough and the failure is not hypothetical:
+ * the real value is `` `/agent-skills`.replace(/\/$/,``)+`/pagefind/` `` and the
+ * comma inside that regex literal truncates it to something that does not
+ * parse. Worse than not parsing, a slightly different minifier output could
+ * truncate to `` `/agent-skills` `` — which parses, yields a string, and is the
+ * WRONG string. A reader that can be wrong quietly is the thing this file
+ * exists to prevent, so the scan is real rather than approximate.
+ */
+function balancedExpression(source, at) {
+  const skipQuoted = (i) => {
+    const q = source[i];
+    for (i += 1; i < source.length; i += 1) {
+      if (source[i] === "\\") i += 1;
+      else if (source[i] === q) return i + 1;
+    }
+    return source.length;
+  };
+  const skipRegex = (i) => {
+    let inClass = false;
+    for (i += 1; i < source.length; i += 1) {
+      if (source[i] === "\\") i += 1;
+      else if (source[i] === "[") inClass = true;
+      else if (source[i] === "]") inClass = false;
+      else if (source[i] === "/" && !inClass) {
+        i += 1;
+        while (i < source.length && /[a-z]/.test(source[i])) i += 1;
+        return i;
+      }
+    }
+    return source.length;
+  };
+
+  let i = at;
+  let depth = 0;
+  let prev = "";
+  while (i < source.length) {
+    const c = source[i];
+    if (c === "'" || c === '"' || c === "`") {
+      i = skipQuoted(i);
+      prev = c;
+      continue;
+    }
+    // A `/` is a regex only where an operand may begin. After an identifier or
+    // a closing bracket it is division, and treating that as a regex would
+    // swallow the rest of the file.
+    if (c === "/" && (prev === "" || "(,=:[!&|?{};+-*%~^<>".includes(prev))) {
+      i = skipRegex(i);
+      prev = "/";
+      continue;
+    }
+    if ("([{".includes(c)) depth += 1;
+    else if (")]}".includes(c)) {
+      if (depth === 0) break;
+      depth -= 1;
+    } else if (c === "," && depth === 0) break;
+    if (!/\s/.test(c)) prev = c;
+    i += 1;
+  }
+  return source.slice(at, i).trim();
+}
+
+/**
+ * The bundle path the SEARCH LOADER computes at runtime, read out of the built
+ * bundle rather than out of our own configuration.
+ *
+ * Starlight compiles the pagefind location into `dist/_astro/Search.*.js` as a
+ * `bundlePath:` option whose value is an expression over the configured base —
+ * today `` `/agent-skills`.replace(/\/$/,``)+`/pagefind/` ``. Evaluating the
+ * expression rather than pattern-matching its current shape is deliberate: the
+ * point is to compute what the CONSUMER computes, and a regex that extracted
+ * only the leading literal would agree with the checker while the consumer
+ * disagreed with both.
+ *
+ * THROWS rather than returns null when it cannot find or evaluate the
+ * expression. A Starlight upgrade that renames the option must fail this test
+ * loudly; a soft return would turn the coupling into a skip, which is the
+ * "gate that cannot fire" shape the whole suite is written against, and the
+ * skip would arrive exactly when the upgrade made the check most necessary.
+ */
+export function bundlePathFromBuiltLoader(source, where = "the built search loader") {
+  const key = /bundlePath\s*:\s*/.exec(source);
+  const m = key && [null, balancedExpression(source, key.index + key[0].length)];
+  if (!m) {
+    throw new Error(
+      `${where} declares no bundlePath — the search loader no longer states where it fetches ` +
+        `the index from, so nothing here can be compared against the checker`,
+    );
+  }
+  let value;
+  try {
+    value = new Function(`return (${m[1]});`)();
+  } catch (err) {
+    throw new Error(
+      `${where} computes bundlePath from something this test cannot evaluate ` +
+        `(${m[1].trim()}): ${err.message}`,
+    );
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${where} computes a non-string bundlePath: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+test("the search loader fetches from the path the checker verifies (AC3 consumer gap)", async () => {
+  // THE GAP THE INDEPENDENT DESIGN READ FOUND IN THE ARTIFACT SWEEP, CLOSED FOR
+  // 19 OF THE 32 NON-HTML FILES.
+  //
+  // The sweep proves every deployed file is present and byte-faithful AT THE
+  // URL THE CHECKER DERIVES from its path. It does not prove any consumer asks
+  // for that URL. For the 7 HTML pages the two coincide, because the crawl
+  // reads the consumer's own markup. For the other 32 files THE ONLY REQUESTER
+  // IN THE SYSTEM IS THE CHECKER ITSELF — it derives a URL, fetches it, and
+  // agrees with itself.
+  //
+  // So a base-path regression confined to the search loader ships all 39 files,
+  // serves all 39 byte-identical at the checker's URLs, passes every control in
+  // this repository, and leaves search dead. That is the same outcome the
+  // artifact sweep was commissioned to prevent, arriving through a cause nobody
+  // enumerated: the fix was scoped to the DEMONSTRATION (drop pagefind) rather
+  // than to the cause set (everything that produces dead search).
+  //
+  // DENOMINATOR, STATED. 39 dist files = 7 HTML + 32 non-HTML. Of the 32, 19
+  // are pagefind/* and all 19 hang off this one literal — pagefind.js resolves
+  // the entry JSON, the meta, the index, the fragments and the wasm relative to
+  // bundlePath, and the entry-to-meta-to-fragment chain is already coupled by
+  // the test at the top of this file. Of the remaining 13, ten _astro assets
+  // and favicon.svg are referenced from HTML markup the crawl reads, so for
+  // those the two derivations already coincide. THE RESIDUE IS TWO FILES: the
+  // sitemaps, whose consumer is a search engine we cannot observe from here.
+  // 19 of 32 closed, 11 of 32 already covered by the crawl, 2 of 32 open.
+  //
+  // WHAT THIS DOES NOT PROVE, and it is strictly narrower than AC3: that the
+  // loader RUNS, or that pagefind resolves anything at runtime. A search box
+  // wired to the right prefix and broken for any other reason passes this.
+  const loaders = (await walk(dist)).filter(
+    (f) => /[\\/]_astro[\\/]Search\..*\.js$/.test(f),
+  );
+  assert.equal(
+    loaders.length,
+    1,
+    `expected exactly one built search loader in dist/_astro, found ${loaders.length} — ` +
+      `the extraction below would otherwise be reading an arbitrary one of several`,
+  );
+
+  const bundlePath = bundlePathFromBuiltLoader(await read(loaders[0]), loaders[0]);
+
+  // THE CHECKER'S SIDE, taken from the function the artifact sweep actually
+  // calls rather than reassembled here. Reassembling it would make this a
+  // comparison between two of our own copies, which is the F9 defect wearing a
+  // different hat.
+  const checkerUrl = liveUrlForFile("pagefind/pagefind.js", BASE);
+  const checkerDir = `${checkerUrl.slice(0, checkerUrl.lastIndexOf("/"))}/`;
+
+  assert.equal(
+    bundlePath,
+    checkerDir,
+    `the search loader will fetch its index from ${bundlePath} and the artifact sweep ` +
+      `verifies it at ${checkerDir}. Every file would be present, byte-identical and ` +
+      `green at the checker's URL, and search would be dead at the consumer's.`,
+  );
+
+  // ...and the consumer's own path has to land on real artifact bytes. The
+  // assertion above couples two derivations; this one anchors the pair to the
+  // build, so the two agreeing about a path that ships nothing still fails.
+  const rel = bundlePath.slice(BASE.length + 1);
+  assert.ok(
+    existsSync(join(dist, rel, "pagefind.js")),
+    `the loader and the checker agree on ${bundlePath}, and no pagefind.js was built there`,
+  );
+});
+
+test("CONTROL: the bundlePath reader fails loudly rather than skipping", () => {
+  // Each of these is a way the extraction could go quiet and take the coupling
+  // with it. A soft failure here is worse than no test, because it reports
+  // green about a comparison it never made.
+  assert.throws(
+    () => bundlePathFromBuiltLoader("initSearch({ baseUrl: `/x` })"),
+    /declares no bundlePath/,
+    "a loader with no bundlePath was accepted",
+  );
+  assert.throws(
+    () => bundlePathFromBuiltLoader("initSearch({ bundlePath: someRuntimeVariable })"),
+    /cannot evaluate/,
+    "an unevaluatable expression was accepted",
+  );
+  assert.throws(
+    () => bundlePathFromBuiltLoader("initSearch({ bundlePath: 0 })"),
+    /non-string/,
+    "a non-string bundlePath was accepted",
+  );
+
+  // The positive half: the real shape, and a DIFFERENT real shape, both read
+  // correctly. Without this the three throws above could all be passing because
+  // the reader throws unconditionally.
+  assert.equal(
+    bundlePathFromBuiltLoader("x({baseUrl:`/agent-skills`,bundlePath:`/agent-skills`.replace(/\\/$/,``)+`/pagefind/`,showImages:!1})"),
+    "/agent-skills/pagefind/",
+  );
+  assert.equal(
+    bundlePathFromBuiltLoader('x({bundlePath:"/other/pagefind/"})'),
+    "/other/pagefind/",
+    "the reader only recognises this site's current value — it is matching, not evaluating",
+  );
+
+  // THE TRUNCATION CASE, WHICH IS THE ONE THAT WOULD HAVE BEEN WRONG QUIETLY.
+  // The comma lives inside a regex literal. A naive `[^,}]+` stops there and
+  // yields either a parse error or, on a different minifier output, the bare
+  // base path — a string, plausible, and missing `/pagefind/`. The assertion
+  // that matters is not that this throws; it is that it returns the RIGHT
+  // string rather than a shorter one.
+  assert.equal(
+    bundlePathFromBuiltLoader("x({a:`/b`,bundlePath:`/base`.replace(/,$/,``)+`/pagefind/`,c:1})"),
+    "/base/pagefind/",
+    "the expression scanner truncated at a comma inside a regex literal",
+  );
+  // Nested calls and brackets, so a depth-blind scanner cannot pass.
+  assert.equal(
+    bundlePathFromBuiltLoader("x({bundlePath:[`/a`,`/b`].join(``)+`/pagefind/`,z:2})"),
+    "/a/b/pagefind/",
+    "the expression scanner stopped at a comma inside a nested array",
+  );
+  // Division after an identifier must not be read as a regex opening.
+  assert.equal(
+    bundlePathFromBuiltLoader("x({bundlePath:`/p${6/2}/`,z:2})"),
+    "/p3/",
+    "the scanner mistook a division for a regex literal",
+  );
 });

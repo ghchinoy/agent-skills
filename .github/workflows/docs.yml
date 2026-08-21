@@ -19,8 +19,28 @@
 # only ref this environment will ever admit, and the guard below mirrors that
 # exactly rather than merely excluding tags.
 #
-# SCOPE: this workflow deploys. It does not test. `site-ci.yml` is the gate that
-# runs `npm test` on the pull request, before anything reaches `main`.
+# SCOPE, CORRECTED. This workflow used to say "it deploys, it does not test",
+# and delegated testing to `site-ci.yml` on the pull request. That sentence was
+# true about this file and wrong about the system, and the design read found the
+# hole: `main` carries NO branch protection and NO rulesets — checked against the
+# API, not assumed — and `site-ci.yml` triggers only on `pull_request`. So
+# nothing whatsoever required the suite to have RUN on the commit this workflow
+# deploys. A direct push to `main`, an admin merge, or a merge of a pull request
+# whose paths filter did not match all deployed content, each reaches
+# `deploy-pages` having executed zero tests.
+#
+# Two rounds of gate-building — the artifact sweep, search-declaration,
+# EXPECTED_ROUTES — sat on a path the deploy did not traverse. The gates were
+# real and the deploy was not obliged to pass them.
+#
+# Repository SETTINGS are the owner's and are not ours to change, so this is
+# fixed where we do have authority: the deploy job now runs the same `npm test`
+# as `site-ci.yml`, on the deploying ref, before Pages is configured or anything
+# is uploaded. Branch protection would be the better instrument and this is the
+# one available to a workflow file. `site-ci.yml` keeps its job: it fails on the
+# pull request, attributed to the change, which is earlier and more useful.
+# tests/workflows.test.mjs asserts this step exists, precedes the deploy, and
+# runs the identical command.
 name: docs
 
 on:
@@ -101,6 +121,16 @@ jobs:
 
       - name: Build the site
         run: npm run build
+        working-directory: site
+
+      # THE GATE, ON THE PATH THAT DEPLOYS. Placed after the build because most
+      # of the suite asserts on the bytes in dist/, and BEFORE Configure Pages
+      # so a red suite stops the run without having touched the Pages
+      # deployment state at all. Same command as site-ci.yml, deliberately: two
+      # gates running different subsets is a gate whose coverage nobody can
+      # state.
+      - name: Type-check and run the guardrail suite
+        run: npm test
         working-directory: site
 
       - name: Configure Pages
