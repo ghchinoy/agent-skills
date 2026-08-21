@@ -13,10 +13,14 @@
 //   run the REAL build,
 //   assert the build fails, naming file, line and target.
 //
-// It is the slowest suite by a wide margin (three full builds, ~10s each, run
-// concurrently). That cost buys the only assertion in the project that covers
-// the whole pipeline end to end, and the defect it would have caught reached
-// two shipped files and `dist/`. Keep it.
+// It is the slowest suite by a wide margin (FIVE full builds, ~10s each, all
+// started concurrently at module load). That cost buys the only assertion in
+// the project that covers the whole pipeline end to end, and the defect it
+// would have caught reached two shipped files and `dist/`. Keep it.
+//
+// (The count above said "three" for two phases while `cases` held five — the
+// Phase 1 reviewer's FYI-2. Corrected here rather than left to rot in the one
+// file whose job is to stop things rotting.)
 //
 // SCOPE NOTE for whoever adds to this: the value here is coverage of the PATH,
 // not of the rule. One case per gate is enough; the rules themselves are
@@ -25,10 +29,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { access, cp, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { repoRoot, siteRoot } from "./_helpers.mjs";
@@ -38,29 +42,89 @@ const run = promisify(execFile);
 const SKILL = "plugins/okf-authoring/skills/okf-author/SKILL.md";
 const BAD = "/tables/customers.md";
 
+const writable = async (dir) => {
+  try {
+    await access(dir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where the copied trees go.
+ *
+ * PREFERRED: a sibling of the repository. Not for tidiness — for the
+ * FILESYSTEM. `node_modules` is hard-linked into each copy (see below) and a
+ * hard link cannot cross a mount point, so the copy has to live on the same
+ * filesystem as the real `node_modules`. `os.tmpdir()` frequently is not:
+ * `/tmp` is its own mount on most CI images. Falls back to `tmpdir()` when the
+ * parent directory is not writable, where the hard-link attempt degrades to a
+ * real copy.
+ */
+async function tempParent() {
+  const sibling = resolve(repoRoot, "..");
+  return (await writable(sibling)) ? sibling : tmpdir();
+}
+
+/**
+ * Gives the copied tree its own `node_modules`: a real directory tree whose
+ * FILES are hard links to the real ones. Cheap (no bytes copied), private (each
+ * case gets its own `.astro` and `.vite`), and — the part that matters —
+ * entirely INSIDE the copied tree.
+ *
+ * PHASE 2 CHANGED THIS, and the reason is worth keeping.
+ *
+ * It used to mirror with per-entry SYMLINKS pointing back at the real
+ * `node_modules`. That works only when the copy and the real tree sit close
+ * enough on disk for the bundler to agree with itself about what a module is
+ * called. When they do not, every build that reaches the bundling stage dies:
+ *
+ *   No cached compile metadata found for
+ *   "/REAL/site/node_modules/@astrojs/starlight/components/Page.astro?...lang.css".
+ *   The main Astro module "/COPY/site/REAL/site/node_modules/.../Page.astro"
+ *   should have compiled and filled the metadata first.
+ *
+ * Note the second path: the real path concatenated onto the copy's root. The
+ * symlink gives one file two identities — the id the .astro module compiled
+ * under and the id its virtual CSS module is looked up under — and the lookup
+ * misses.
+ *
+ * It passed locally for a whole phase because the checkout and `os.tmpdir()`
+ * happened to be on the same filesystem there. On the first CI run, with the
+ * checkout under /home/runner/work and the copies under /tmp, four of the eight
+ * tests in this file failed. The Phase 1 reviewer's FYI-3 said to watch the
+ * first few CI runs rather than assume a local green transferred; it did not
+ * transfer, and this is why.
+ *
+ * Hard links have their own hazard — writing THROUGH one would corrupt the
+ * real package — so note what the build actually writes into `node_modules`:
+ * `.astro` and `.vite`, both of which it CREATES. New files get new inodes and
+ * touch nothing shared. Nothing in the build rewrites a package file in place.
+ */
+async function privateNodeModules(dest) {
+  const src = join(siteRoot, "node_modules");
+  try {
+    // GNU cp. `--link` hard-links regular files; -a keeps symlinks (node_modules/.bin)
+    // as symlinks, which is correct because they are relative and stay inside.
+    await run("cp", ["-a", "--link", src, dest]);
+  } catch {
+    // BSD cp, or a hard link that could not be made. Correct but slow; better
+    // a slow suite than a suite that quietly stops covering the build.
+    await run("cp", ["-a", src, dest]);
+  }
+  // Each case must start from a cold cache; a copied one would bleed state.
+  await rm(join(dest, ".astro"), { recursive: true, force: true });
+  await rm(join(dest, ".vite"), { recursive: true, force: true });
+}
+
 /**
  * Copies the repo to a temp dir, applies `mutate`, and runs a real build.
- *
- * `node_modules` is MIRRORED — a real directory whose entries are symlinks to
- * the real ones — rather than copied or symlinked whole.
- *
- *   - copying is out: 376MB per case, five cases
- *   - symlinking the whole directory is what I did first, and it is wrong.
- *     Astro writes its content-layer cache to `node_modules/.astro`, so five
- *     concurrent builds sharing one symlink race over one cache. It produced
- *     exactly one intermittent failure before I noticed, which is the worst
- *     possible amount. Running them sequentially would not have fixed it
- *     either — it would have traded the race for stale cache bleeding from
- *     one case into the next, which is harder to see and just as wrong.
- *
- * Mirroring gives each case a writable `node_modules` of its own for `.astro`
- * and `.vite`, while the packages themselves are shared and resolved from
- * their real paths.
  *
  * @returns {Promise<{ok: boolean, output: string, root: string}>}
  */
 async function buildWith(mutate) {
-  const root = await mkdtemp(join(tmpdir(), "site-e2e-"));
+  const root = await mkdtemp(join(await tempParent(), ".site-e2e-"));
   await cp(repoRoot, root, {
     recursive: true,
     filter: (src) =>
@@ -68,15 +132,10 @@ async function buildWith(mutate) {
       !src.includes(`${"/"}.git${"/"}`) &&
       !src.endsWith(`${"/"}.git`) &&
       !src.includes(`${"/"}dist`) &&
-      !src.includes(`${"/"}.astro`),
+      !src.includes(`${"/"}.astro`) &&
+      !src.includes(`${"/"}.site-e2e-`),
   });
-  const mods = join(root, "site", "node_modules");
-  await mkdir(mods, { recursive: true });
-  for (const ent of await readdir(join(siteRoot, "node_modules"))) {
-    // Skip the caches themselves: each case creates its own.
-    if (ent === ".astro" || ent === ".vite") continue;
-    await symlink(join(siteRoot, "node_modules", ent), join(mods, ent));
-  }
+  await privateNodeModules(join(root, "site", "node_modules"));
   await mutate(root);
   try {
     const { stdout, stderr } = await run("npm", ["run", "build"], {
@@ -114,8 +173,9 @@ async function append(root, relPath, text) {
 /** Set by the `afterIndentedFence` plant; read by the test that awaits it. */
 let plantedLine = null;
 
-// The builds are independent, so they run concurrently and each test awaits
-// the one it needs. Sequential would multiply the wall clock for nothing.
+// The five builds are independent, so they all start here at module load and
+// each test awaits the one it needs. Sequential would multiply the wall clock
+// for nothing.
 const cases = {
   // POSITIVE 1 — a bad link in an ordinary region. This one always worked;
   // it is here so a failure in the other two can be attributed to the region
@@ -335,6 +395,34 @@ test("E2E: a non-string metadata value fails with a diagnostic naming file and l
     output,
     /Invalid content entry frontmatter/,
     "Astro's generic frontmatter error is still what the developer sees",
+  );
+});
+
+test("E2E control: the copied tree resolves its packages INSIDE itself", async () => {
+  // The regression test for the symlink-mirroring defect described on
+  // `privateNodeModules`. Every positive in this file asserts a FAILING build,
+  // so a harness that could no longer build anything would still satisfy them;
+  // the clean-build control below catches that, but only after the fact and
+  // with a bundler stack trace that says nothing about why.
+  //
+  // This says why. If `node_modules` ever points back out of the copy again,
+  // this fails first and names the mechanism.
+  const { root } = await cases.insideFence;
+  const inside = await realpath(root);
+  for (const pkg of ["astro", "@astrojs/starlight", "yaml"]) {
+    const real = await realpath(join(root, "site", "node_modules", pkg, "package.json"));
+    assert.ok(
+      real.startsWith(inside),
+      `${pkg} resolves to ${real}, outside the copied tree at ${inside} — ` +
+        `the bundler will give that file two identities and the build will die ` +
+        `with "No cached compile metadata found"`,
+    );
+  }
+  // …and the control for THIS control: the real tree is genuinely elsewhere, so
+  // the assertion above is not trivially true of any two paths.
+  assert.ok(
+    !(await realpath(join(siteRoot, "node_modules", "astro"))).startsWith(inside),
+    "the copy and the real site are the same directory; this test proves nothing",
   );
 });
 
