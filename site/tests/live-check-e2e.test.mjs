@@ -80,6 +80,10 @@ const mimeFor = (p) => MIME[p.slice(p.lastIndexOf("."))] ?? "application/octet-s
  *   route into these pages.
  */
 async function serveDist(opts = {}) {
+  /** Every pathname the server was asked for, in arrival order, including
+   *  duplicates. The coverage claim is measured by counting server hits, so
+   *  the fixture has to be able to count them. */
+  const hits = [];
   const files = await walk(dist);
   const byUrlPath = new Map();
   for (const abs of files) {
@@ -95,6 +99,7 @@ async function serveDist(opts = {}) {
 
   const server = createServer(async (req, res) => {
     const { pathname } = new URL(req.url, "http://127.0.0.1");
+    hits.push(pathname);
     const hit = resolve(pathname);
     if (!hit || opts.drop?.(hit.rel)) {
       res.writeHead(404, { "content-type": "text/plain" });
@@ -121,6 +126,7 @@ async function serveDist(opts = {}) {
   const { port } = server.address();
   return {
     localOrigin: `http://127.0.0.1:${port}`,
+    hits,
     close: () => new Promise((r) => server.close(r)),
   };
 }
@@ -155,9 +161,10 @@ async function withOrigin(localOrigin, fn) {
 const run = async (opts) => {
   const srv = await serveDist(opts);
   try {
-    return await withOrigin(srv.localOrigin, () =>
+    const out = await withOrigin(srv.localOrigin, () =>
       runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
     );
+    return { ...out, hits: srv.hits };
   } finally {
     await srv.close();
   }
@@ -303,4 +310,93 @@ test("the error document's canonical is exempt, and NOTHING ELSE is", async () =
     1,
     "expected exactly one exempted reference — the error document's canonical",
   );
+});
+
+// ── the pool's two invariants, asserted against a COUNTING server ──────────
+
+test("the request cache dedupes IN-FLIGHT requests, not just completed ones", async () => {
+  // PRE-REGISTERED BY REVIEW, WITH A REPRODUCTION, BEFORE THE POOL EXISTED.
+  // The natural spelling of a memoising fetch puts an await between the has()
+  // and the set():
+  //
+  //     if (!fetched.has(url)) fetched.set(url, await get(url));
+  //
+  // Sequentially that dedupes perfectly, because there is no interleaving
+  // point — so it is not a bug until the day the calls are pooled, and then
+  // every concurrent caller for the same URL sees has() false and issues its
+  // own request. Review measured 6 logical fetches becoming 6 HTTP requests
+  // under a pool of 6, against 1 when the PROMISE is cached.
+  //
+  // This is asserted here rather than left as a comment because it fails
+  // SILENTLY. Nothing errors, no gate goes red, the counters stay plausible,
+  // and the duplicates are visible only from the server side. It is also load
+  // bearing for something outside this repository: the coverage claim is
+  // verified by counting server hits, so duplicate requests would cost the
+  // artifact sweep its denominator and make "39 of 39" unverifiable.
+  const { stats, hits } = await run();
+
+  const counts = new Map();
+  for (const p of hits) counts.set(p, (counts.get(p) ?? 0) + 1);
+  const repeated = [...counts].filter(([, n]) => n > 1);
+  assert.deepEqual(
+    repeated,
+    [],
+    `these URLs were requested more than once — the cache is storing results ` +
+      `rather than in-flight promises:\n${repeated.map(([p, n]) => `  ${n}x ${p}`).join("\n")}`,
+  );
+
+  // The counter the runtime is sized from must agree with the wire.
+  assert.equal(stats.httpRequests, hits.length, "httpRequests disagrees with actual server hits");
+  // ...and the crawl must genuinely be resolving more references than it makes
+  // requests, or this test would pass on a run that deduped by checking less.
+  assert.ok(
+    stats.refsResolved > stats.httpRequests,
+    `expected reuse: ${stats.refsResolved} references resolved via ${stats.httpRequests} requests`,
+  );
+});
+
+test("the failure list is deterministic under the pool", async () => {
+  // A pool destroys the order results ARRIVE in. It must not touch the order
+  // they are REPORTED in: attempts are diffed against each other, and a list
+  // that reshuffles between runs makes "did this change" unanswerable. The
+  // guarantee comes from evaluating in artifact order after prefetching, not
+  // from sorting — sorting would fix it too, and would scatter each page's
+  // failures across the output.
+  const broken = { corrupt: (rel) => rel.endsWith(".css") || rel.endsWith(".html") };
+  const a = await run(broken);
+  const b = await run(broken);
+  assert.ok(a.failures.length > 3, `expected several failures, got ${a.failures.length}`);
+  assert.deepEqual(a.failures, b.failures, "two identical runs produced differently-ordered lists");
+});
+
+test("a fetch that THROWS is reported as a failure, not memoised as a rejection", async () => {
+  // The promise cache is only safe if get() never rejects, and review flagged
+  // that premise as load bearing: a cached rejection replays for every later
+  // caller of that URL, and would do it for the whole run. Rather than verify
+  // the premise, the cache converts rejections at the boundary. This proves the
+  // conversion, by making fetch throw for one URL that several pages reference.
+  const srv = await serveDist();
+  const victim = `${ORIGIN}${BASE}/pagefind/pagefind.js`;
+  try {
+    const realFetch = globalThis.fetch;
+    const out = await withOrigin(srv.localOrigin, async () => {
+      const routed = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        if (String(input).startsWith(victim)) throw new Error("synthetic transport explosion");
+        return routed(input, init);
+      };
+      try {
+        return await runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist });
+      } finally {
+        globalThis.fetch = routed;
+      }
+    });
+    assert.equal(globalThis.fetch, realFetch, "fetch was not restored");
+    assert.ok(
+      out.failures.some((f) => /synthetic transport explosion/.test(f)),
+      `a throwing fetch should surface as a failure:\n${out.failures.join("\n")}`,
+    );
+  } finally {
+    await srv.close();
+  }
 });

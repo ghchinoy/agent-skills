@@ -401,18 +401,43 @@ async function get(url) {
 
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
-/** Run `fn` over `items`, at most `limit` at a time. Preserves nothing about
- *  order on purpose — callers pool the FETCHING and then evaluate in order. */
+/**
+ * Run `fn` over `items`, at most `limit` at a time.
+ *
+ * THIS FUNCTION NEVER PRODUCES A VERDICT, and that is a design constraint
+ * rather than an accident. Callers pool the FETCHING and then evaluate the
+ * results in artifact order, sequentially. Two problems that a concurrent
+ * checker normally has are therefore structurally absent rather than mitigated:
+ *
+ *   Promise.all vs allSettled. A batch that aborts on the first rejection turns
+ *   six broken assets into one reported failure — a worse instrument than a
+ *   slow one. Here nothing is reported from inside the pool, so a lost
+ *   in-flight error cannot lose a finding: the URL is simply re-awaited at its
+ *   evaluation site, from the same cached promise, and reported there. The
+ *   swallow below is what makes that true, and the sort-order guarantee too.
+ *
+ *   Determinism. A pool destroys the order results ARRIVE in. It cannot touch
+ *   the order they are READ in. Sorting the failure list afterwards would also
+ *   fix the symptom, at the cost of the page-by-page grouping that makes the
+ *   output readable; evaluating in source order keeps both. Asserted by
+ *   tests/live-check-e2e.test.mjs, which runs a multi-failure scenario twice
+ *   and requires the two failure arrays to be identical.
+ */
 async function pooled(items, limit, fn) {
   const iter = items[Symbol.iterator]();
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
     for (;;) {
       const next = iter.next();
       if (next.done) return;
-      await fn(next.value);
+      // Deliberately swallowed: see above. The result is cached either way and
+      // the caller decides what it means.
+      await Promise.resolve(fn(next.value)).catch(() => {});
     }
   });
-  await Promise.all(workers);
+  // allSettled, not all: the workers already convert their own rejections, and
+  // this is the second layer. One worker dying must not cancel the batch —
+  // N findings collapsing into one is a worse instrument than a slow one.
+  await Promise.allSettled(workers);
 }
 
 /** Content hash of a Buffer. Exported so the sweep's comparison is testable. */
@@ -435,7 +460,38 @@ export function sha256(buf) {
  */
 export async function runOnce({ liveUrl, distDir }) {
   const { origin, base } = originAndBase(liveUrl);
-  const failures = [];
+  // FINDINGS CARRY AN EXPLICIT ORDER KEY, ASSIGNED WHERE THEY ARE RAISED, and
+  // the list is sorted by it before it is returned.
+  //
+  // The pool destroys the order results ARRIVE in. Evaluating in artifact order
+  // after prefetching means nothing is currently reported from inside a pooled
+  // callback, so push order is already deterministic — but that is an invariant
+  // of how the three passes happen to be written today, and the failure mode if
+  // someone breaks it is a list that silently reshuffles between attempts.
+  // Attempts are diffed against each other; a reshuffling list makes "did this
+  // change since the last attempt" unanswerable.
+  //
+  // Keying by (pass, position within pass) rather than sorting the strings
+  // alphabetically keeps each page's findings together and the artifact sweep
+  // in artifact order, which is what makes the output readable, while making
+  // the order independent of WHEN anything completed.
+  const raised = [];
+  let rank = 0;
+  const fail = (key, msg) => {
+    raised.push({ key, rank: rank++, msg });
+    return msg;
+  };
+  /** Findings in reporting order. */
+  const report = () =>
+    raised
+      .sort((a, b) => {
+        for (let i = 0; i < Math.max(a.key.length, b.key.length); i += 1) {
+          const d = (a.key[i] ?? -1) - (b.key[i] ?? -1);
+          if (d !== 0) return d;
+        }
+        return a.rank - b.rank;
+      })
+      .map((r) => r.msg);
   // Failures that CANNOT become green by waiting, because they are computed
   // from the artifact rather than from an answer the server gave. Retrying
   // these spends the full propagation schedule — 250 seconds of sleeping — to
@@ -469,8 +525,8 @@ export async function runOnce({ liveUrl, distDir }) {
   const files = await walk(distDir);
   const htmlFiles = files.filter((f) => f.endsWith(".html"));
   if (htmlFiles.length === 0) {
-    failures.push(`no HTML files found in ${distDir} — nothing to check against`);
-    return { failures, stats };
+    fail([0, 0], `no HTML files found in ${distDir} — nothing to check against`);
+    return { failures: report(), stats };
   }
   stats.distPages = htmlFiles.length;
 
@@ -481,7 +537,31 @@ export async function runOnce({ liveUrl, distDir }) {
   // count of distinct requests this run issued.
   const fetched = new Map();
   const fetchCached = (url) => {
-    if (!fetched.has(url)) fetched.set(url, get(url));
+    // CACHE THE PROMISE, NOT THE AWAITED RESULT. Writing this as
+    // `fetched.set(url, await get(url))` puts an await between the has() and
+    // the set(): sequentially there is no interleaving point so it dedupes
+    // perfectly, and under a pool every concurrent caller for the same URL
+    // sees has() false and issues its own real request. It degrades silently —
+    // nothing fails, the counts stay plausible, and the only evidence is
+    // server-side. It would also have broken the coverage instrument that
+    // measures this script by counting server hits, so the sweep's own
+    // 39-of-39 claim would have become unverifiable with no symptom.
+    //
+    // The rejection guard is NOT decoration. Caching a promise memoises its
+    // rejection for the life of the run, so every later caller for that URL
+    // replays it. get() is written never to throw, but a cache whose
+    // correctness depends on that invariant holding in a DIFFERENT function
+    // breaks the day someone adds a line above its try block. Converting here
+    // makes the dedupe correct on its own terms.
+    if (!fetched.has(url)) {
+      fetched.set(
+        url,
+        get(url).catch((err) => ({
+          ok: false,
+          error: `request threw: ${err instanceof Error ? err.message : String(err)}`,
+        })),
+      );
+    }
     return fetched.get(url);
   };
   /** Warm the cache for a set of URLs, 8 at a time. */
@@ -503,21 +583,21 @@ export async function runOnce({ liveUrl, distDir }) {
   });
   await prefetch(pageTargets.map((t) => t.url));
 
-  for (const { file, relPath, url } of pageTargets) {
+  for (const [pageIndex, { file, relPath, url }] of pageTargets.entries()) {
     const res = await fetchCached(url);
     if (!res.ok) {
-      failures.push(`UNREACHABLE ${url} (built as ${relPath}) — ${res.error}`);
+      fail([1, pageIndex], `UNREACHABLE ${url} (built as ${relPath}) — ${res.error}`);
       reportedUrls.add(url);
       continue;
     }
     if (res.status !== 200) {
-      failures.push(`HTTP ${res.status} ${url} (built as ${relPath})`);
+      fail([1, pageIndex], `HTTP ${res.status} ${url} (built as ${relPath})`);
       reportedUrls.add(url);
       continue;
     }
     const hop = redirectVerdict(url, res.finalUrl, { origin, base });
     if (hop) {
-      failures.push(`${url} (built as ${relPath}) — ${hop}`);
+      fail([1, pageIndex], `${url} (built as ${relPath}) — ${hop}`);
       reportedUrls.add(url);
       continue;
     }
@@ -531,7 +611,8 @@ export async function runOnce({ liveUrl, distDir }) {
       verifiedUrls.add(url);
     } else {
       reportedUrls.add(url);
-      failures.push(
+      fail(
+        [1, pageIndex],
         `STALE-OR-DIFFERENT ${url} — the live bytes differ from the deployed ` +
           `artifact (${expected.length} bytes built, ${res.body.length} served). ` +
           `Usually propagation lag; if it persists, the site being served is not this build.`,
@@ -553,7 +634,7 @@ export async function runOnce({ liveUrl, distDir }) {
       .map((c) => c.url),
   );
 
-  for (const { pageUrl, html, kind, ref } of refWork) {
+  for (const [refIndex, { pageUrl, html, kind, ref }] of refWork.entries()) {
     stats.refsSeen += 1;
     const c = classify(ref, { origin, base }, pageUrl);
     if (c.verdict === "offsite") {
@@ -567,40 +648,39 @@ export async function runOnce({ liveUrl, distDir }) {
       continue;
     }
     if (c.verdict === "escapes") {
-      const msg = `${pageUrl} -> ${kind} ${ref} — ${c.reason}`;
-      failures.push(msg);
+      const msg = fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — ${c.reason}`);
       deterministic.add(msg);
       continue;
     }
     if (c.verdict === "fragment") {
       stats.fragmentsChecked += 1;
       if (!idsIn(html).has(c.fragment)) {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}"`);
+        fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}"`);
       }
       continue;
     }
     const res = await fetchCached(c.url);
     stats.refsResolved += 1;
     if (!res.ok) {
-      failures.push(`${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${c.url}: ${res.error}`);
+      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${c.url}: ${res.error}`);
       reportedUrls.add(c.url);
       continue;
     }
     if (res.status !== 200) {
-      failures.push(`${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${c.url}`);
+      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${c.url}`);
       reportedUrls.add(c.url);
       continue;
     }
     const hop = redirectVerdict(c.url, res.finalUrl, { origin, base });
     if (hop) {
-      failures.push(`${pageUrl} -> ${kind} ${ref} — ${hop}`);
+      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — ${hop}`);
       reportedUrls.add(c.url);
       continue;
     }
     if (c.fragment) {
       stats.fragmentsChecked += 1;
       if (!idsIn(res.body).has(c.fragment)) {
-        failures.push(`${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${c.url}`);
+        fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${c.url}`);
       }
     }
   }
@@ -627,7 +707,7 @@ export async function runOnce({ liveUrl, distDir }) {
   // identified. Pooled, and still evaluated in artifact order below.
   await prefetch(sweepTargets.filter((t) => !reportedUrls.has(t.url)).map((t) => t.url));
 
-  for (const { file, relPath, url } of sweepTargets) {
+  for (const [fileIndex, { file, relPath, url }] of sweepTargets.entries()) {
     const expected = await readFile(file);
 
     if (verifiedUrls.has(url)) {
@@ -642,11 +722,12 @@ export async function runOnce({ liveUrl, distDir }) {
 
     const res = await fetchCached(url);
     if (!res.ok) {
-      failures.push(`ARTIFACT ${relPath} — UNREACHABLE ${url}: ${res.error}`);
+      fail([3, fileIndex], `ARTIFACT ${relPath} — UNREACHABLE ${url}: ${res.error}`);
       continue;
     }
     if (res.status !== 200) {
-      failures.push(
+      fail(
+        [3, fileIndex],
         `ARTIFACT ${relPath} — HTTP ${res.status} at ${url}. The deploy shipped this file ` +
           `and the live site does not serve it.`,
       );
@@ -654,7 +735,7 @@ export async function runOnce({ liveUrl, distDir }) {
     }
     const hop = redirectVerdict(url, res.finalUrl, { origin, base });
     if (hop) {
-      failures.push(`ARTIFACT ${relPath} — ${hop}`);
+      fail([3, fileIndex], `ARTIFACT ${relPath} — ${hop}`);
       continue;
     }
     // HASH, not length. The brief specified "200 plus a length match"; a length
@@ -673,7 +754,8 @@ export async function runOnce({ liveUrl, distDir }) {
     // two-standards problem it was written to remove: the standard is the same
     // for all 39 files, and applying it to only 7 was the actual defect.
     if (res.digest !== sha256(expected)) {
-      failures.push(
+      fail(
+        [3, fileIndex],
         `ARTIFACT ${relPath} — served at ${url} but the bytes differ from the deployed file ` +
           `(${expected.length} bytes deployed, ${res.bytes} served). A 200 with the wrong ` +
           `content is a file that is present and broken.`,
@@ -687,43 +769,55 @@ export async function runOnce({ liveUrl, distDir }) {
   // ── 4. controls ───────────────────────────────────────────────────────────
   // Without these a run that checked nothing, or a host that answers 200 to
   // everything, would both report success.
+  //
+  // The negative control is issued FIRST, so that every request this run can
+  // make has been made before any counter is read or asserted on. Reading
+  // httpRequests before it made the zero-requests control assert on a figure
+  // the run had not finished producing.
+  const control = await fetchCached(`${origin}${base}/${NEGATIVE_CONTROL}`);
   stats.httpRequests = fetched.size;
+
   if (stats.refsResolved === 0) {
-    failures.push("CONTROL: zero references were resolved — the reference extractor matched nothing");
+    fail([4, 0], "CONTROL: zero references were resolved — the reference extractor matched nothing");
   }
   if (stats.httpRequests === 0) {
-    failures.push("CONTROL: zero HTTP requests were issued — this run checked nothing");
+    fail([4, 1], "CONTROL: zero HTTP requests were issued — this run checked nothing");
   }
   // The exemption is allowed to exist and is NOT allowed to spread.
   if (stats.exemptions > 1) {
-    failures.push(
+    fail(
+      [4, 2],
       `CONTROL: ${stats.exemptions} references were exempted from resolving. Exactly one ` +
         `is expected (the error document's canonical) — the exemption has widened.`,
     );
   }
   if (stats.livePagesFetched === 0) {
-    failures.push("CONTROL: zero live pages were fetched");
+    fail([4, 3], "CONTROL: zero live pages were fetched");
   }
   // COVERAGE, as a number rather than a hope. Anything the deploy shipped that
   // this run did not verify is named individually, so "39 of 39" cannot quietly
   // become "17 of 39" again the next time an asset stops being referenced.
   if (stats.artifactVerified !== stats.artifactFiles) {
-    failures.push(
+    fail(
+      [4, 4],
       `CONTROL: ${stats.artifactVerified} of ${stats.artifactFiles} artifact files verified — ` +
         `${stats.artifactFiles - stats.artifactVerified} shipped file(s) were not confirmed served`,
     );
   }
-  const control = await get(`${origin}${base}/${NEGATIVE_CONTROL}`);
+  // The negative control is a REAL request and is counted like one. A runtime
+  // figure that quietly omits a request is the U3 defect in miniature: this
+  // reported 40 against 41 on the wire until a counting server caught it.
   if (!control.ok) {
-    failures.push(`CONTROL: the negative-control request failed outright — ${control.error}`);
+    fail([4, 5], `CONTROL: the negative-control request failed outright — ${control.error}`);
   } else if (control.status === 200) {
-    failures.push(
+    fail(
+      [4, 6],
       `CONTROL: ${origin}${base}/${NEGATIVE_CONTROL} returned 200. This URL was never built, ` +
         `so every other 200 in this run is meaningless — the check cannot fail.`,
     );
   }
 
-  return { failures, stats, deterministic };
+  return { failures: report(), stats, deterministic };
 }
 
 /**
