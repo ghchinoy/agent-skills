@@ -496,3 +496,69 @@ export function plantOrThrow(source, find, replaceWith, what) {
   }
   return after;
 }
+
+/**
+ * A JavaScript source split into lines with comments removed and STRING
+ * LITERALS KEPT. Returns `[{ line, code }]`, one entry per physical line, with
+ * `line` 1-based so a finding can be cited at a location.
+ *
+ * Lifted verbatim out of `copiesIn()` in pins.test.mjs, which is where it was
+ * written and hardened, and moved here so a second scan can REUSE it instead of
+ * growing a second copy. Two comment strippers in one suite would drift, and
+ * the drift would show up as one scan going quiet while the other stayed loud.
+ *
+ * The subtlety it exists for: `https://` CONTAINS `//`. A line-oriented
+ * stripper cuts there and silently discards the rest of the line — a real
+ * defect after that point becomes invisible, and the scan reports clean. That
+ * bug was live in an earlier version of the mirrored-constant detector, and two
+ * of the three constants it guards are URLs, so it could not fire on either.
+ * The controls for that live in pins.test.mjs and still run against this code.
+ *
+ * String literals are DELIBERATELY retained: a hardcoded value is usually
+ * inside quotes, so stripping them would remove exactly what is being hunted.
+ *
+ * @param {string} text
+ * @returns {{ line: number, code: string }[]}
+ */
+export function codeOnlyLines(text) {
+  const out = [];
+  let inBlock = false;
+  text.split("\n").forEach((raw, i) => {
+    let code = "";
+    let quote = null;
+    for (let j = 0; j < raw.length; j += 1) {
+      const c = raw[j];
+      if (inBlock) {
+        if (c === "*" && raw[j + 1] === "/") {
+          inBlock = false;
+          j += 1;
+        }
+        continue;
+      }
+      if (quote) {
+        code += c;
+        if (c === "\\") {
+          code += raw[j + 1] ?? "";
+          j += 1;
+          continue;
+        }
+        if (c === quote) quote = null;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === "`") {
+        quote = c;
+        code += c;
+        continue;
+      }
+      if (c === "/" && raw[j + 1] === "/") break;
+      if (c === "/" && raw[j + 1] === "*") {
+        inBlock = true;
+        j += 1;
+        continue;
+      }
+      code += c;
+    }
+    out.push({ line: i + 1, code });
+  });
+  return out;
+}

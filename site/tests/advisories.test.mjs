@@ -53,7 +53,7 @@ import {
   RESOURCE_GROUPS,
   SKILL_MD_LINE_GUIDANCE,
 } from "../src/loaders/advise.mjs";
-import { declaredSkills, here, repoRoot, siteRoot } from "./_helpers.mjs";
+import { declaredSkills, distHtmlFiles, here, repoRoot, siteRoot } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -592,4 +592,87 @@ test("AC6 meta: the resource inventory this suite reads is its own, not the load
   const first = skills.find((s) => (s.resources.assets ?? []).some((e) => e.name.includes("/")));
   const sample = first.resources.assets.find((e) => e.name.includes("/"));
   assert.ok((await stat(join(first.dir, "assets", sample.name))).isFile());
+});
+
+// ── THE THIRD POPULATION: PROSE EMITTED BY CODE ─────────────────────────────
+//
+// Raised by the EM, and neither of us had looked at it. Every discussion of
+// restated normative language on this site has been about PAGES AUTHORED AS
+// PROSE — the landing page, the standards page. But the loaders also emit
+// English, and some of that English restates the specifications:
+//
+//   D1            "…the Agent Skills spec defines metadata as a map of string
+//                  keys to string VALUES."
+//   NAME-DIR-SKEW "…Agent Skills requires them to match."
+//   I4            "…another file in the repository may describe it."
+//
+// If any of that reaches a rendered page, it is site-authored restatement in
+// the same sense the landing-page sentence was, arriving by a route no AC and
+// no detector in this suite has ever pointed at.
+//
+// ENUMERATED RATHER THAN SEARCHED, because a needle would only tell me about
+// the messages I thought to grep for. The routes out of an advisory are
+// finite and all of them were followed: `throw` (build fails, never renders),
+// the build log (skills.ts §6.5, `Advisories to the build log`), and
+// `_skill.specNotes`, which IS carried on entity data and therefore COULD
+// render — except that no component reads it. `grep -rn specNotes src/` returns
+// five hits, all inside the loaders, none in `src/components/` or in
+// `content.config.ts`.
+//
+// SO THE ANSWER IS NO, AND THIS TEST IS WHAT KEEPS IT NO. A future component
+// that renders `specNotes`, or an advisory routed to a page, turns it red.
+
+test("no advisory prose reaches a rendered page — the emitted-English population", async () => {
+  const logged = advisoryLines(await build());
+  assert.ok(logged.length > 0, "no advisories were emitted, so this test would prove nothing");
+
+  // A stable needle per message: its longest run of fixed prose, with no digit
+  // and no path separator in it, so the needle is the TEMPLATE's words rather
+  // than one skill's interpolated values.
+  const needle = (message) =>
+    message
+      .split(/[^A-Za-z ,']+/)
+      .map((s) => s.trim())
+      .sort((a, b) => b.length - a.length)[0] ?? "";
+
+  const needles = [...new Set(logged.map((l) => needle(l.message)))].filter((n) => n.length >= 30);
+  assert.ok(
+    needles.length >= 4,
+    `only ${needles.length} advisory needles were derived; the extractor has stopped working ` +
+      "and the search below would be over almost nothing",
+  );
+
+  // POSITIVE CONTROL FIRST, and it is the whole reason the zero below means
+  // anything. THESE EXACT NEEDLES ARE FOUND, by this exact matcher, in the
+  // build log. So a zero in `dist/` is an absence in the artifact and not a
+  // dead selector — the same string, the same search, two outputs, one hit and
+  // one miss. E-4's ladder: the control is drawn from the corpus the scan is at
+  // risk against, not from the scan.
+  const log = await build();
+  for (const n of needles) {
+    assert.ok(log.includes(n), `the needle ${JSON.stringify(n)} is not even in the build log`);
+  }
+
+  const html = await Promise.all(
+    (await distHtmlFiles()).map(async (p) => ({ p, text: await readFile(p, "utf8") })),
+  );
+  assert.ok(html.length >= 50, `only ${html.length} rendered pages were searched`);
+
+  const rendered = [];
+  for (const n of needles) {
+    for (const { p, text } of html) {
+      if (text.includes(n)) rendered.push(`${relative(siteRoot, p)} renders advisory prose: ${n}`);
+    }
+  }
+
+  assert.deepEqual(
+    rendered,
+    [],
+    "advisory prose is rendering to a page. Some of it restates the specifications " +
+      "in the site's own words, which is the thing AC3 forbids, arriving by a route " +
+      "no page-level scan looks at. An operator-facing build-log message explaining " +
+      "WHY a plugin was rejected is a different act from telling a reader what a " +
+      "specification says — but that defence only holds while the message stays in " +
+      "the log, and this is where it stopped:\n  " + rendered.join("\n  "),
+  );
 });

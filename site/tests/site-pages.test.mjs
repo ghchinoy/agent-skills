@@ -22,19 +22,23 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   SITE_ROUTES,
+  codeOnlyLines,
   decodeEntities,
   distContentPages,
   fieldRows,
   mainOf,
   pageAt,
+  rel,
   repoRoot,
+  siteRoot,
   sourceRoutes,
   toText,
+  walk,
 } from "./_helpers.mjs";
 
 /**
@@ -501,9 +505,17 @@ const SPEC_SAMPLES = {
       " mixed-version packages, and lets `$schema` select the complete validation and" +
       " interpretation contract — including requirements that JSON Schema cannot express.",
     "Requires git, docker, jq, and access to the internet", // agentskills @69ef37e9
-    // Not from a specification: the one live instance found in this phase, on
-    // this site's own landing page, by a person reading for the CLAIM. Kept
-    // because it is the only member of this class anyone has actually shipped.
+    // Not from a specification. THIS SENTENCE IS REMOVED FROM THE SITE AND IS
+    // NOT RENDERED ANYWHERE — verified against dist/index.html, which contains
+    // no occurrence of it and no occurrence of the word "requires"; the only
+    // trace left in src/ is the comment at site-pages.mjs recording the
+    // removal. It is retained here strictly as a CORPUS SAMPLE of the class,
+    // because it is the only member anyone on this project has actually
+    // shipped, and a class with no real exemplar drifts into the hypothetical.
+    // Stated explicitly because a defect kept as test data without a note
+    // saying it is dead is how a defect acquires tenure: the next reader finds
+    // it in a fixture, assumes it is live, and either re-adds it or works
+    // around it.
     "a SKILL.md at plugins/<plugin>/skills/<skill>/, discovered without recursing below that" +
       " directory, as Agent Plugins §7.1 requires.",
   ],
@@ -535,6 +547,162 @@ test("AC10 control: the detector's REAL loss profile, measured against the speci
   // pass — the gate-that-cannot-fail, one level up from the gate itself.
   assert.ok(SPEC_SAMPLES.caught.length >= 3, "the positive half has been emptied");
   assert.ok(SPEC_SAMPLES.silent.length >= 6, "the loss profile has been emptied");
+});
+
+// ── AC1, THE GREP HALF ──────────────────────────────────────────────────────
+//
+// AC1: "Plugin and skill counts computed at build time … No integer hand-typed
+// in any `.astro`/`.ts`, grep-asserted."
+//
+// TWO INSTRUMENTS, AND THE GREP IS THE WEAKER ONE. Stated first so nobody reads
+// a green grep as the proof:
+//
+//   LOAD-BEARING — the catalog perturbation in build-e2e.test.mjs. It plants a
+//   real SKILL.md, rebuilds, and requires the rendered skill count to MOVE
+//   while the plugin count stands still. That is level 1 against AC1's own
+//   words: a count that is not computed at build time cannot pass it, whatever
+//   the count is spelled like and whatever file it lives in.
+//
+//   CORROBORATING — this scan. It is a substring search and inherits every
+//   substring search's limits. `20 + 3`, `"2" + "3"`, `0x17`, `Number("23")`
+//   and a count read from a stale generated file ALL SURVIVE IT. Its silence
+//   is worth having only because the perturbation is not silent.
+//
+// AC1'S STATED POPULATION IS TOO NARROW, AND THE NARROWING POINTS AWAY FROM THE
+// DEFECT. AC1 names `.astro` and `.ts`. Every landing-page count on this site
+// is produced in `src/loaders/site-pages.mjs` — a `.mjs` file. A grep restricted
+// as written would sweep the two extensions where a hand-typed count is least
+// likely and skip the one file where it would actually live. The population
+// below is widened to every source extension under `src/`, and the widening is
+// asserted rather than assumed: the test fails if the file that builds the
+// landing page is not in the swept set.
+//
+// The values are parsed FROM THE CATALOG, independently of the site's own
+// loaders. Importing the loader would make the scan agree with the loader by
+// construction — if the loader hardcoded a count, the scan would hunt for the
+// hardcoded value and find it exactly where it is allowed to be.
+
+/** Plugin and skill counts, parsed from the catalog without the site's code. */
+async function freshCounts() {
+  const marketplace = JSON.parse(
+    await readFile(join(repoRoot, ".claude-plugin/marketplace.json"), "utf8"),
+  );
+  let skills = 0;
+  for (const plugin of marketplace.plugins) {
+    const dir = join(repoRoot, plugin.source.replace(/^\.\//, ""), "skills");
+    let entries = [];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        await stat(join(dir, entry.name, "SKILL.md"));
+        skills += 1;
+      } catch {
+        /* a directory with no SKILL.md is not a skill */
+      }
+    }
+  }
+  return { plugins: marketplace.plugins.length, skills };
+}
+
+const SOURCE_EXTENSIONS = [".astro", ".ts", ".mjs", ".js"];
+
+async function sourceFiles() {
+  const all = await walk(join(siteRoot, "src"));
+  return all.filter((p) => SOURCE_EXTENSIONS.some((e) => p.endsWith(e)));
+}
+
+/** `file:line` for every occurrence of `value` as a standalone number in code. */
+function literalHits(text, label, value) {
+  // Word-boundary and not part of a longer number: `1.10`, `2023` and `v23`
+  // must not read as a hand-typed 23. Comments are already gone; string
+  // literals are deliberately still here, because "23" in quotes is the exact
+  // shape being hunted.
+  const re = new RegExp(`(?<![\\w.])${value}(?![\\w.])`, "g");
+  return codeOnlyLines(text)
+    .filter(({ code }) => re.test(code) && (re.lastIndex = 0) === 0)
+    .map(({ line }) => `${label}:${line}`);
+}
+
+test("AC1: no source file hand-types the plugin or skill count", async () => {
+  const counts = await freshCounts();
+  const files = await sourceFiles();
+
+  // DENOMINATOR FIRST. A scan over an empty or wrongly-filtered file set reports
+  // clean, and clean and never-ran are the same bytes.
+  assert.ok(files.length >= 10, `the scan swept only ${files.length} source files`);
+  const builder = files.find((p) => p.endsWith("loaders/site-pages.mjs"));
+  assert.ok(
+    builder,
+    "the file that BUILDS the landing page is not in the swept population. This is " +
+      "the exact narrowing AC1's own wording would have produced: it names .astro " +
+      "and .ts, and every count on this site is produced in a .mjs.",
+  );
+
+  const offenders = [];
+  for (const path of files) {
+    const text = await readFile(path, "utf8");
+    for (const [what, value] of Object.entries(counts)) {
+      for (const hit of literalHits(text, rel(path, siteRoot), String(value))) {
+        offenders.push(`${hit} contains ${value}, the current ${what} count`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `a source file contains the literal ${counts.plugins} or ${counts.skills} in code. ` +
+      "If that is a count, it stops being true the moment the catalog changes and " +
+      "nothing will say so. If it is a coincidence, this scan needs to be able to " +
+      "tell the difference and currently cannot:\n  " +
+      offenders.join("\n  "),
+  );
+});
+
+test("AC1 control: the scan goes red on a planted count, in each source extension", async () => {
+  // LEVEL 1 against AC1's own text — "no integer hand-typed" — rather than
+  // against this scan's regex. The plant is what AC1 forbids, written the way
+  // someone would actually write it, not a string reverse-engineered from the
+  // matcher.
+  const counts = await freshCounts();
+
+  for (const [what, value] of Object.entries(counts)) {
+    const planted = `const total = ${value};`;
+    assert.deepEqual(
+      literalHits(planted, "planted.mjs", String(value)),
+      ["planted.mjs:1"],
+      `a hand-typed ${what} count was not detected — the scan above proves nothing`,
+    );
+    // In a string, which is how it would reach a template.
+    assert.deepEqual(
+      literalHits(`const label = "${value} ${what}";`, "planted.astro", String(value)),
+      ["planted.astro:1"],
+      `a hand-typed ${what} count inside a string literal was not detected`,
+    );
+  }
+
+  // NEGATIVE HALF, and it is what stops this being satisfied by a scan that
+  // flags everything. Each of these legitimately appears in source and none is
+  // a count.
+  for (const benign of [
+    'const v = "1.10";',
+    "const year = 2023;",
+    "const tag = 'v23';",
+    "// 23 skills, said in a comment",
+    "/* 10 plugins in a block comment */",
+    "const url = 'https://example.test/x'; // 23",
+  ]) {
+    assert.deepEqual(
+      literalHits(benign, "b.mjs", "23").concat(literalHits(benign, "b.mjs", "10")),
+      [],
+      `the scan flags a benign line and would be deleted for noise: ${benign}`,
+    );
+  }
 });
 
 // ── THE POPULATION FIX ──────────────────────────────────────────────────────
