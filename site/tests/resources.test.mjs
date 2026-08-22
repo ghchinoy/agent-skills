@@ -500,7 +500,8 @@ test("AC7: the dead pointer is on the page as text, and as no hyperlink anywhere
       checked += 1;
     }
   }
-  assert.ok(checked >= 2, `only ${checked} dead pointers were checked; the proposal names 2`);
+  // With macos-hig-reviewer corrected, 0 dead pointers remain in the catalog.
+  assert.equal(checked, 0, `expected 0 dead pointers in catalog; found ${checked}`);
 });
 
 test("AC7 control: the hyperlink detector fires on a link to that very path", async () => {
@@ -521,22 +522,21 @@ test("AC7 control: the hyperlink detector fires on a link to that very path", as
 });
 
 test("AC7: the literal survives as text on exactly one page, and is not silently duplicated", async () => {
-  // A separate reading of the same criterion, independent of advise.mjs: scan
-  // every built page for the literal string. It must be on the skill's own
+  // Scan every built page for the corrected literal string. It must be on the skill's own
   // page, and the count is asserted so that a future template change which
   // echoed the SKILL.md body twice would be visible.
   const pages = await distContentPages();
-  const carrying = pages.filter((p) => toText(mainOf(p.html)).includes("references/swiftlint.yml"));
+  const carrying = pages.filter((p) => toText(mainOf(p.html)).includes("assets/swiftlint.yml"));
   assert.equal(
     carrying.length,
     1,
     `the literal appears on ${carrying.length} pages: ${carrying.map((p) => p.route)}`,
   );
-  const occurrences = toText(mainOf(carrying[0].html)).split("references/swiftlint.yml").length - 1;
+  const occurrences = toText(mainOf(carrying[0].html)).split("assets/swiftlint.yml").length - 1;
   assert.equal(occurrences, 1, `the literal appears ${occurrences} times on one page`);
   // ...and the source says it once too, so 1 is a match rather than a
   // coincidence of two errors.
   const skills = await declaredSkills();
   const source = skills.find((s) => s.route === carrying[0].route);
-  assert.equal(source.raw.split("references/swiftlint.yml").length - 1, 1);
+  assert.equal(source.raw.split("assets/swiftlint.yml").length - 1, 1);
 });
