@@ -299,10 +299,11 @@ const author = manifest.author;
   }
 
   {/* ── The resource inventory ───────────────────────────────────────────────
-       `references` and `scripts` are depth-1; `assets` is listed at every
-       depth, so its note says so rather than repeating a scope that is true
-       of the other two. The scope sentence is DERIVED from the group name,
-       not hand-written per block, so the two cannot drift apart. */}
+       `references` and `scripts` list their immediate children; `assets` is
+       listed at every depth, so its note says so rather than repeating a
+       scope that is true of the other two. The scope sentence is DERIVED
+       from the group name, not hand-written per block, so the two cannot
+       drift apart. */}
   {
     d.kind === "skill" && d.resources && (
       <div class="resources">
@@ -311,7 +312,7 @@ const author = manifest.author;
           // looked inside it; `[]` would claim it looked and found nothing.
           // Neither renders a block.
           d.resources[group] && d.resources[group].length > 0 ? (
-            <div class="resource-group">
+            <div class="resource-group" data-resource-group={group}>
               <h2 id={`${group}`}>{group}</h2>
               <p class="derived-note">
                 Listed by real filename — no summary is written for a file that
@@ -322,7 +323,11 @@ const author = manifest.author;
               </p>
               <ul class="child-list">
                 {d.resources[group].map((r: any) => (
-                  <li>
+                  // `data-resource-name` carries the REAL filename, so a test
+                  // can address a row without parsing the anchor's text and
+                  // without a regex over the page. It is the same string the
+                  // <code> shows; there is no second source for it.
+                  <li data-resource-name={r.name} data-resource-kind={r.kind}>
                     <a href={r.href}><code>{r.name}{r.kind === "directory" ? "/" : ""}</code></a>
                   </li>
                 ))}
