@@ -551,34 +551,79 @@ test("AC8: exactly ONE field label in the renderer is data-driven, and it is the
   // On the day a second interpolated label appears, this fails — and that is
   // the day a planted key could reach a page, the day the forward form of AC8
   // stops being vacuous, and the day this file's header needs rereading.
-  const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("../src/components/EntryMeta.astro", import.meta.url), "utf8");
+  // THE POPULATION IS DERIVED FROM THE DIRECTORY, NOT NAMED.
+  //
+  // Round 2, Advisory 1: this read exactly one path,
+  // `../src/components/EntryMeta.astro`. Planting a second data-driven
+  // `<dt data-field-label>` into the OTHER rendering component,
+  // SiteIndex.astro, left this test green while its stated claim — "exactly
+  // ONE field label in THE RENDERER is data-driven" — became false. "The
+  // renderer" was never one file; naming the file is what made the population
+  // unable to grow. Another gate caught that particular plant, so this was a
+  // scoping defect in one test rather than a hole in the suite, and it is
+  // standard 31 in a test file: a population bounded by a name instead of by a
+  // measurement.
+  //
+  // Now every component that EMITS a field label is scanned, so the day a
+  // second emitter appears this test sees it instead of being aimed away.
+  const { readdir, readFile } = await import("node:fs/promises");
+  const dir = new URL("../src/components/", import.meta.url);
+  const components = (await readdir(dir)).filter((f) => f.endsWith(".astro")).sort();
+  assert.ok(
+    components.length >= 3,
+    `only ${components.length} .astro components found — the directory scan is not reaching them`,
+  );
+
+  const sources = new Map();
+  for (const f of components) sources.set(f, await readFile(new URL(f, dir), "utf8"));
+
+  // The emitter set, derived. Non-emitting components are not silently dropped:
+  // they are the complement, and the split is asserted to be non-degenerate in
+  // both directions so this cannot pass by scanning nothing.
+  const emitters = components.filter((f) => sources.get(f).includes("<dt data-field-label"));
+  assert.ok(emitters.length > 0, "no component emits a field label at all — nothing is being checked");
+  assert.ok(
+    emitters.includes("EntryMeta.astro"),
+    `the metadata renderer is no longer among the field-label emitters: ${emitters.join(", ")}`,
+  );
+
   // Scoped to real `<dt>` ELEMENTS. An earlier draft of this matched the
   // attribute name anywhere and swallowed the comment on line 20 that merely
   // mentions it — the test caught my own instrument before it could report on
   // anything else, which is the order these things are supposed to happen in.
-  const labels = [...src.matchAll(/<dt data-field-label[^>]*>\s*([^<]*?)\s*</g)].map((m) =>
-    m[1].trim(),
-  );
-  const declaredSites = (src.match(/<dt data-field-label/g) ?? []).length;
+  const labels = [];
+  let declaredSites = 0;
+  for (const f of emitters) {
+    const src = sources.get(f);
+    for (const m of src.matchAll(/<dt data-field-label[^>]*>\s*([^<]*?)\s*</g)) {
+      labels.push({ file: f, label: m[1].trim() });
+    }
+    declaredSites += (src.match(/<dt data-field-label/g) ?? []).length;
+  }
   assert.equal(
     labels.length,
     declaredSites,
-    `the extractor read ${labels.length} of the ${declaredSites} label sites in the renderer`,
+    `the extractor read ${labels.length} of the ${declaredSites} label sites across ` +
+      `${emitters.join(", ")}`,
   );
-  assert.ok(labels.length >= 13, `found only ${labels.length} label sites in the renderer`);
-  const interpolated = labels.filter((l) => l.includes("{"));
+  assert.ok(labels.length >= 13, `found only ${labels.length} label sites across the renderers`);
+
+  // The set is PRINTED with the file each member came from, so a second
+  // data-driven label names its own emitter instead of arriving as a total.
+  const interpolated = labels.filter((l) => l.label.includes("{"));
   assert.deepEqual(
-    interpolated,
-    ["{key}"],
-    `the renderer's data-driven field labels are no longer just the metadata loop:\n` +
-      `${interpolated.join("\n")}\nAll label sites: ${labels.join(" | ")}`,
+    interpolated.map((l) => `${l.file} ${l.label}`),
+    ["EntryMeta.astro {key}"],
+    `the data-driven field labels are no longer just the metadata loop:\n` +
+      `${interpolated.map((l) => `${l.file} ${l.label}`).join("\n")}\n` +
+      `All label sites: ${labels.map((l) => `${l.file} ${l.label}`).join(" | ")}`,
   );
-  // …and that one is inside the metadata iteration, not somewhere else.
+  // …and that one is inside the metadata iteration, not somewhere else. The
+  // file is taken from the derived set rather than written down again.
   assert.match(
-    src,
+    sources.get(interpolated[0].file),
     /Object\.entries\(metadata\)\.map\(\(\[key, value\]\)/,
-    "the interpolated label no longer comes from Object.entries(metadata)",
+    `${interpolated[0].file}'s interpolated label no longer comes from Object.entries(metadata)`,
   );
 });
 

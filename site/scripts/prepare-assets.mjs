@@ -10,11 +10,35 @@
 // ── THE SELECTION RULE, AND WHY IT IS NOT A GLOB ─────────────────────────────
 //
 // Copy exactly the assets that are the target of an IMAGE link in a SKILL.md
-// body. Not "every file under assets/", not "every .webp". Today that rule
-// selects exactly one file out of the 24 assets in the repo, and it keeps
-// `okf-author/assets/example-bundle/`'s 11 markdown files (I5) and
-// `scaffolder/.gitignore` (I6) out of `public/` BY CONSTRUCTION rather than by
-// an exclude list somebody has to maintain.
+// body. Not "every file under assets/", not "every .webp". That rule selects a
+// strict subset of the assets in the repo, and it keeps the okf-author skill's
+// `assets/example-bundle/` markdown (I5) and `scaffolder/.gitignore` (I6) out
+// of `public/` BY CONSTRUCTION rather than by an exclude list somebody has to
+// maintain.
+//
+// NO COUNTS APPEAR IN THAT SENTENCE ON PURPOSE. It used to give three: how many
+// files the rule selects, how many assets there are to select from, and how
+// many markdown files the example bundle holds. Two were true and one was
+// false — the false one copied from a comment in enumerate.mjs rather than
+// measured, and wrong on the day it was written.
+//
+// ALL THREE ARE GONE RATHER THAN CORRECTED, AND THE TRUE ONES ARE THE POINT.
+// A false literal is catchable by anyone who reads it against the tree. A
+// true-but-unbound literal fails SILENTLY: it is correct today, nothing goes
+// red on the day it stops being correct, and the next reader inherits it with
+// no signal. Deleting a true unbound count removes a defect that has not fired
+// yet; correcting it only resets the clock.
+//
+// Every claim those numbers decorated is ALREADY BOUND thirty lines away in
+// `tests/assets.test.mjs`, which derives the denominator every run and asserts
+// the RELATION instead of any literal, and derives the excluded set as the
+// complement of the selection instead of listing it, with a non-vacuity floor
+// and the leak set printed rather than counted. A prose count standing beside a
+// test that derives the same population is not documentation — it is an
+// unverified duplicate of a verified claim, and the duplicate is the copy that
+// goes false. The remedy for a duplicate is deletion, not a second
+// verification: binding the copy would leave two statements of one fact that
+// can still disagree.
 //
 // ── HOW IT STAYS IN STEP WITH THE LOADER ─────────────────────────────────────
 //

@@ -54,57 +54,51 @@
   // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
   // overwhelmingly missing annotations and implicit `any` under `strict` rather
   // than latent bugs. Fixing them is real work and out of scope. Logged as a
-  // PHASE 5 CANDIDATE with a re-measured count so the phase can size it.
+  // PHASE 5 CANDIDATE, to be sized by running the command below at the moment
+  // the phase is scoped.
   //
-  // RE-MEASURED IN FIX ROUND 2, AND THE OLD NUMBER WAS THE FINDING. This said
-  // "204 errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
-  // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro)" — a Phase 1
-  // measurement quoted unchanged by a Phase 2 commit that edited the lines
-  // directly above it to ADD a file to the unchecked list. Round 2 re-measured
-  // it at 399.
+  //   HOW TO SIZE IT (the measurement this comment used to record):
+  //   flip `checkJs` to true, run `npx astro check`, restore the file. Confirm
+  //   with `cmp` that the flip landed and the restore was byte-identical, and
+  //   that `git status --porcelain` is empty before and after.
   //
-  // RE-MEASURED AGAIN IN PHASE 3, for the same reason and by the same method:
-  // this edit adds two files to the list above, so the figure below it is
-  // exactly the figure that would otherwise be inherited. Measured by flipping
-  // `checkJs` to true, running `npx astro check`, and restoring the file —
-  // `cmp` confirming the flip landed and the restore was byte-identical, and
-  // `git status` producing the same output before and after.
+  // NO ERROR COUNT IS RECORDED HERE, DELIBERATELY, AND THAT IS THE FIX FOR A
+  // DEFECT THIS COMMENT COMMITTED FOUR TIMES. A per-file census used to sit at
+  // this spot. It was re-measured in Phase 2, re-measured twice in Phase 3, and
+  // went stale again in the very commit whose purpose was to correct it — each
+  // value correct on the day it was written and wrong by the next commit,
+  // because the figure counts errors in files that every phase edits.
   //
-  // AND THEN RE-MEASURED ONCE MORE, because the first Phase 3 measurement was
-  // taken mid-phase and four test files were added after it: the figure was
-  // 501 across 22 files and is now 532 across 26. That is the same failure the
-  // paragraph below warns about, caught inside a single phase. The number
-  // quoted here is the one measured last, against the tree being committed:
-  // 532 errors, 0 warnings, 8 hints, across 26 files.
+  // The Phase 3 round-2 review is what established the pattern rather than the
+  // instance. Its readings, quoted as that review's findings at that commit and
+  // not as properties of this tree: 23 of 26 rows still matched, and the 3 that
+  // diverged were exactly the 3 files edited after the census was taken, their
+  // deltas summing to the change in the total with no residual. Attributing
+  // them that way is what keeps them from becoming the next stale figure — a
+  // reading indexed to a moment cannot go out of date; a reading presented as a
+  // current fact can.
   //
-  //   scripts/check-live-links.mjs 62   tests/workflows 50
-  //   tests/live-check-e2e 50   tests/enumeration 37   tests/_helpers 33
-  //   tests/build-e2e 29   src/loaders/links.mjs 27
-  //   src/loaders/enumerate.mjs 27   tests/pins 26
-  //   src/loaders/site-pages.mjs 25   tests/chrome 23   tests/links 17
-  //   tests/search-declaration 14   tests/link-rules 14
-  //   src/loaders/markdown.mjs 14   tests/content 13   tests/live-links 12
-  //   tests/assets 12   tests/no-fabrication 10   tests/fields 8
-  //   tests/markdown 7   src/sidebar.mjs 6   src/loaders/frontmatter.mjs 6
-  //   tests/site-pages 6   scripts/prepare-assets.mjs 3   tests/versions 1
+  // A number that decays by construction is not documentation of a fact, it is
+  // a copy of a measurement, and the copy is what goes false. Note also which
+  // of these was the more dangerous: the total was TRUE when written, every
+  // time. A false figure is catchable by anyone who reads it against the tree.
+  // A true-but-unbound one fails silently — right today, nothing goes red the
+  // day it stops being right. So the copy is gone and the command that produces
+  // it stays.
   //
-  // Phase 3 added THREE source files, and TWO of them are visible to this
-  // census: src/loaders/site-pages.mjs 25 + scripts/prepare-assets.mjs 3 = 28
-  // errors. The third, src/components/SiteIndex.astro, contributes 0 — not
-  // because it is clean but because checkJs covers .mjs and .ts and this table
-  // has no .astro row at all. The four test files Phase 3 added account for 27;
-  // the remainder of the rise from Phase 2's 399 is in tests Phase 3 widened.
-  // src/loaders/skills.ts stays at 0 because it is checked today.
+  // WHAT IS NOT DELETED, AND WHY THE DIFFERENCE IS THE WHOLE POINT: the list of
+  // unchecked files above is BOUND. `tests/pins.test.mjs` R6 derives that set
+  // from the filesystem and fails if any unchecked source is missing from the
+  // disclosure below the NOT CHECKED heading, with a non-vacuity floor and a
+  // control proving the scoped search can fail. Phase 2 and Phase 3 each added
+  // files to that list and each got it right — because a test went red when
+  // they did not. The census sat in the same comment, written by the same hands
+  // in the same commits, and went stale every single time. Same block, same
+  // authors, same edits: the only variable is whether an assertion was watching.
   //
-  // That sentence said "the two SOURCE files Phase 3 added" until the Phase 3
-  // review caught it: three were added, and the count was over a population the
-  // sentence did not name. The arithmetic was right and the word was wrong,
-  // which is the failure this very comment goes on to warn about — one
-  // paragraph below.
-  //
-  // The lesson is not the arithmetic, it is that a sizing figure sitting three
-  // lines below an edit is exactly the figure nobody re-runs. Standard 2: a
-  // number is re-measured at the moment it is quoted, not inherited.
+  // Standard 2 says a number is re-measured at the moment it is quoted, not
+  // inherited. Four recurrences here say the stronger thing: a number nothing
+  // re-measures should not be written down beside a command that produces it.
   //
   // If you turn it on, do it as its own change with its own review. Do not
   // widen it as a side effect of something else, and do not restate the
