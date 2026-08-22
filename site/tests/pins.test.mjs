@@ -11,7 +11,7 @@ import { readFile, access, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 
-import { repoRoot, siteRoot, walk, rel } from "./_helpers.mjs";
+import { codeOnlyLines, repoRoot, siteRoot, walk, rel } from "./_helpers.mjs";
 
 const PINNED = {
   astro: "7.2.4",
@@ -1093,37 +1093,19 @@ function plainCopiesIn(text, label, constants) {
 }
 
 function copiesIn(text, label, constants) {
+  // The comment/string stripper this used to carry inline now lives in
+  // _helpers.mjs as codeOnlyLines(), so the AC1 hardcoded-count scan can reuse
+  // it instead of growing a second copy that would drift out of step. The
+  // controls below are unchanged and still guard the stripper's behaviour --
+  // including the `https://` case, which is the one that broke it before.
   const out = [];
-  let inBlock = false;
-  text.split("\n").forEach((raw, i) => {
-    let code = "";
-    let quote = null;
-    for (let j = 0; j < raw.length; j += 1) {
-      const c = raw[j];
-      if (inBlock) {
-        if (c === "*" && raw[j + 1] === "/") { inBlock = false; j += 1; }
-        continue;
-      }
-      if (quote) {
-        code += c;
-        if (c === "\\") { code += raw[j + 1] ?? ""; j += 1; continue; }
-        if (c === quote) quote = null;
-        continue;
-      }
-      if (c === '"' || c === "'" || c === "`") { quote = c; code += c; continue; }
-      if (c === "/" && raw[j + 1] === "/") return record(code);
-      if (c === "/" && raw[j + 1] === "*") { inBlock = true; j += 1; continue; }
-      code += c;
+  for (const { line, code } of codeOnlyLines(text)) {
+    let rest = code;
+    for (const { name, value } of constants) {
+      if (!rest.includes(value)) continue;
+      rest = rest.split(value).join(""); // strip so shorter values do not re-hit
+      out.push(`${label}:${line} ${name}`);
     }
-    record(code);
-
-    function record(line) {
-      for (const { name, value } of constants) {
-        if (!line.includes(value)) continue;
-        line = line.split(value).join(""); // strip so shorter values do not re-hit
-        out.push(`${label}:${i + 1} ${name}`);
-      }
-    }
-  });
+  }
   return out;
 }
