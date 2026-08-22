@@ -8,7 +8,7 @@
 // The site's markup therefore carries stable `data-*` hooks, and the tests
 // address those.
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,15 +36,221 @@ export const BASE = "/agent-skills";
  */
 export const ORIGIN = "https://ghchinoy.github.io";
 
-/** The one plugin Phase 1 renders, and the five routes it must produce. */
+/**
+ * The plugin the WORKED-EXAMPLE tests use.
+ *
+ * Phase 1 rendered exactly this plugin and nothing else, so `PLUGIN` was the
+ * catalog. Phase 3 renders all ten, and the constant survives with a smaller
+ * job: several checks are about a specific known property of a specific source
+ * file — I1's two competing descriptions, I9's 755- and 790-character
+ * descriptions, the `# Concepts` line inside a fence at okf-author/SKILL.md:71 —
+ * and those are claims about an instance, correctly written against the
+ * instance.
+ *
+ * IT IS NOT A SAMPLE STANDING IN FOR THE CATALOG. A check about a CLASS
+ * ("no page renders a Tags label", "every rendered field label traces to a
+ * declared key") must run over the population, and the populations below are
+ * what it runs over. A class check narrowed to `PLUGIN` would be two skills of
+ * twenty-three and would report itself green.
+ */
 export const PLUGIN = "okf-authoring";
-export const EXPECTED_ROUTES = [
-  "plugins/okf-authoring",
-  "plugins/okf-authoring/okf-author",
-  "plugins/okf-authoring/okf-validate",
-  "plugins/okf-authoring/references/okf-v0.2-spec-summary",
-  "plugins/okf-authoring/references/trust-vocabulary",
-];
+
+/**
+ * The five pages that are ABOUT the catalog rather than in it, as routes.
+ *
+ * Hand-written here on purpose, and it is the one route list that is. These
+ * five are a decision this site made, not a fact about the source repository,
+ * so there is nothing to derive them FROM: a test that asked site-pages.mjs how
+ * many pages site-pages.mjs emits would assert only that the module agrees with
+ * itself. `""` is the site root.
+ */
+export const SITE_ROUTES = ["", "skills", "about/install", "about/standards", "about/contributing"];
+
+/**
+ * Every route the built site must contain, DERIVED from the source tree by this
+ * file's own parsing — marketplace.json for which plugins exist and in what
+ * order, and `readdir` for what is inside each of them. The loader is never
+ * asked. (EM ruling, 2026-08-21: "if the test computes its expected set by
+ * calling the same enumeration code the loader uses, it proves only that the
+ * loader agrees with itself".)
+ *
+ * The rules re-implemented here are Agent Plugins §7.1 discovery plus this
+ * site's routing decisions, and they are re-implemented rather than imported:
+ *
+ *   plugins/<p>                              one per marketplace.json entry
+ *   plugins/<p>/<skill>                      one per skills/<skill>/SKILL.md
+ *   plugins/<p>/references/<slug>            plugin-level references/*.md
+ *   plugins/<p>/<skill>/references/<slug>    skill-level references/*.md
+ *
+ * Non-markdown references, scripts and assets are NOT routes: they are listed
+ * on their owning page and linked to GitHub. Discovery does not recurse below
+ * the directories named above, which is what keeps the eight markdown files in
+ * okf-author's `assets/example-bundle/` out of the site.
+ *
+ * @returns {Promise<{plugins: string[], skills: {plugin: string, skill: string, route: string, skillMd: string}[], references: string[], routes: string[]}>}
+ */
+export async function sourceRoutes() {
+  const market = JSON.parse(
+    await readFile(join(repoRoot, ".claude-plugin", "marketplace.json"), "utf8"),
+  );
+  const names = market.plugins.map((p) => p.name);
+  if (names.length === 0) throw new Error("marketplace.json declares no plugins");
+
+  const skills = [];
+  const references = [];
+  for (const name of names) {
+    const dir = join(repoRoot, "plugins", name);
+    for (const skill of await subdirs(join(dir, "skills"))) {
+      const skillMd = join(dir, "skills", skill, "SKILL.md");
+      // §7.1: a directory under skills/ is a skill only if it holds a SKILL.md.
+      if (!(await isFile(skillMd))) continue;
+      skills.push({ plugin: name, skill, route: `plugins/${name}/${skill}`, skillMd });
+      for (const md of await markdownFiles(join(dir, "skills", skill, "references"))) {
+        references.push(`plugins/${name}/${skill}/references/${md.replace(/\.md$/i, "")}`);
+      }
+    }
+    for (const md of await markdownFiles(join(dir, "references"))) {
+      references.push(`plugins/${name}/references/${md.replace(/\.md$/i, "")}`);
+    }
+  }
+
+  return {
+    plugins: names,
+    skills,
+    references,
+    routes: [
+      ...SITE_ROUTES,
+      ...names.map((n) => `plugins/${n}`),
+      ...skills.map((s) => s.route),
+      ...references,
+    ],
+  };
+}
+
+/** Immediate subdirectories of `dir`, or `[]` if `dir` does not exist. */
+async function subdirs(dir) {
+  try {
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Immediate `*.md` files of `dir`, or `[]` if `dir` does not exist. */
+async function markdownFiles(dir) {
+  try {
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter((d) => d.isFile() && /\.md$/i.test(d.name))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+async function isFile(path) {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The source strings a given ROUTE is entitled to quote.
+ *
+ * A model of the site's routing written here rather than imported, so that a
+ * page rendering something none of its own sources say is a failure rather
+ * than a redefinition. Deliberately TIGHT: a skill page gets its SKILL.md and
+ * not its plugin's manifest, an about page gets the one document it lifts, and
+ * `/about/standards/` gets nothing at all because it is site-authored. Widening
+ * any of these to make a check pass would be exactly the move the check exists
+ * to catch.
+ */
+export async function entitledSources(route) {
+  const { plugins, skills } = await sourceRoutes();
+  const pluginJson = (p) => readFile(join(repoRoot, "plugins", p, "plugin.json"), "utf8");
+
+  if (route === "") {
+    // The landing page: the README's LEAD — not the whole README, because the
+    // whole README is not what it lifts — plus every plugin's manifest
+    // description, which its plugin list renders verbatim.
+    return [
+      readmeLead(await readFile(join(repoRoot, "README.md"), "utf8")),
+      ...(await Promise.all(plugins.map(pluginJson))),
+    ];
+  }
+  if (route === "skills") {
+    // The flat index: every skill's declared name, title and description.
+    return await Promise.all(skills.map((s) => readFile(s.skillMd, "utf8")));
+  }
+  if (route === "about/install") {
+    return [readmeSection(await readFile(join(repoRoot, "README.md"), "utf8"), "Installation & Usage")];
+  }
+  if (route === "about/contributing") {
+    return [await readFile(join(repoRoot, "CONTRIBUTING.md"), "utf8")];
+  }
+  if (route === "about/standards") return [];
+
+  const parts = route.split("/");
+  const plugin = parts[1];
+  if (parts.length === 2) {
+    // A plugin page: its manifest, and its skills' descriptions, which it
+    // lists verbatim.
+    return [
+      await pluginJson(plugin),
+      ...(await Promise.all(
+        skills.filter((s) => s.plugin === plugin).map((s) => readFile(s.skillMd, "utf8")),
+      )),
+    ];
+  }
+  if (parts.length === 3) {
+    return [await readFile(join(repoRoot, "plugins", plugin, "skills", parts[2], "SKILL.md"), "utf8")];
+  }
+  if (parts.length === 4 && parts[2] === "references") {
+    return [await readFile(join(repoRoot, "plugins", plugin, "references", `${parts[3]}.md`), "utf8")];
+  }
+  if (parts.length === 5 && parts[3] === "references") {
+    return [
+      await readFile(
+        join(repoRoot, "plugins", plugin, "skills", parts[2], "references", `${parts[4]}.md`),
+        "utf8",
+      ),
+    ];
+  }
+  throw new Error(`entitledSources: no rule for route "${route}" — the route shapes changed`);
+}
+
+/**
+ * The README's lead: after its H1, up to the first `---` or `##`. Re-derived
+ * here rather than imported from site-pages.mjs, so the two agreeing means
+ * something.
+ */
+function readmeLead(markdown) {
+  const afterH1 = markdown.replace(/^\s*#[^\n]*\n/, "");
+  const cut = afterH1.search(/^(?:---\s*$|##\s)/m);
+  const lead = (cut === -1 ? afterH1 : afterH1.slice(0, cut)).trim();
+  if (lead.length === 0) throw new Error("the README has no lead paragraph — this model is stale");
+  return lead;
+}
+
+/** The body of one `## <heading>` section of a markdown document. */
+function readmeSection(markdown, heading) {
+  const lines = markdown.split("\n");
+  const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
+  if (start === -1) {
+    throw new Error(`the document has no "## ${heading}" section — this model is stale`);
+  }
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^## \S/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join("\n");
+}
 
 export async function walk(dir) {
   const out = [];

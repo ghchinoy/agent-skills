@@ -13,9 +13,11 @@
   //                src/loaders/links.mjs
   //                src/loaders/markdown.mjs
   //                src/loaders/frontmatter.mjs
+  //                src/loaders/site-pages.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
   //                scripts/check-live-links.mjs
+  //                scripts/prepare-assets.mjs
   //                tests/*.mjs
   //
   // That is most of the loader. Verified, not assumed: a `@type {number}`
@@ -36,24 +38,50 @@
   // out and unit-tested in tests/live-links.test.mjs precisely because the type
   // checker is not watching it.
   //
-  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces 399 errors across
-  // 27 files, which are overwhelmingly missing annotations and implicit `any`
-  // under `strict` rather than latent bugs. Fixing them is real work and out of
-  // scope for Phase 2. Logged as a PHASE 5 CANDIDATE with that count so the
-  // phase can size it.
+  // PHASE 3 added two more, and both are load-bearing:
+  //
+  //   src/loaders/site-pages.mjs   builds the five pages ABOUT the catalog,
+  //                                including the verbatim README lifts
+  //   scripts/prepare-assets.mjs   selects and copies the image assets that
+  //                                SKILL.md bodies embed, before every build
+  //
+  // Neither is checked, and both are consumed by src/loaders/skills.ts, which
+  // IS — so a shape mismatch at that boundary surfaces there. That is the only
+  // type coverage they have. Their behaviour is covered by
+  // tests/site-pages.test.mjs and tests/assets.test.mjs instead, for the same
+  // reason the live-link checker's is.
+  //
+  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
+  // overwhelmingly missing annotations and implicit `any` under `strict` rather
+  // than latent bugs. Fixing them is real work and out of scope. Logged as a
+  // PHASE 5 CANDIDATE with a re-measured count so the phase can size it.
   //
   // RE-MEASURED IN FIX ROUND 2, AND THE OLD NUMBER WAS THE FINDING. This said
   // "204 errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
   // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro)" — a Phase 1
   // measurement quoted unchanged by a Phase 2 commit that edited the lines
-  // directly above it to ADD a file to the unchecked list. The five per-file
-  // loader figures are all still exactly right; every one of the 195 new errors
-  // is in code Phase 2 wrote. Today, by the same run:
+  // directly above it to ADD a file to the unchecked list. Round 2 re-measured
+  // it at 399.
   //
-  //   scripts/check-live-links.mjs 62   tests/live-check-e2e   51
-  //   tests/workflows 39   tests/enumeration 37   src/loaders/enumerate.mjs 26
-  //   src/loaders/links.mjs 21   src/loaders/markdown.mjs 14
-  //   src/loaders/frontmatter.mjs 6   src/sidebar.mjs 5   (rest in tests/)
+  // RE-MEASURED AGAIN IN PHASE 3, for the same reason and by the same method:
+  // this edit adds two files to the list above, so the figure below it is
+  // exactly the figure that would otherwise be inherited. Measured by flipping
+  // `checkJs` to true, running `npx astro check`, and restoring the file —
+  // `git status` clean before and after. 501 errors, 0 warnings, 8 hints,
+  // across 22 files:
+  //
+  //   scripts/check-live-links.mjs 62   tests/workflows 51
+  //   tests/live-check-e2e 51   tests/enumeration 37   src/loaders/links.mjs 31
+  //   tests/build-e2e 30   src/loaders/enumerate.mjs 27   tests/pins 26
+  //   src/loaders/site-pages.mjs 25   tests/chrome 22   tests/_helpers 22
+  //   tests/content 20   tests/links 17   tests/search-declaration 15
+  //   tests/link-rules 14   src/loaders/markdown.mjs 14   tests/live-links 12
+  //   tests/no-fabrication 11   tests/markdown 7   src/sidebar.mjs 6
+  //   src/loaders/frontmatter.mjs 6   scripts/prepare-assets.mjs 3
+  //
+  // The two files Phase 3 added account for 28 of the 102 new errors; the rest
+  // are in tests Phase 3 widened. src/loaders/skills.ts stays at 0 because it
+  // is checked today.
   //
   // The lesson is not the arithmetic, it is that a sizing figure sitting three
   // lines below an edit is exactly the figure nobody re-runs. Standard 2: a

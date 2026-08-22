@@ -25,6 +25,7 @@ import {
   dist,
   distContentPages,
   distHtmlFiles,
+  entitledSources,
   read,
   repoRoot,
 } from "./_helpers.mjs";
@@ -204,7 +205,14 @@ test("0 broken assets: the favicon every page references is actually shipped", a
     );
     referenced += 1;
   }
-  assert.equal(rendered, 6, "expected 5 content pages plus the 404 to be rendered");
+  // RE-POINTED IN PHASE 3: the literal 6 was "the 5 content pages plus the
+  // 404". The claim is unchanged — EVERY rendered document carries exactly one
+  // favicon reference and it resolves — but the population is now counted
+  // rather than typed, so a page added without a favicon cannot pass by being
+  // outside a hardcoded total.
+  const expected = (await distContentPages()).length + 1;
+  assert.equal(rendered, expected, `expected every content page plus the 404 to be rendered`);
+  assert.ok(rendered > 1, "only one document rendered — this check is nearly vacuous");
   assert.equal(referenced, rendered);
 });
 
@@ -275,50 +283,71 @@ test("off-site links point at the real repository, at a pinned ref", async () =>
   // place the site sends a reader off-site. They must be shaped correctly, and
   // must not be silently pointing at some other repo.
   const pages = await distContentPages();
-  const gh = new Set();
+  const gh = [];
   for (const p of pages) {
     for (const href of hrefsIn(mainOf(p.html))) {
-      if (href.startsWith("https://github.com/")) gh.add(href);
+      if (href.startsWith("https://github.com/")) gh.push({ route: p.route, href });
     }
   }
-  assert.ok(gh.size > 0, "no GitHub source links were rendered at all");
+  assert.ok(gh.length > 0, "no GitHub source links were rendered at all");
 
   // Every off-site link is either MINTED by the build (a source permalink,
-  // which must point at this repository at the pinned ref) or DECLARED in the
-  // repo (plugin.json's author.url and repository fields, which must appear
-  // byte-identically and must not be invented). Nothing else is allowed.
-  const manifest = JSON.parse(
-    await readFile(join(repoRoot, "plugins", PLUGIN, "plugin.json"), "utf8"),
-  );
-  const declaredUrls = new Set(
-    JSON.stringify(manifest)
-      .match(/https?:\/\/[^"\\]+/g)
-      ?.map((u) => u.replace(/\/$/, "")) ?? [],
-  );
-
-  for (const href of gh) {
-    if (/\/(blob|tree)\//.test(href)) {
-      assert.ok(
-        href.startsWith("https://github.com/ghchinoy/agent-skills/"),
-        `minted source link points at an unexpected repository: ${href}`,
-      );
+  // which must point at this repository at the pinned ref) or PRESENT IN THE
+  // PAGE'S OWN SOURCES (plugin.json's author.url and repository fields; a URL
+  // written in a lifted README or CONTRIBUTING section), in which case it must
+  // appear byte-identically and must not be invented. Nothing else is allowed.
+  //
+  // RE-POINTED IN PHASE 3, AND STRENGTHENED. The declared set used to be built
+  // from ONE plugin's manifest and applied to every page, which at fan-out
+  // would have let any plugin's URL excuse a link on any other plugin's page.
+  // It is now resolved PER PAGE against `entitledSources()`, so a URL is
+  // allowed only where its own source says it. That is what surfaced the new
+  // case: https://github.com/vercel-labs/skills is on /about/install/ because
+  // the README's install section links it, and on no other page.
+  let minted = 0;
+  let sourced = 0;
+  // A MINTED link is one this build constructed: it points into THIS
+  // repository, at a blob or tree. Phase 3 had to add the repository test to
+  // that definition, because a blob URL is not by itself a sign the build made
+  // it — plugins/agent-plugin-authoring's SKILL.md body links
+  // github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md, which
+  // is an author's citation of another project's file. It goes down the
+  // source-attribution branch, where it is checked against the document that
+  // wrote it. A genuinely misminted link — ours, wrong ref — still fails the
+  // ref assertion, and a minted link at an unexpected repository now fails the
+  // attribution branch instead, because no source of that page would contain
+  // it.
+  const OURS = "https://github.com/ghchinoy/agent-skills/";
+  for (const { route, href } of gh) {
+    if (href.startsWith(OURS) && /\/(blob|tree)\//.test(href)) {
       assert.match(
         href,
         /\/(blob|tree)\/main\//,
         `GitHub link is not a blob/tree at the pinned ref: ${href}`,
       );
+      minted += 1;
       continue;
     }
+    const bare = href.replace(/\/$/, "");
+    const sources = await entitledSources(route);
     assert.ok(
-      declaredUrls.has(href.replace(/\/$/, "")),
-      `off-site link ${href} is neither a minted source permalink nor a URL declared in plugin.json`,
+      sources.some((s) => s.includes(bare)),
+      `off-site link ${href} on /${route}/ is neither a minted source permalink nor a URL ` +
+        `written in any source that page renders`,
     );
+    sourced += 1;
   }
+  // Both branches must have run, or one of them is untested.
+  assert.ok(minted > 0, "no minted permalink was rendered — that branch is vacuous");
+  assert.ok(sourced > 0, "no source-declared off-site link was rendered — that branch is vacuous");
   // The example-bundle DIRECTORY link is a /tree/ URL, not /blob/ — an I5
   // detail that is wrong in a way nothing else would catch.
-  const bundle = [...gh].find((h) => h.includes("example-bundle"));
+  const bundle = gh.find(({ href }) => href.includes("example-bundle"));
   assert.ok(bundle, "the assets/example-bundle/ link was not rendered");
-  assert.match(bundle, /\/tree\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/);
+  assert.match(
+    bundle.href,
+    /\/tree\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/,
+  );
 });
 
 // ── helpers ─────────────────────────────────────────────────────────────────

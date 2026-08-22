@@ -224,6 +224,63 @@ function stripDataSourced(text) {
   return out;
 }
 
+// ── The LIFTED allowance (Phase 3) ───────────────────────────────────────────
+//
+// A THIRD source of repository identity, found by this control at fan-out in
+// the same way the second one was found in round 4: the assertion failed and
+// the code was right.
+//
+// `/about/install/` reproduces `README.md`'s "Installation & Usage" section
+// VERBATIM — that is Phase 3 acceptance criterion 9, in those words — and the
+// README's install commands name the repository as a literal:
+// `npx skills add ghchinoy/agent-skills --list`, and a `git clone` of
+// `https://github.com/ghchinoy/agent-skills.git`. Under a perturbed REPO_URL
+// those strings do not move, because they are not derived from REPO_URL. They
+// are the README's own bytes, and substituting a site constant into lifted
+// prose would be the site editing its source, which is the one thing this site
+// does not do.
+//
+// WHAT THIS ALLOWANCE HIDES, stated because an exemption nobody re-reads is how
+// a fact stops being known: repository identity now has THREE sources of truth
+// — `site.config.mjs`'s REPO_URL, `plugin.json`'s `repository` field, and the
+// README's install commands — and a repository rename would break the second
+// and third silently. Neither is in this branch's scope to change. Both are
+// disclosed rather than fixed, and the disclosure is a build-log/report matter,
+// not an upstream one.
+//
+// The allowance is not a blanket: it exempts a NAMED PAGE, and only for strings
+// that are literally present in the source region that page lifts. Anything
+// else surviving on that page still fails.
+const LIFTED = {
+  "about/install/index.html": {
+    source: "README.md",
+    heading: "Installation & Usage",
+    reason:
+      "AC9 requires this page to reproduce the README's three installers verbatim and in the " +
+      "README's order. The README's own commands name the repository literally, so the real " +
+      "owner/repo survives a perturbed REPO_URL here — correctly, because the page follows the " +
+      "README rather than the constant. Measured under a fully perturbed config: 1 page.",
+  },
+};
+
+/** The exact source region a lifted page reproduces, read from the repo. */
+async function liftedSource(rel) {
+  const lift = LIFTED[rel];
+  if (lift === undefined) return null;
+  const md = await readFile(join(repoRoot, lift.source), "utf8");
+  const lines = md.split("\n");
+  const start = lines.findIndex((l) => l.trim() === `## ${lift.heading}`);
+  assert.notEqual(start, -1, `${lift.source} has no "## ${lift.heading}" section`);
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^## \S/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join("\n");
+}
+
 // The exemptions, priced. Standard 17b: state what each one hides.
 //
 // EMPTY AS OF PHASE 3, and that is a strengthening rather than a gap. Phase 1
@@ -435,7 +492,12 @@ test("E2E: advisory gates proven only at unit level actually fire in a real buil
   // is fixed.
   const planted = advisoryCount(output);
   const baseline = advisoryCount((await cases.insideFence).output);
-  assert.equal(baseline, 10, `the unplanted baseline moved: ${baseline}`);
+  // A tripwire, not the claim. RE-POINTED IN PHASE 3: 10 was the total for a
+  // one-plugin build; 30 is the total for all ten, of which 5 are the version
+  // skews the fan-out surfaced. The claim is the relational one below, which
+  // holds at any baseline; this line exists so that a baseline change is
+  // something a human looks at rather than something a diff absorbs.
+  assert.equal(baseline, 30, `the unplanted baseline moved: ${baseline}`);
   assert.equal(
     planted,
     baseline + 2,
@@ -449,7 +511,12 @@ test("E2E control: the advisory-count assertion is aimed at a string the build e
   // reads the real line out of a real build's output.
   const { output } = await cases.insideFence;
   assert.match(output, /\d+ source-repo advisories/, "the build no longer reports a total");
-  assert.equal(advisoryCount(output), 10);
+  // The helper's answer against a second, independent parse of the same line.
+  // RE-POINTED IN PHASE 3: this used to compare against the literal 10, which
+  // duplicated the tripwire above and said nothing extra about the helper.
+  const reparsed = Number(/(\d+) source-repo advisories/.exec(output)[1]);
+  assert.equal(advisoryCount(output), reparsed);
+  assert.ok(reparsed > 0, "a zero total would make this control vacuous");
 
   // Negative, and the evidence for the finding: the literal the deleted
   // assertion matched against appears in NO build output that has ever
@@ -643,12 +710,57 @@ test("E2E control: the sensitivity check fails when the output does not follow t
     const real = new RegExp(`^export const ${name} = "([^"]*)";$`, "m").exec(config)[1];
     if (real === "main") continue; // `<main>` — see the note on PERTURBATIONS
     const survivors = html.filter((h) => stripDataSourced(h.text).includes(real));
+    // Phase 3: a survivor on a LIFTED page is allowed only if the source
+    // region that page reproduces literally contains the surviving string.
+    // Derived per survivor, so the allowance cannot cover a page by name
+    // alone — an unrelated leak onto /about/install/ still fails.
+    const unexplained = [];
+    for (const s of survivors) {
+      const source = await liftedSource(s.rel);
+      if (source !== null && source.includes(real)) continue;
+      unexplained.push(s.rel);
+    }
     assert.deepEqual(
-      survivors.map((h) => h.rel),
+      unexplained,
       [],
       `the REAL ${name} (${real}) still renders under a perturbed config, and not from any ` +
         `known data source — the build read a stale or cached dist, or the value is hard-coded`,
     );
+  }
+});
+
+test("E2E: the lifted allowance is real, and it is a THIRD source of repo identity", async () => {
+  // 17b again, for the Phase 3 allowance. Same shape as the DATA_SOURCED test
+  // below: prove the exemption covers something that actually exists, prove it
+  // is not a blanket, and say out loud what it hides.
+  for (const [rel, lift] of Object.entries(LIFTED)) {
+    const source = await liftedSource(rel);
+    assert.ok(source && source.length > 0, `${rel}: the lifted region is empty`);
+    assert.ok(lift.reason.length > 60, `${rel} is exempted without a real reason`);
+
+    // The thing it covers is really there, and it is really repo identity.
+    const config = await readFile(join(siteRoot, "src/site.config.mjs"), "utf8");
+    const repoUrl = /^export const REPO_URL = "([^"]*)";$/m.exec(config)[1];
+    const slug = new URL(repoUrl).pathname.replace(/^\/|\/$/g, "");
+    assert.ok(
+      source.includes(slug),
+      `${lift.source}'s "${lift.heading}" section no longer names ${slug}, so this allowance ` +
+        `covers nothing — remove it rather than leaving a rule about nothing`,
+    );
+
+    // Not a blanket: a string the lifted region does NOT contain is not
+    // covered, so an unrelated leak onto the same page still fails.
+    assert.ok(
+      !source.includes("https://perturbed-origin.example"),
+      "the lifted region contains a perturbation value; this control cannot discriminate",
+    );
+  }
+  // The page named actually exists in a real build, so the key is not a typo
+  // that silently exempts nothing. (A typo'd key would make the allowance
+  // inert, and an inert allowance reads as coverage.)
+  const built = (await perturbedHtml()).map((h) => h.rel);
+  for (const rel of Object.keys(LIFTED)) {
+    assert.ok(built.includes(rel), `${rel} is exempted but was never built — stale key`);
   }
 });
 
@@ -689,25 +801,63 @@ test("E2E: the rendered install command is DERIVED from REPO_URL, not hard-coded
   const { ok, output, root } = await cases.perturbedConstants;
   assert.ok(ok, `the perturbed build failed:\n${output}`);
 
-  const html = (await perturbedHtml()).map((h) => h.text);
-  assert.ok(html.length > 0, "the perturbed build produced no HTML");
+  const pages = await perturbedHtml();
+  assert.ok(pages.length > 0, "the perturbed build produced no HTML");
 
-  const commands = [...new Set(html.flatMap((h) => [...h.matchAll(/npx skills add ([^\s<]+)/g)].map((m) => m[1])))];
+  // PARTITIONED IN PHASE 3, and the partition is the finding. Install commands
+  // now reach the output by two different routes: the site GENERATES one on
+  // every skill page from REPO_URL, and `/about/install/` LIFTS the README's
+  // own commands verbatim (AC9). Those are different claims and they need
+  // different assertions — pooling them would have meant either exempting the
+  // generated ones or asserting that a verbatim lift follows a site constant.
+  const slugsOn = (h) => [...h.matchAll(/npx skills add ([^\s<]+)/g)].map((m) => m[1]);
+  const generated = new Set();
+  const lifted = new Set();
+  for (const p of pages) {
+    const source = await liftedSource(p.rel);
+    for (const slug of slugsOn(p.text)) (source === null ? generated : lifted).add(slug);
+  }
   assert.ok(
-    commands.length > 0,
-    "no install command is rendered anywhere, so this control cannot see the thing it controls",
+    generated.size > 0,
+    "no GENERATED install command is rendered anywhere, so this control cannot see the thing " +
+      "it controls",
+  );
+  assert.ok(
+    lifted.size > 0,
+    "no LIFTED install command is rendered anywhere, so the partition below is vacuous and " +
+      "AC9's page is not reproducing the README's commands",
   );
 
-  // MOVED. Every rendered slug follows the perturbed constant.
+  // MOVED. Every GENERATED slug follows the perturbed constant.
   assert.deepEqual(
-    commands,
+    [...generated],
     ["perturbed-owner/perturbed-repo"],
     "the rendered install command did NOT follow REPO_URL — it is hard-coded somewhere, " +
       "or the loader did not re-run, and an unchanged dist digest would mean nothing",
   );
-  assert.ok(
-    !html.some((h) => h.includes("npx skills add ghchinoy/agent-skills")),
-    "the real slug still renders under a perturbed REPO_URL",
+
+  // DID NOT MOVE, and must not have. The lifted slugs are the README's bytes;
+  // each one is required to appear literally in the region the page lifts, so
+  // "did not move" is checked against the source rather than merely tolerated.
+  const source = await liftedSource(Object.keys(LIFTED)[0]);
+  for (const slug of lifted) {
+    assert.ok(
+      source.includes(`npx skills add ${slug}`),
+      `/about/install/ renders "npx skills add ${slug}", which is not in the README section ` +
+        `it reproduces — the lift is not verbatim`,
+    );
+    assert.ok(
+      !slug.includes("perturbed"),
+      "a perturbed constant was substituted into lifted README prose",
+    );
+  }
+
+  // The real slug survives ONLY on the lifted page.
+  const realOn = pages.filter((h) => h.text.includes("npx skills add ghchinoy/agent-skills"));
+  assert.deepEqual(
+    realOn.map((h) => h.rel),
+    Object.keys(LIFTED),
+    "the real slug still renders under a perturbed REPO_URL on a page that does not lift it",
   );
 });
 
