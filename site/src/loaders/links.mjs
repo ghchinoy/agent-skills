@@ -36,7 +36,7 @@
 
 /**
  * @typedef {object} LinkContext
- * @property {"skill"|"reference"} kind
+ * @property {"skill"|"reference"|"site"} kind
  * @property {string} base            Astro `base`, e.g. "/agent-skills"
  * @property {string} blobBase        e.g. "https://github.com/o/r/blob/main"
  * @property {string} treeBase        e.g. "https://github.com/o/r/tree/main"
@@ -50,6 +50,8 @@
  * @property {Set<string>} routedSkills       sibling skill slugs in this plugin
  * @property {object|null} resources          depth-1 inventory for this skill
  * @property {string} sourceRepoPath          for error and advisory messages
+ * @property {Set<string>} [routedPages]     every route this build emits, as
+ *   base-prefixed paths with a trailing slash. Required for `kind: "site"`.
  * @property {(a: object) => void} note       advisory sink
  */
 
@@ -86,8 +88,24 @@ export function resolveTarget(target, at, ctx) {
   if (target === "" ) throw fail(target, ctx, line, "empty target.");
   if (EXTERNAL.test(target)) return target;
   if (target.startsWith("#")) return target; // in-page anchor
-  // Site-absolute. Not passed through — see the header note.
+  // Site-absolute. Not passed through — see the header note. The ONE
+  // exception is a site page's own base-prefixed route, which this build wrote
+  // itself from the base constant and which is checked against the routes the
+  // build is emitting.
   if (target.startsWith("/")) {
+    if (ctx.kind === "site") {
+      const [routePath, routeAnchor] = splitAnchor(target);
+      if (ctx.routedPages.has(routePath)) return `${routePath}${routeAnchor}`;
+      throw fail(
+        target,
+        ctx,
+        line,
+        `this site emits no page at "${routePath}". A site page's internal ` +
+          `links are checked against the routes the build produced, so a link ` +
+          `to a page that does not exist stops the build instead of shipping ` +
+          `a 404 for a reader to find. Known routes: ${ctx.routedPages.size}.`,
+      );
+    }
     throw fail(
       target,
       ctx,
@@ -102,8 +120,47 @@ export function resolveTarget(target, at, ctx) {
   const [rawPath, anchor] = splitAnchor(target);
   const path = rawPath.replace(/^\.\//, "");
 
+  if (ctx.kind === "site") return resolveFromSitePage(path, anchor, target, at, ctx);
   if (ctx.kind === "reference") return resolveFromReference(path, anchor, target, at, ctx);
   return resolveFromSkill(path, anchor, target, at, ctx);
+}
+
+/**
+ * A site page — the landing page, /skills/, and the three /about/ pages.
+ *
+ * These bodies are part site-authored and part LIFTED from `README.md` and
+ * `CONTRIBUTING.md`, and the two halves need opposite treatment:
+ *
+ *  - The site-authored half writes internal links as `<base>/…`, already
+ *    base-prefixed by this build from the one constant that holds the base. So
+ *    a site-absolute target is legal here and ONLY here, and it is checked
+ *    against the set of routes the build is actually emitting — an internal
+ *    link to a page that does not exist is a build error, not a 404 for a
+ *    reader to find.
+ *  - The lifted half is somebody else's markdown, written to be read inside a
+ *    git checkout. A relative target in it (`LICENSE`, `docs/x.md`) means a
+ *    path in the repository, and there is no rule here for turning one into a
+ *    URL, so it stops the build. That is Phase 1's posture for the image
+ *    branch repeated: a rule nothing exercises is a rule nothing has proven,
+ *    and today every link in every lifted region is an absolute http(s) URL —
+ *    measured, 5 of 5. Writing a speculative blob-URL rule instead would ship
+ *    an unproven path and hide the day the README starts linking sideways.
+ */
+function resolveFromSitePage(path, anchor, target, at, ctx) {
+  const { line } = at;
+  // Site-absolute never reaches here: resolveTarget throws on a leading "/"
+  // before the split. So the base-prefixed case is handled there, not here —
+  // see the `ctx.routedPages` branch.
+  throw fail(
+    target,
+    ctx,
+    line,
+    `a site page body may contain only absolute http(s) links, in-page ` +
+      `anchors, and this site's own routes written as "${ctx.base}/…". ` +
+      `"${target}" is a repository-relative path, and there is no rule for ` +
+      `turning one into a URL on a page that is not itself inside the ` +
+      `repository tree.`,
+  );
 }
 
 function resolveFromSkill(path, anchor, target, at, ctx) {

@@ -13,6 +13,25 @@ import { buildSidebar } from "./src/sidebar.mjs";
 export default defineConfig({
   site: SITE,
   base: BASE,
+  // ── FOUND IN PHASE 3, AND IT IS OLDER THAN PHASE 3 ───────────────────────
+  //
+  // src/loaders/markdown.mjs opens by saying the body transformation is a
+  // CLOSED list of exactly two operations — "No heading demotion, no
+  // prettifier, no SMART QUOTES, no reflow" — and proposal §6.5 says the same.
+  // That was true of the module. It was not true of the page, because Astro's
+  // markdown renderer runs SmartyPants by default, downstream of everything
+  // the loader does and outside the list the loader is describing. A comment
+  // that is correct about its own file and wrong about the artifact is worse
+  // than no comment: it is the reason nobody went looking.
+  //
+  // Measured on this branch before the flag was added: 34 of the 58 built
+  // pages differed byte-for-byte with SmartyPants on versus off. The README's
+  // own "the model's immediate context window" reached the landing page as
+  // "model’s" — a character the repository does not contain, on a site whose
+  // entire claim is that it renders what the source declares.
+  //
+  // Off. The declared bytes are the declared bytes, apostrophes included.
+  markdown: { smartypants: false },
 
   // NO `redirects` HERE, AND THAT IS THE CHANGE. Phase 1 routed five content
   // pages and no landing page, so the site root was a redirect stub whose only

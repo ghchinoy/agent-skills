@@ -167,6 +167,11 @@ function advisory(code, file, line, message) {
  *   description, kept only so I1 can report it. NOT rendered.
  * @property {SkillEntry[]} skills
  * @property {ReferenceEntry[]} references
+ * @property {{repoPath: string, present: boolean}} mcp  the §6.1 fixed location
+ *   `<plugin>/mcp.json`, PROBED rather than assumed. `present: false` is a
+ *   measurement — the file was looked for and is not there — which is what lets
+ *   /about/standards/ say this catalog ships no MCP servers without anybody
+ *   typing a zero.
  */
 
 /**
@@ -279,6 +284,22 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
             `separately-worded description is not rendered.`,
         ),
       );
+    }
+
+    // ── The other §6.1 fixed location: mcp.json ─────────────────────────────
+    // Agent Plugins §6.1 fixes exactly two things inside a plugin root:
+    // `skills/` and `mcp.json`. The loader has always implemented the first
+    // one. This probes the second — one stat, no read — so that "this catalog
+    // is skills-only" is a thing the build MEASURED across every declared
+    // plugin, rather than a sentence somebody wrote once and nothing rechecks.
+    // The file is not parsed: counting servers inside it would be a different
+    // claim, and it is not one this repo's data ever needs.
+    const mcpRel = `${pluginRel}/mcp.json`;
+    let mcpPresent = false;
+    try {
+      mcpPresent = (await fs.stat(join(pluginDir, "mcp.json"))).isFile();
+    } catch {
+      mcpPresent = false;
     }
 
     // ── §7.1 discovery. Read this block against the quotation above. ────────
@@ -418,6 +439,7 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
         typeof entry.description === "string" ? entry.description : null,
       skills,
       references: pluginRefs,
+      mcp: { repoPath: mcpRel, present: mcpPresent },
     });
   }
 

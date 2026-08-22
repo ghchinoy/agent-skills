@@ -61,7 +61,35 @@ export async function buildSidebar(onlyPlugins) {
   const { plugins } = await enumerate({ repoRoot, fs: nodeFs, onlyPlugins });
   const displayNames = await readDisplayNames(repoRoot);
 
-  const groups = [];
+  // The skill total in the "All skills (N)" label. COUNTED from the same
+  // enumeration that builds the groups below, never typed: proposal §11 lists
+  // "hand-type '10 plugins, 23 skills' on a landing page" under what this site
+  // does not do, and a hand-typed number in the navigation is the same claim in
+  // a more permanent place. Adding a skill changes this label and nothing else.
+  const skillCount = plugins.reduce((n, p) => n + p.skills.length, 0);
+
+  const groups = [
+    // ── Start (proposal §6.3) ────────────────────────────────────────────────
+    // Explicit labels, because these are not pages whose title happens to suit
+    // the nav: "Agent Skills & Plugins" is the landing page's title, lifted
+    // from the README's H1, and it would read as a second site name in a
+    // sidebar that already carries one.
+    //
+    // NOT HERE, and deliberately: the "→ agentskills CLI" cross-link to site B.
+    // §6.3 sketches it, and §8 makes the two sites a pair — but site B does not
+    // exist yet, and Phase 8 owns the bridge between them. A link to a URL
+    // nobody has published is a broken link with a plan attached. It goes in
+    // when there is something at the other end.
+    {
+      label: "Start",
+      items: [
+        { label: "What this is", slug: "index" },
+        { label: "Install & usage", slug: "about/install" },
+        { label: "The standards", slug: "about/standards" },
+        { label: `All skills (${skillCount})`, slug: "skills" },
+      ],
+    },
+  ];
   for (const plugin of plugins) {
     const items = [
       // The plugin overview page keeps its inherited title, which is the
@@ -84,6 +112,11 @@ export async function buildSidebar(onlyPlugins) {
       items,
     });
   }
+  // ── Project (proposal §6.3) ───────────────────────────────────────────────
+  groups.push({
+    label: "Project",
+    items: [{ label: "Contributing", slug: "about/contributing" }],
+  });
   return groups;
 }
 

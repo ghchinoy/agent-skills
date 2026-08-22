@@ -19,6 +19,23 @@
 // `license`), so even the label is lifted rather than invented. Every label
 // element carries `data-field-label`, which is what
 // tests/no-fabrication.test.mjs scans — see AC 9.
+//
+// ── EVERY ROW NAMES ITS SOURCE, IN WORDS (EM ruling, Phase 3) ────────────────
+//
+// Phase 1 put the source in `data-field-source`, a machine attribute, and in
+// visible words only on the manifest and derived rows. That was enough for the
+// tests and not enough for a reader, and the gap has a concrete cost: five
+// skills in this catalog declare a `metadata.version` that differs from their
+// plugin's `plugin.json` version (I3, and it is five rather than the one the
+// specification names). This site renders each number on the page of the entity
+// that DECLARED it — one rule, no conditional, nothing merged or normalised —
+// and that rule is only legible if each page says whose number it is showing.
+// So every row now carries a `.src` line: "from this skill's SKILL.md", "from
+// plugin.json", "derived".
+//
+// A machine attribute is not a label to a reader. Both are kept: the attribute
+// is what the tests address, the words are what the reader gets, and neither
+// substitutes for the other.
 
 interface Props {
   entry: any;
@@ -30,6 +47,10 @@ const data = (entry?.data ?? {}) as any;
 // the honest answer; inventing a shape for it would be the fabrication.
 const d = data._skill;
 const manifest = data._manifest ?? {};
+// A page ABOUT the catalog. Mutually exclusive with `_skill` — the loader's
+// `emit()` refuses an entry that has both or neither — so the two blocks below
+// can never both render.
+const p = data._page;
 
 // Derived from plugin.json's own `$schema` URL, which is the only place the
 // targeted standard version is declared. No $schema, no row.
@@ -76,7 +97,7 @@ const author = manifest.author;
          rather than being silently swapped for the prose title. */
       d.kind === "skill" && typeof data.name === "string" && (
         <div class="field-row">
-          <dt data-field-label data-field-source="skill-frontmatter">name</dt>
+          <dt data-field-label data-field-source="skill-frontmatter">name <span class="src">from this skill's SKILL.md</span></dt>
           <dd><code>{data.name}</code></dd>
         </div>
       )
@@ -85,7 +106,7 @@ const author = manifest.author;
       d.kind === "skill" &&
         Object.entries(metadata).map(([key, value]) => (
           <div class="field-row">
-            <dt data-field-label data-field-source="skill-frontmatter">{key}</dt>
+            <dt data-field-label data-field-source="skill-frontmatter">{key} <span class="src">from this skill's SKILL.md</span></dt>
             <dd>
               {Array.isArray(value) ? (
                 // D1: rendered as the list the author declared, one exact
@@ -105,7 +126,7 @@ const author = manifest.author;
     {
       d.kind === "skill" && data.compatibility !== undefined && (
         <div class="field-row">
-          <dt data-field-label data-field-source="skill-frontmatter">compatibility</dt>
+          <dt data-field-label data-field-source="skill-frontmatter">compatibility <span class="src">from this skill's SKILL.md</span></dt>
           <dd>{data.compatibility}</dd>
         </div>
       )
@@ -113,7 +134,7 @@ const author = manifest.author;
     {
       d.kind === "skill" && data["allowed-tools"] !== undefined && (
         <div class="field-row">
-          <dt data-field-label data-field-source="skill-frontmatter">allowed-tools</dt>
+          <dt data-field-label data-field-source="skill-frontmatter">allowed-tools <span class="src">from this skill's SKILL.md</span></dt>
           <dd>{data["allowed-tools"]}</dd>
         </div>
       )
@@ -124,7 +145,7 @@ const author = manifest.author;
          property of today's data into the template. */
       d.kind === "skill" && data.license !== undefined && (
         <div class="field-row">
-          <dt data-field-label data-field-source="skill-frontmatter">license</dt>
+          <dt data-field-label data-field-source="skill-frontmatter">license <span class="src">from this skill's SKILL.md</span></dt>
           <dd>{data.license}</dd>
         </div>
       )
@@ -317,6 +338,27 @@ const author = manifest.author;
   }
 </div>
 )}
+
+{
+  /* A site page states its provenance and nothing else. `sourcePath` is
+     non-null exactly when the page LIFTS bytes from a repository document, and
+     a reader who wants to know whether they are reading the repo's words or
+     the site's can see which from here. A site-authored page renders no row,
+     because there is no source to name and "source: this site" would be a
+     label carrying no information. */
+  p && p.sourcePath !== null && (
+    <div class="entry-meta" data-entry-kind="site">
+      <dl class="field-list">
+        <div class="field-row">
+          <dt data-field-label data-field-source="derived">
+            source <span class="src">derived — lifted verbatim from this file</span>
+          </dt>
+          <dd><a href={p.sourceUrl}><code>{p.sourcePath}</code></a></dd>
+        </div>
+      </dl>
+    </div>
+  )
+}
 
 <style>
   .entry-meta {

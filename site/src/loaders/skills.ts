@@ -30,9 +30,10 @@ import type { Loader, LoaderContext } from "astro/loaders";
 import { z } from "astro/zod";
 
 import { enumerate, nodeFs, toPosix } from "./enumerate.mjs";
-import { analyzeDeclared, splitFrontmatter } from "./frontmatter.mjs";
+import { analyzeDeclared, frontmatterKeyLine, splitFrontmatter } from "./frontmatter.mjs";
 import { firstH1, rewriteLinks, stripLeadingH1 } from "./markdown.mjs";
 import { resolveTarget } from "./links.mjs";
+import { buildSitePages } from "./site-pages.mjs";
 
 export interface SkillsLoaderOptions {
   /** Repository root, relative to the Astro project root. */
@@ -88,6 +89,57 @@ const Declared = z.object({
   metadata: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
 });
 
+/**
+ * DERIVED, for a page ABOUT the catalog rather than in it: the landing page,
+ * `/skills/`, and the three `/about/` pages.
+ *
+ * Its own namespace rather than a sixth `_skill.kind`, because these pages have
+ * no declared source entity at all. A site page is not a skill with missing
+ * fields, and giving it the skill shape would invite a template to ask it skill
+ * questions and get `undefined` for an answer.
+ */
+const SitePage = z.object({
+  kind: z.literal("site"),
+  /** The repo document whose bytes were lifted, or `null` if site-authored. */
+  sourcePath: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  /**
+   * Index data that travels as DATA rather than as generated markdown. See
+   * site-pages.mjs: a declared description spliced into a markdown string would
+   * have its backticks and asterisks reinterpreted, and the page would show
+   * something its author did not write.
+   */
+  lists: z
+    .object({
+      plugins: z
+        .array(
+          z.object({
+            name: z.string(),
+            displayName: z.string().nullable(),
+            href: z.string(),
+            description: z.string(),
+            skillCount: z.number(),
+            referenceCount: z.number(),
+          }),
+        )
+        .optional(),
+      skills: z
+        .array(
+          z.object({
+            plugin: z.string(),
+            pluginDisplayName: z.string().nullable(),
+            pluginHref: z.string(),
+            name: z.string(),
+            title: z.string(),
+            description: z.string(),
+            href: z.string(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
+});
+
 /** DERIVED — computed by this build, never merged into the above. */
 const Derived = z.object({
   kind: z.enum(["plugin", "skill", "reference"]),
@@ -140,9 +192,25 @@ const Derived = z.object({
  */
 const Manifest = z.record(z.string(), z.any());
 
+/**
+ * ON THE THREE OPTIONALS BELOW, AND WHAT REPLACES THE STRICTNESS THEY GIVE UP.
+ *
+ * Phase 1 required `_skill` and `_manifest` on every entry, which was exactly
+ * right when every entry described a plugin, a skill or a reference. Phase 3
+ * adds five pages that describe none of those, so a schema demanding a manifest
+ * of the landing page would be demanding a fiction. Zod cannot express "exactly
+ * one of `_skill` and `_page`, and `_manifest` iff `_skill`" in a shape
+ * `docsSchema({ extend })` will compose with — it wraps this object and adds
+ * its own keys.
+ *
+ * So the constraint moved rather than disappeared: `emit()` asserts it, on
+ * every entry, at the one place entries are created. An optional here is not a
+ * loosened rule; it is the same rule enforced where it can be stated exactly.
+ */
 export const skillsSchema = Declared.extend({
-  _skill: Derived,
-  _manifest: Manifest,
+  _skill: Derived.optional(),
+  _manifest: Manifest.optional(),
+  _page: SitePage.optional(),
 });
 
 export function skillsLoader(options: SkillsLoaderOptions): Loader {
@@ -178,6 +246,15 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
       const treeUrl = (repoPath: string) => `${treeBase}/${repoPath}`;
 
       let pages = 0;
+
+      // Accumulated across the plugin loop and handed to the site pages, so
+      // that every count and every list on `/`, `/skills/` and
+      // `/about/standards/` is a tally of what this build actually emitted
+      // rather than a second traversal that could disagree with the first.
+      const skillIndex: any[] = [];
+      const emittedIds: string[] = [];
+      let referencePages = 0;
+      let unroutedResources = 0;
 
       /**
        * Emits ONE reference page, at either scope.
@@ -259,6 +336,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           _manifest: scope.plugin.manifest,
         }, rewritten, raw);
 
+        referencePages += 1;
         return { title, href: `${base}/${id}/`, notes };
       }
 
@@ -284,6 +362,46 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           });
 
           const notes: any[] = [...fmNotes];
+
+          // ── I3, VERSION SKEW ────────────────────────────────────────────
+          //
+          // A skill declaring `metadata.version` that differs from its
+          // plugin's `plugin.json` version. Both numbers are declared, by
+          // different authors about different entities, and the site renders
+          // each on the page of the entity that declared it — it does not
+          // merge them, prefer one, or normalise "1.9" into "1.9.0". This
+          // advisory is how the reader of a build log finds out the two
+          // disagree.
+          //
+          // READ THIS BEFORE ADDING A SKILL NAME BELOW. Proposal §3.7 names
+          // `bd-dolt-troubleshooter` as THE version-skew case. Measuring all 23
+          // skills found FIVE, of which that is one; the specification stated
+          // an instance and was read as a population. So the test in
+          // tests/versions.test.mjs derives the skew set the same way this loop
+          // does and hardcodes no skill name, and neither does this code: the
+          // condition below is a comparison, and the population is every
+          // enumerated skill that declares a version. A count written here
+          // would be the same mistake in a new place.
+          const declaredVersion = declared.metadata?.version;
+          if (
+            typeof declaredVersion === "string" &&
+            typeof plugin.manifest.version === "string" &&
+            declaredVersion !== plugin.manifest.version
+          ) {
+            notes.push({
+              code: "I3",
+              file: skill.repoPath,
+              line: frontmatterKeyLine(fmText, fmFirstLine, "version", { nested: true }),
+              message:
+                `version skew: this skill declares metadata.version ` +
+                `"${declaredVersion}" while ${plugin.manifestRepoPath} declares ` +
+                `version "${plugin.manifest.version}" for the plugin that ships ` +
+                `it. Both are declared data about different entities; the site ` +
+                `renders each on the page of the entity that declared it and ` +
+                `merges neither.`,
+            });
+          }
+
           const routedSkillRefs = new Set(
             (skill.resources.references ?? [])
               .filter((r: any) => r.kind === "file" && /\.md$/i.test(r.name))
@@ -363,6 +481,25 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             description: declared.description,
             href: `${base}/${id}/`,
           });
+          skillIndex.push({
+            plugin: plugin.name,
+            pluginDisplayName,
+            pluginHref: `${base}/plugins/${plugin.name}/`,
+            name: declared.name,
+            title,
+            description: declared.description,
+            href: `${base}/${id}/`,
+          });
+          // Everything in the depth-1 inventory that this site does NOT route:
+          // scripts, assets, and non-markdown references. Counted here, at the
+          // one place that also decides what IS routed, so the two can never
+          // give different answers about the same file.
+          for (const group of ["references", "scripts", "assets"] as const) {
+            for (const r of skill.resources[group] ?? []) {
+              const routed = group === "references" && r.kind === "file" && /\.md$/i.test(r.name);
+              if (!routed) unroutedResources += 1;
+            }
+          }
           pluginNotes.push(...notes);
 
           // ── This skill's own reference pages ─────────────────────────────
@@ -465,6 +602,59 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
         }, "", "");
       }
 
+      // ── The five pages ABOUT the catalog ─────────────────────────────────
+      const { pages: sitePages } = await buildSitePages({
+        repoRoot,
+        base,
+        blobUrl,
+        plugins,
+        displayNames,
+        skillIndex,
+        referencePages,
+        unroutedResources,
+      });
+
+      // Every route the build emits, as the base-prefixed path a link would
+      // use. Site pages are added BEFORE any of them is rendered, so they may
+      // link to each other; the check in links.mjs then covers all of them.
+      const routedPages = new Set<string>([
+        ...emittedIds.map((id) => `${base}/${id}/`),
+        ...sitePages.map((p: any) => (p.id === "index" ? `${base}/` : `${base}/${p.id}/`)),
+      ]);
+
+      for (const page of sitePages) {
+        // Site-authored bytes have no repo file of their own; the module that
+        // wrote them is the honest `filePath` for Astro to name in an error.
+        const repoPath = page.sourcePath ?? "site/src/loaders/site-pages.mjs";
+        const body = page.stripH1 ? stripLeadingH1(page.body).body : page.body;
+        const { body: rewritten } = rewriteLinks(body, (target, at) =>
+          resolveTarget(target, at, {
+            kind: "site",
+            base,
+            blobBase,
+            treeBase,
+            plugin: "",
+            pluginRepoPath: "",
+            routedPluginRefs: new Set<string>(),
+            routedSkillRefs: new Set<string>(),
+            routedSkills: new Set<string>(),
+            routedPages,
+            resources: null,
+            sourceRepoPath: repoPath,
+            note: () => {},
+          }),
+        );
+        await emit(page.id, repoPath, {
+          title: page.title,
+          _page: {
+            kind: "site" as const,
+            sourcePath: page.sourcePath,
+            sourceUrl: page.sourceUrl,
+            lists: page.lists,
+          },
+        }, rewritten, page.body);
+      }
+
       // ── Advisories to the build log (§6.5) ───────────────────────────────
       // Non-fatal notes about the SOURCE repo. The site is a read-only
       // consumer: it reports and never repairs.
@@ -501,6 +691,27 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
         body: string,
         raw: string,
       ) {
+        // THE INVARIANT THE SCHEMA CANNOT STATE. See skillsSchema above: an
+        // entry describes a catalog entity (`_skill`, and then the manifest of
+        // the plugin it belongs to) or it describes the site (`_page`). Never
+        // both, never neither. Asserted here because here is the only place an
+        // entry is made, so there is no path around it.
+        const hasSkill = data._skill !== undefined;
+        const hasPage = data._page !== undefined;
+        if (hasSkill === hasPage) {
+          throw new Error(
+            `skills-loader: entry "${id}" has ${hasSkill ? "both" : "neither"} ` +
+              `\`_skill\` and \`_page\`. Exactly one is required: an entry ` +
+              `either describes something in the catalog or describes this site.`,
+          );
+        }
+        if (hasSkill && data._manifest === undefined) {
+          throw new Error(
+            `skills-loader: entry "${id}" carries \`_skill\` but no ` +
+              `\`_manifest\`. Every catalog entity belongs to a plugin, and ` +
+              `its manifest is declared data the page may render.`,
+          );
+        }
         const abs = join(repoRoot, repoPath);
         const filePath = toPosix(
           resolve(abs).startsWith(projectRoot)
@@ -517,6 +728,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           digest: generateDigest(raw + JSON.stringify(data)),
           rendered,
         });
+        emittedIds.push(id);
         pages += 1;
       }
     },
