@@ -20,6 +20,31 @@
 //   description  the skill's own `description` — declared
 //   plugin       the plugin that ships it, linked — derived, and labelled
 //   counts       `.length` of what the build enumerated — derived, and labelled
+//   keywords     `plugin.json.keywords` — declared, BY THE PLUGIN, and every
+//                place they appear says so (see below)
+//
+// ── THE FILTER, AND THE ONE FABRICATION IT IS BUILT TO AVOID ─────────────────
+//
+// Proposal §6.6: "There is no per-skill taxonomy in the data or in the
+// standard, and inventing one is the most tempting fabrication available here,
+// because a catalog wants facets." The only facet that exists is
+// `plugin.json.keywords`. So the filter is real, and every string a reader sees
+// around it says PLUGIN KEYWORD:
+//
+//   * the control's own heading says it,
+//   * each chip's accessible name says it,
+//   * each skill row prints the keywords under the plugin that declared them,
+//   * and the page prose above the list says a skill declares none of its own.
+//
+// The words "tag", "category" and "topic" appear nowhere in the rendered
+// output, and a Phase 3 gate (fields.test.mjs, AC7) fails the build's test run
+// if any of them shows up as a metadata label anywhere on the site.
+//
+// WITHOUT JAVASCRIPT ALL 23 ROWS RENDER, which is also what AC8 asks for. The
+// markup is the complete list; the script only sets `hidden` on rows. A reader
+// with no JS sees the whole catalog rather than an empty box, and the filter
+// state lives in one attribute so there is no second copy of "which rows are
+// showing" to disagree with the DOM.
 
 interface Props {
   entry: any;
@@ -28,6 +53,15 @@ const { entry } = Astro.props;
 const lists = entry?.data?._page?.lists;
 const plugins = lists?.plugins;
 const skills = lists?.skills;
+
+// Every keyword any listed skill's plugin declares, deduplicated, in code-unit
+// order. DERIVED FROM THE ROWS THEMSELVES — not from a second pass over the
+// manifests — so a chip cannot exist that matches no row, and a row cannot
+// carry a keyword that has no chip. Code-unit order for the reason the loader
+// gives about its log: an ordering rule that does not depend on a locale.
+const keywords: string[] = [
+  ...new Set<string>((skills ?? []).flatMap((s: any) => s.pluginKeywords ?? [])),
+].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 ---
 
 {
@@ -58,10 +92,43 @@ const skills = lists?.skills;
 }
 
 {
+  skills && keywords.length > 0 && (
+    <div class="kw-filter" data-keyword-filter>
+      <h2 id="filter-by-plugin-keyword" class="kw-heading">
+        Filter by plugin keyword
+      </h2>
+      <p class="kw-note">
+        Declared by the plugin in its <code>plugin.json</code>, not by the skill.
+        Showing <span data-shown-count>{skills.length}</span> of {skills.length}.
+      </p>
+      <ul class="kw-chips" aria-labelledby="filter-by-plugin-keyword">
+        <li>
+          <button type="button" data-keyword="" aria-pressed="true">
+            All skills
+          </button>
+        </li>
+        {keywords.map((k) => (
+          <li>
+            <button
+              type="button"
+              data-keyword={k}
+              aria-pressed="false"
+              aria-label={`plugin keyword ${k}`}
+            >
+              {k}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+{
   skills && (
     <ol class="site-index" data-site-index="skills">
       {skills.map((s: any) => (
-        <li data-index-entry>
+        <li data-index-entry data-keywords={(s.pluginKeywords ?? []).join(" ")}>
           <a href={s.href} data-entry-title>
             {s.title}
           </a>
@@ -70,9 +137,53 @@ const skills = lists?.skills;
             from <a href={s.pluginHref}>{s.pluginDisplayName ?? s.plugin}</a>
           </span>
           <span class="entry-desc" data-entry-description>{s.description}</span>
+          {/* The plugin's keywords, under the plugin that declared them and
+              said to be its. Rendered as text, not as links: a keyword has no
+              page, and a link to a filtered view would be a route this build
+              does not emit. */}
+          {(s.pluginKeywords ?? []).length > 0 && (
+            <span class="entry-kw" data-entry-keywords>
+              plugin keywords: {(s.pluginKeywords ?? []).join(", ")}
+            </span>
+          )}
         </li>
       ))}
     </ol>
+  )
+}
+
+{
+  skills && keywords.length > 0 && (
+    <script is:inline>
+      {`
+      (function () {
+        var filter = document.querySelector("[data-keyword-filter]");
+        var list = document.querySelector('[data-site-index="skills"]');
+        if (!filter || !list) return;
+        var rows = Array.prototype.slice.call(list.querySelectorAll("[data-index-entry]"));
+        var shown = filter.querySelector("[data-shown-count]");
+        filter.addEventListener("click", function (event) {
+          var button = event.target.closest("button[data-keyword]");
+          if (!button) return;
+          var want = button.getAttribute("data-keyword");
+          var visible = 0;
+          rows.forEach(function (row) {
+            var on =
+              want === "" ||
+              (" " + (row.getAttribute("data-keywords") || "") + " ").indexOf(" " + want + " ") !== -1;
+            row.hidden = !on;
+            if (on) visible += 1;
+          });
+          filter.querySelectorAll("button[data-keyword]").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b === button));
+          });
+          // The count is read off the DOM that was just set, so it cannot
+          // report a filter the page is not showing.
+          if (shown) shown.textContent = String(visible);
+        });
+      })();
+      `}
+    </script>
   )
 }
 
@@ -99,5 +210,48 @@ const skills = lists?.skills;
     font-size: var(--sl-text-sm);
     line-height: 1.5;
     margin-block-start: 0.15rem;
+  }
+  /* NOT clamped, truncated or line-limited — see I9 and the gate in
+     fields.test.mjs that fails on any rule which would hide declared text. */
+  .site-index .entry-kw {
+    display: block;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+    margin-block-start: 0.15rem;
+  }
+
+  .kw-filter {
+    margin-block: 1rem 1.5rem;
+  }
+  .kw-heading {
+    font-size: var(--sl-text-sm);
+    margin: 0;
+  }
+  .kw-note {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+    margin-block: 0.25rem 0.5rem;
+  }
+  .kw-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .kw-chips button {
+    font: inherit;
+    font-size: var(--sl-text-xs);
+    padding: 0.15rem 0.55rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    background: none;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+  }
+  .kw-chips button[aria-pressed="true"] {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
   }
 </style>

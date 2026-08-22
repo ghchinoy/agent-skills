@@ -13,7 +13,8 @@
     "astro": "astro",
     "typecheck": "astro check",
     "test": "npm run typecheck && node --test \"tests/*.test.mjs\"",
-    "check:live": "node scripts/check-live-links.mjs"
+    "check:live": "node scripts/check-live-links.mjs",
+    "check:blobs": "node scripts/check-blob-links.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.7",

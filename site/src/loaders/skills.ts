@@ -29,6 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Loader, LoaderContext } from "astro/loaders";
 import { z } from "astro/zod";
 
+import { adviseDeadPointers, adviseLength, adviseOrphans } from "./advise.mjs";
 import { enumerate, nodeFs, toPosix } from "./enumerate.mjs";
 import { analyzeDeclared, frontmatterKeyLine, splitFrontmatter } from "./frontmatter.mjs";
 import { firstH1, rewriteLinks, stripLeadingH1 } from "./markdown.mjs";
@@ -133,6 +134,18 @@ const SitePage = z.object({
             title: z.string(),
             description: z.string(),
             href: z.string(),
+            /**
+             * The keywords the SHIPPING PLUGIN declares (§6.6). `null` when its
+             * plugin.json declares none — distinct from `[]`, which would be
+             * this site saying a manifest declared an empty list.
+             *
+             * Zod strips unknown keys, so a field added to the object in
+             * skills.ts and not added here reaches no template and renders
+             * nowhere, with no error. That is how this one first arrived: the
+             * data was built, the component read it, and every row came out
+             * with an empty attribute and a green build.
+             */
+            pluginKeywords: z.array(z.string()).nullable(),
           }),
         )
         .optional(),
@@ -361,7 +374,18 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             expectedName: skill.name,
           });
 
-          const notes: any[] = [...fmNotes];
+          // ── D2, D4, I4 ──────────────────────────────────────────────────
+          // Findings that compare this file against its own directory. All
+          // three read `raw` — the bytes before the frontmatter split and the
+          // H1 strip — so the lines they report are source lines and need no
+          // offset correction. See advise.mjs for each condition and for why
+          // none of them hardcodes a skill name or an expected count.
+          const notes: any[] = [
+            ...fmNotes,
+            ...adviseLength(raw, skill.repoPath),
+            ...adviseDeadPointers(raw, skill),
+            ...adviseOrphans(raw, skill),
+          ];
 
           // ── I3, VERSION SKEW ────────────────────────────────────────────
           //
@@ -489,8 +513,22 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             title,
             description: declared.description,
             href: `${base}/${id}/`,
+            // ── The only facet in the data (§6.6) ─────────────────────────
+            //
+            // `plugin.json.keywords`, which Agent Plugins §5.4 defines as
+            // "Search and discovery tags". It is a PLUGIN's field. It travels
+            // on the skill row because that is the row a reader filters, and
+            // it travels under a name that says whose it is, because the one
+            // fabrication this catalog invites is a per-skill taxonomy: a
+            // skill does not declare "cobra", its plugin does. Carried as the
+            // declared array, unsorted and unmerged. Absent when the manifest
+            // declares none — not defaulted to [], which would be this site
+            // asserting a manifest declared an empty list.
+            pluginKeywords: Array.isArray(plugin.manifest.keywords)
+              ? plugin.manifest.keywords
+              : null,
           });
-          // Everything in the depth-1 inventory that this site does NOT route:
+          // Everything in the resource inventory that this site does NOT route:
           // scripts, assets, and non-markdown references. Counted here, at the
           // one place that also decides what IS routed, so the two can never
           // give different answers about the same file.

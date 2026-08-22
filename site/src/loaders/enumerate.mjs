@@ -10,16 +10,23 @@
 //
 // That sentence is implemented literally below: ONE readdir of
 // `<plugin>/skills/`, and for each entry that `isDirectory()`, ONE stat of
-// `<plugin>/skills/<name>/SKILL.md`. There is no recursion anywhere in this
-// file, so the 11 markdown files under
-// `okf-author/assets/example-bundle/` — including its own `references/skills/`
-// tree — are unreachable BY CONSTRUCTION rather than by an exclude list.
+// `<plugin>/skills/<name>/SKILL.md`. SKILL DISCOVERY DOES NOT RECURSE, so a
+// SKILL.md below depth 1 — including any inside `okf-author`'s
+// `assets/example-bundle/` teaching tree — is unreachable BY CONSTRUCTION
+// rather than by an exclude list.
 //
-// The resource inventory (§6.4's References / Scripts / Assets blocks) is also
-// strictly depth-1: it lists the immediate children of `references/`,
-// `scripts/` and `assets/` by real filename and never opens or descends into
-// them. `assets/example-bundle` is therefore inventoried as one DIRECTORY
-// entry, never as 11 pages.
+// The resource inventory (§6.4's References / Scripts / Assets blocks) is a
+// SEPARATE concern from skill discovery, and §7.1 does not govern it: its
+// prohibition is on recursively searching for ADDITIONAL SKILLS, not on
+// naming a file. `references/` and `scripts/` are inventoried depth-1 by
+// `listDir()`; `assets/` is inventoried at every depth by `listTree()`,
+// because AC1 requires every asset file to appear by real filename and names
+// a depth-2 file explicitly. See `listTree()` for why the three groups differ.
+//
+// The inventory LISTS NAMES AND NEVER OPENS BYTES, at any depth. The two
+// invariants that actually matter — no asset file is ever read, and no asset
+// file ever becomes a page — are asserted independently and did not move when
+// the descent was permitted (EM ruling, Phase 4, Option A).
 //
 // `fs` is injected (`{ readFile, readdir, stat }`). Production passes
 // `nodeFs`; `tests/enumeration.test.mjs` passes a recorder and asserts on the
@@ -132,8 +139,11 @@ function advisory(code, file, line, message) {
 // check`. Keep them in step with the objects constructed below.
 
 /**
- * One entry of a depth-1 directory listing. `kind` is the real filesystem
- * kind; no description is invented for it.
+ * One entry of a resource listing. `name` is relative to the group's root
+ * directory, so it carries a slash for anything `listTree()` found below the
+ * top level. `kind` is the real filesystem kind; no description is invented
+ * for it. `listTree()` emits files only, so `"directory"` reaches this type
+ * from `listDir()` alone.
  * @typedef {{name: string, kind: "file"|"directory"}} ResourceEntry
  */
 
@@ -175,8 +185,8 @@ function advisory(code, file, line, message) {
  */
 
 /**
- * Discovers plugins, skills, plugin-level references and the depth-1 resource
- * inventory.
+ * Discovers plugins, skills, plugin-level references and the per-skill
+ * resource inventory. See the module header for which groups recurse.
  *
  * @param {object} opts
  * @param {string} opts.repoRoot   absolute path to the repository root
@@ -423,7 +433,8 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
         resources: {
           references: await listDir(fs, join(s.dir, "references")),
           scripts: await listDir(fs, join(s.dir, "scripts")),
-          assets: await listDir(fs, join(s.dir, "assets")),
+          // Assets recurse; references and scripts do not. See listTree().
+          assets: await listTree(fs, join(s.dir, "assets")),
         },
       });
     }
@@ -469,6 +480,56 @@ async function listDir(fs, dir) {
   return dirents
     .map((d) => ({ name: d.name, kind: d.isDirectory() ? "directory" : "file" }))
     .sort(byCodeUnit);
+}
+
+/**
+ * Lists every FILE at any depth under `dir`, named by its path RELATIVE to
+ * `dir`, or `null` when the directory does not exist. Same `null` vs `[]`
+ * posture as `listDir()`.
+ *
+ * WHY THIS EXISTS, AND WHY ONLY `assets/` USES IT.
+ *
+ * Acceptance criterion 1 requires every asset file to appear on its owning
+ * skill page by real filename, and it names `assets/scaffolder/.gitignore`
+ * explicitly — a file two levels below the `assets/` root. A depth-1 inventory
+ * cannot render it under any predicate, so the inventory descends.
+ *
+ * `references/` and `scripts/` deliberately keep `listDir()`. A reference is
+ * ROUTED to a page by slug, and a nested reference has no route this design
+ * defines — descending there would silently produce a collision or a dropped
+ * file rather than a page. Scripts are unrouted and flat, and widening the
+ * descent gate where nothing needs it is not free. A nested file under
+ * `scripts/` would therefore be missed; that hole is recorded in the phase
+ * report's boundary ledger rather than left for a reader to discover.
+ *
+ * DIRECTORIES ARE NOT EMITTED AS ENTRIES. Every file inside one is now listed
+ * individually, so a bare directory row would be a second, coarser claim about
+ * the same bytes.
+ *
+ * This function READS NAMES ONLY. It never opens a file. That distinction is
+ * the whole basis on which the descent was permitted: the invariants that
+ * matter — no asset bytes are ever read, and no asset file ever becomes a page
+ * — are asserted independently in `tests/enumeration.test.mjs`
+ * (`assetFileReads`) and `tests/content.test.mjs` (the bundle leak detector),
+ * and neither moved to make this possible.
+ */
+async function listTree(fs, dir) {
+  let dirents;
+  try {
+    dirents = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const out = [];
+  for (const d of dirents.slice().sort(byCodeUnit)) {
+    if (d.isDirectory()) {
+      const nested = (await listTree(fs, join(dir, d.name))) ?? [];
+      for (const n of nested) out.push({ name: `${d.name}/${n.name}`, kind: n.kind });
+    } else {
+      out.push({ name: d.name, kind: "file" });
+    }
+  }
+  return out.sort(byCodeUnit);
 }
 
 /**

@@ -451,11 +451,44 @@ test("off-site links point at the real repository, at a pinned ref", async () =>
   assert.ok(sourced > 0, "no source-declared off-site link was rendered — that branch is vacuous");
   // The example-bundle DIRECTORY link is a /tree/ URL, not /blob/ — an I5
   // detail that is wrong in a way nothing else would catch.
-  const bundle = gh.find(({ href }) => href.includes("example-bundle"));
-  assert.ok(bundle, "the assets/example-bundle/ link was not rendered");
+  //
+  // RE-POINTED IN PHASE 4, AND STRENGTHENED. This previously did
+  // `gh.find((h) => h.href.includes("example-bundle"))` — the FIRST link whose
+  // URL contained the substring anywhere. That was already the wrong selector
+  // when it was written: it happened to pick the directory link only because
+  // the directory link happened to be the only match. Once the asset inventory
+  // began listing files INSIDE the bundle, the same selector started returning
+  // a blob URL for `example-bundle/computations/revenue.md` and the assertion
+  // failed — correctly, and against the test rather than the site.
+  //
+  // The replacement selects on the property the assertion is about: links
+  // whose target IS the bundle directory, matched at the END of the path
+  // rather than anywhere in it. It also pins the count, so a second link to
+  // the same directory could not hide behind a `.find()`.
+  const bundleDirLinks = gh.filter(({ href }) =>
+    /\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/.test(href),
+  );
+  assert.equal(
+    bundleDirLinks.length,
+    1,
+    `expected exactly one link targeting the example-bundle DIRECTORY, got ` +
+      `${bundleDirLinks.length}: ${bundleDirLinks.map((b) => b.href).join(", ")}`,
+  );
   assert.match(
-    bundle.href,
+    bundleDirLinks[0].href,
     /\/tree\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/,
+  );
+  // And the converse the old form could not express: nothing links to the
+  // bundle DIRECTORY through a /blob/ URL, which is the actual I5 mistake.
+  assert.deepEqual(
+    gh
+      .map(({ href }) => href)
+      .filter((href) =>
+        /\/blob\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/.test(
+          href,
+        ),
+      ),
+    [],
   );
 });
 

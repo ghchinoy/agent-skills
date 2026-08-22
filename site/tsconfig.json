@@ -9,6 +9,7 @@
   //                src/**/*.astro              (component script blocks)
   //
   //   NOT CHECKED — type errors in these are invisible to `astro check`:
+  //                src/loaders/advise.mjs
   //                src/loaders/enumerate.mjs
   //                src/loaders/links.mjs
   //                src/loaders/markdown.mjs
@@ -16,6 +17,7 @@
   //                src/loaders/site-pages.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
+  //                scripts/check-blob-links.mjs
   //                scripts/check-live-links.mjs
   //                scripts/prepare-assets.mjs
   //                tests/*.mjs
@@ -50,6 +52,26 @@
   // type coverage they have. Their behaviour is covered by
   // tests/site-pages.test.mjs and tests/assets.test.mjs instead, for the same
   // reason the live-link checker's is.
+  //
+  // PHASE 4 added two:
+  //
+  //   src/loaders/advise.mjs        derives the D2, D4 and I4 advisories
+  //   scripts/check-blob-links.mjs  requests the script blob URLs (AC5)
+  //
+  // The first has the same situation and the same mitigation as the Phase 3
+  // pair — skills.ts imports it and is checked, so the boundary shape is
+  // covered there, and its conditions are covered by tests/advisories.test.mjs.
+  // Worth naming the specific exposure: it reads `skill.resources[group]`,
+  // whose `null`-means-absent convention is the kind of thing a type checker
+  // would enforce here and does not.
+  //
+  // The second is the live-link checker's situation exactly: its derivation of
+  // WHICH URLs to request is exported and asserted offline in
+  // tests/resources.test.mjs against an independently written extractor, and
+  // only the fetching is left unchecked by anything. Its specific exposure is
+  // that `blobTargets()` may return `url: null` for a row with no href; the
+  // script reports that as a failure rather than filtering it, and the test
+  // asserts the null case is empty.
   //
   // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
   // overwhelmingly missing annotations and implicit `any` under `strict` rather
