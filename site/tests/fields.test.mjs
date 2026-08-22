@@ -203,6 +203,59 @@ test("AC8: the forward population is EMPTY, which is why the gate runs backwards
   );
 });
 
+// THE ONE EXEMPTION, ITEMISED AND COUNTED, AND ITS REASON IS A MEASUREMENT
+// (pre-registration §6.5). `description` is declared by 23 of 23 skills and is
+// the only declared key that is not a labelled row: Starlight renders it as the
+// page's lead paragraph, which is where a reader meets a description. It is
+// exempted from the ROW requirement and then held to a stronger one at the call
+// site — the full string must appear in the page text — so the exemption buys a
+// change of location, not a licence to drop it.
+const EXEMPT = ["description"];
+
+/**
+ * THE FORWARD PREDICATE, extracted in the Phase 3 fix round for the same reason
+ * as `traceRow` below: so that its positive control drives THE REAL COMPARISON.
+ *
+ * The reviewer's Advisory 1 was exact. The old control built a label set by
+ * FILTERING `license` OUT and then asserted the set did not contain `license` —
+ * a tautology, true of any correct `Set` and no evidence whatsoever that the
+ * suppression sweep can detect suppression. The plant was real; nothing was
+ * ever fed to the detector.
+ *
+ * Given a skill and the lowercased labels its own page rendered from its own
+ * frontmatter, returns the declared keys that never reach a reader, with the
+ * two denominators that say whether the sweep was thin.
+ */
+function suppressedKeys(skill, ownLabels) {
+  const suppressed = [];
+  let exemptSeen = 0;
+  let checked = 0;
+  const declaredKeys = [
+    ...Object.keys(skill.declared).filter((k) => k !== "metadata"),
+    ...Object.keys(skill.declared.metadata ?? {}).map((k) => `metadata.${k}`),
+  ];
+  for (const key of declaredKeys) {
+    const leaf = key.replace(/^metadata\./, "").toLowerCase();
+    if (EXEMPT.includes(leaf)) {
+      exemptSeen += 1;
+      continue;
+    }
+    checked += 1;
+    if (!ownLabels.has(leaf)) {
+      suppressed.push(`${skill.route}: declares ${key}, renders no such row`);
+    }
+  }
+  return { suppressed, exemptSeen, checked };
+}
+
+/** The lowercased labels a page renders from its own SKILL.md. */
+const ownLabelsOf = (main) =>
+  new Set(
+    fieldRows(main)
+      .filter((r) => r.source === "skill-frontmatter")
+      .map((r) => r.label.toLowerCase()),
+  );
+
 test("AC8 forward: every key a skill declares reaches its page", async () => {
   // THE OTHER DIRECTION, and it catches the other failure. The gate below asks
   // "is every rendered label traceable to a declared key" — that is INVENTION.
@@ -216,46 +269,25 @@ test("AC8 forward: every key a skill declares reaches its page", async () => {
   const skills = await declaredSkills();
   const pages = await distContentPages();
 
-  // THE ONE EXEMPTION, ITEMISED AND COUNTED, AND ITS REASON IS A MEASUREMENT
-  // (pre-registration §6.5). `description` is declared by 23 of 23 skills and
-  // is the only declared key that is not a labelled row: Starlight renders it
-  // as the page's lead paragraph, which is where a reader meets a description.
-  // It is exempted from the ROW requirement and then held to a stronger one
-  // below — the full string must appear in the page text — so the exemption
-  // buys a change of location, not a licence to drop it.
-  const EXEMPT = ["description"];
-
   const suppressed = [];
   let checked = 0;
   let exemptSeen = 0;
   for (const s of skills) {
-    const page = pageAt(pages, s.route);
-    const main = mainOf(page.html);
-    const own = new Set(
-      fieldRows(main)
-        .filter((r) => r.source === "skill-frontmatter")
-        .map((r) => r.label.toLowerCase()),
-    );
-    const declaredKeys = [
-      ...Object.keys(s.declared).filter((k) => k !== "metadata"),
-      ...Object.keys(s.declared.metadata ?? {}).map((k) => `metadata.${k}`),
-    ];
-    for (const key of declaredKeys) {
-      const leaf = key.replace(/^metadata\./, "").toLowerCase();
-      if (EXEMPT.includes(leaf)) {
-        exemptSeen += 1;
-        // The stronger requirement the exemption is priced at.
-        const text = toText(main).replace(/\s+/g, " ");
-        const want = String(s.declared.description).replace(/\s+/g, " ").trim();
-        assert.ok(
-          text.includes(want),
-          `${s.route}: the declared description is exempt from the row requirement and ` +
-            `does not appear in the page text either`,
-        );
-        continue;
-      }
-      checked += 1;
-      if (!own.has(leaf)) suppressed.push(`${s.route}: declares ${key}, renders no such row`);
+    const main = mainOf(pageAt(pages, s.route).html);
+    const r = suppressedKeys(s, ownLabelsOf(main));
+    suppressed.push(...r.suppressed);
+    checked += r.checked;
+    exemptSeen += r.exemptSeen;
+
+    // The stronger requirement the exemption is priced at, once per exempt key.
+    for (let i = 0; i < r.exemptSeen; i += 1) {
+      const text = toText(main).replace(/\s+/g, " ");
+      const want = String(s.declared.description).replace(/\s+/g, " ").trim();
+      assert.ok(
+        text.includes(want),
+        `${s.route}: the declared description is exempt from the row requirement and ` +
+          `does not appear in the page text either`,
+      );
     }
   }
   assert.deepEqual(suppressed, [], `declared keys that never reach a reader:\n${suppressed.join("\n")}`);
@@ -276,30 +308,66 @@ test("AC8 forward: every key a skill declares reaches its page", async () => {
   );
 });
 
-test("AC8 forward control: the suppression detector fires when a declared key is hidden", async () => {
+test("AC8 forward control: the suppression detector's OWN PREDICATE fires on a hidden key", async () => {
   // Without this, the empty `suppressed` array above is equally consistent with
   // a detector that reads no rows. The plant is on the RENDERED side — a page's
   // rows are taken away — because that is the failure being detected.
+  //
+  // What this used to do, and why it was worthless: it removed `license` from a
+  // Set and then asserted the Set no longer contained `license`. That is true of
+  // every correct Set implementation and says nothing about `suppressedKeys`.
+  // The plant never reached a detector (review, Advisory 1). It now runs through
+  // the same function the sweep above calls, on real page bytes.
   const skills = await declaredSkills();
   const victim = skills.find((s) => typeof s.declared.license === "string");
   assert.ok(victim, "no skill declares a license, so this control has nothing to hide");
 
   const pages = await distContentPages();
   const main = mainOf(pageAt(pages, victim.route).html);
-  const own = fieldRows(main).filter((r) => r.source === "skill-frontmatter");
+  const own = ownLabelsOf(main);
   assert.ok(
-    own.some((r) => r.label.toLowerCase() === "license"),
+    own.has("license"),
     "the baseline reading already has no license row — the sweep above is vacuous",
   );
 
-  // Same comparison, with the license row removed from what the page reports.
-  const hidden = new Set(
-    own.filter((r) => r.label.toLowerCase() !== "license").map((r) => r.label.toLowerCase()),
+  // BASELINE through the real predicate: this skill's page is clean today.
+  const before = suppressedKeys(victim, own);
+  assert.deepEqual(
+    before.suppressed,
+    [],
+    `${victim.route} is already suppressing a declared key, so a plant proves nothing here`,
   );
-  assert.ok(
-    !hidden.has("license"),
-    "removing the license row did not change the label set, so the comparison is not reading it",
+  assert.ok(before.checked > 0, "the predicate examined no keys at all on the victim page");
+
+  // PLANT: take the license row away from what the page reports, exactly as a
+  // template that stopped emitting it would, and feed that to the predicate.
+  const hidden = new Set([...own].filter((l) => l !== "license"));
+  const after = suppressedKeys(victim, hidden);
+  assert.deepEqual(
+    after.suppressed,
+    [`${victim.route}: declares license, renders no such row`],
+    `THE SUPPRESSION DETECTOR DID NOT FIRE on a page with the license row removed — ` +
+      `every green it reports above is compatible with it reading nothing`,
   );
+
+  // …and it fired for the plant alone, not by collapsing into a detector that
+  // complains about everything the moment one row moves.
+  assert.equal(
+    after.checked,
+    before.checked,
+    "the plant changed the size of the population, so the two runs are not comparable",
+  );
+
+  // NEGATIVE, on the OTHER side of the exemption: hiding `description` must NOT
+  // fire, because it is exempt from the row requirement by design. A detector
+  // that fires on it too would be reporting the exemption as a defect.
+  const noDescription = new Set([...own].filter((l) => l !== "description"));
+  assert.deepEqual(
+    suppressedKeys(victim, noDescription).suppressed,
+    [],
+    "the exempt key was reported as suppressed, so the exemption is not actually live",
+  );
+  assert.equal(suppressedKeys(victim, own).exemptSeen, 1, "the exemption did not fire exactly once");
 });
 
 test("AC8: the spec vocabulary this suite checks against is the one the loader enforces", async () => {
@@ -315,12 +383,68 @@ test("AC8: the spec vocabulary this suite checks against is the one the loader e
   assert.equal(SPEC_TOP_LEVEL_FIELDS.length, 6, "the spec vocabulary is closed at six names");
 });
 
-test("AC8: every rendered field label on all 58 pages traces to a declared key", async () => {
-  // THE GATE. Runs over every label the build emitted, on every page it built.
-  const skills = await declaredSkills();
+/**
+ * THE BACKWARDS PREDICATE, extracted in the Phase 3 fix round so that its
+ * positive control invokes THE GATE ITSELF rather than a re-expression of it.
+ *
+ * The reviewer's Advisory 2 was exact: the control below used to re-state each
+ * rejection branch as its own `expect` callback against a hand-written
+ * `declared` array, and never called the gate body. A control that tests a
+ * COPY of the predicate proves the copy is live. If the two ever drifted, the
+ * control would go on passing while the gate rotted — which is the same defect
+ * as a unit test that confirms a false claim forever, arriving from the other
+ * direction.
+ *
+ * Returns the complaints a row earns. Empty means the row traces.
+ */
+function traceRow(r, { where, manifestKeys, skill }) {
+  const out = [];
+  const label = r.label.trim();
+
+  if (r.source === "derived") {
+    // A derived row must SAY it is derived, in words. Otherwise "derived" is a
+    // hiding place: any invented field could claim it.
+    if (!/derived/i.test(r.note)) out.push(`${where} — not marked derived to a reader`);
+    return out;
+  }
+  if (r.source === "plugin-manifest") {
+    if (!manifestKeys.includes(label)) out.push(`${where} — not a key of plugin.json`);
+    if (!MANIFEST_FIELDS.includes(label)) {
+      out.push(`${where} — outside the closed Agent Plugins §5.1 vocabulary`);
+    }
+    if (!/from plugin\.json/.test(r.note)) out.push(`${where} — unattributed`);
+    return out;
+  }
+  if (r.source === "skill-frontmatter") {
+    if (!skill) {
+      out.push(`${where} — a skill-frontmatter row on a page that is not a skill`);
+      return out;
+    }
+    const declaredHere = [...SPEC_TOP_LEVEL_FIELDS, ...Object.keys(skill.declared.metadata ?? {})];
+    if (!declaredHere.includes(label)) {
+      out.push(`${where} — neither a spec field nor a metadata key this skill declares`);
+    }
+    // …and it must be a key this skill ACTUALLY declares, not merely a
+    // spec-legal name. `metadata` itself never renders as a row; its members do.
+    const actuallyDeclared =
+      skill.declared[label] !== undefined || (skill.declared.metadata ?? {})[label] !== undefined;
+    if (!actuallyDeclared) out.push(`${where} — the skill declares no such key`);
+    if (!/from this skill's SKILL\.md/.test(r.note)) out.push(`${where} — unattributed`);
+    return out;
+  }
+  out.push(`${where} — no source attribution at all`);
+  return out;
+}
+
+/**
+ * THE GATE ITSELF, as a function over page bytes, so that the end-to-end
+ * control below can hand it a CORRUPTED artifact and require it to object.
+ * `pages` is whatever `distContentPages()` shape the caller supplies — real, or
+ * real-with-one-row-planted.
+ */
+function scanPages(pages, skills) {
   const bySkillRoute = new Map(skills.map((s) => [s.route, s]));
   const manifests = new Map(skills.map((s) => [s.plugin, s.manifest]));
-  const pages = await distContentPages();
 
   const untraceable = [];
   let checked = 0;
@@ -336,51 +460,19 @@ test("AC8: every rendered field label on all 58 pages traces to a declared key",
 
     for (const r of fieldRows(mainOf(p.html))) {
       checked += 1;
-      const label = r.label.trim();
-      const where = `${p.route}: "${label}" (source=${r.source})`;
-
-      if (r.source === "derived") {
-        byKind.derived += 1;
-        // A derived row must SAY it is derived, in words. Otherwise "derived"
-        // is a hiding place: any invented field could claim it.
-        if (!/derived/i.test(r.note)) untraceable.push(`${where} — not marked derived to a reader`);
-        continue;
-      }
-      if (r.source === "plugin-manifest") {
-        byKind["plugin-manifest"] += 1;
-        if (!manifestKeys.includes(label)) untraceable.push(`${where} — not a key of plugin.json`);
-        if (!MANIFEST_FIELDS.includes(label)) {
-          untraceable.push(`${where} — outside the closed Agent Plugins §5.1 vocabulary`);
-        }
-        if (!/from plugin\.json/.test(r.note)) untraceable.push(`${where} — unattributed`);
-        continue;
-      }
-      if (r.source === "skill-frontmatter") {
-        byKind["skill-frontmatter"] += 1;
-        if (!skill) {
-          untraceable.push(`${where} — a skill-frontmatter row on a page that is not a skill`);
-          continue;
-        }
-        const declaredHere = [
-          ...SPEC_TOP_LEVEL_FIELDS,
-          ...Object.keys(skill.declared.metadata ?? {}),
-        ];
-        if (!declaredHere.includes(label)) {
-          untraceable.push(`${where} — neither a spec field nor a metadata key this skill declares`);
-        }
-        // …and it must be a key this skill ACTUALLY declares, not merely a
-        // spec-legal name. `metadata` itself never renders as a row; its
-        // members do.
-        const actuallyDeclared =
-          skill.declared[label] !== undefined ||
-          (skill.declared.metadata ?? {})[label] !== undefined;
-        if (!actuallyDeclared) untraceable.push(`${where} — the skill declares no such key`);
-        if (!/from this skill's SKILL\.md/.test(r.note)) untraceable.push(`${where} — unattributed`);
-        continue;
-      }
-      untraceable.push(`${where} — no source attribution at all`);
+      const where = `${p.route}: "${r.label.trim()}" (source=${r.source})`;
+      if (r.source !== null && byKind[r.source] !== undefined) byKind[r.source] += 1;
+      untraceable.push(...traceRow(r, { where, manifestKeys, skill }));
     }
   }
+  return { untraceable, checked, byKind };
+}
+
+test("AC8: every rendered field label on all 58 pages traces to a declared key", async () => {
+  // THE GATE. Runs over every label the build emitted, on every page it built.
+  const skills = await declaredSkills();
+  const pages = await distContentPages();
+  const { untraceable, checked, byKind } = scanPages(pages, skills);
 
   assert.deepEqual(untraceable, [], `untraceable field labels:\n${untraceable.join("\n")}`);
 
@@ -392,6 +484,102 @@ test("AC8: every rendered field label on all 58 pages traces to a declared key",
   for (const [kind, n] of Object.entries(byKind)) {
     assert.ok(n > 0, `no ${kind} row was seen anywhere — that branch of the gate is untested`);
   }
+});
+
+test("AC8 control: the WHOLE GATE, run on real built bytes with one row planted", async () => {
+  // THE DEMONSTRATION PRE-REGISTRATION §6.4 PROMISED, rebuilt to be buildable.
+  //
+  // §6.4 said: add a SKILL.md frontmatter key outside the six, rebuild, require
+  // the assertion to go red. The reviewer showed that control was never built,
+  // and it is also a planned-vs-executed gap report §12.3 does not list. Both
+  // are correct. But the promise could not have been kept as written, and the
+  // reason is worth more than the promise was:
+  //
+  //   A PLANTED FRONTMATTER KEY CAN NEVER REACH A PAGE. A top-level one is
+  //   dropped by `analyzeDeclared` before rendering (the control below this
+  //   one drives that). A `metadata.*` one DOES render — and traces correctly,
+  //   because metadata is an OPEN vocabulary and the gate's rule for it is
+  //   "a key this skill declares", which a planted key is. So no change to the
+  //   DATA can make this gate fire. Only a change to the RENDERER can, which is
+  //   what the reviewer's MA did and what the gate exists to catch.
+  //
+  // So the plant goes where invention actually happens — in the emitted HTML —
+  // and it is planted into the REAL artifact, then fed to the REAL gate.
+  const skills = await declaredSkills();
+  const real = await distContentPages();
+
+  // Baseline on the untouched artifact, through the same function.
+  const before = scanPages(real, skills);
+  assert.deepEqual(before.untraceable, [], "the artifact is not clean, so a plant proves nothing");
+  assert.ok(before.checked > 100, `the gate examined only ${before.checked} rows`);
+
+  const victim = skills[0].route;
+  const PLANT = `<div class="field-row"><dt data-field-label data-field-source="skill-frontmatter">difficulty <span class="src">from this skill's SKILL.md</span></dt><dd>hard</dd></div>`;
+  const corrupted = real.map((p) =>
+    p.route === victim ? { ...p, html: p.html.replace("</main>", `${PLANT}</main>`) } : p,
+  );
+  assert.notEqual(
+    corrupted.find((p) => p.route === victim).html.length,
+    real.find((p) => p.route === victim).html.length,
+    "the plant did not change the page bytes — the corruption never happened",
+  );
+
+  const after = scanPages(corrupted, skills);
+  // BOTH skill-frontmatter branches fire on an invented label, and the pair is
+  // asserted exactly rather than by `length > 0`: the gate must object for the
+  // right reasons, and it must object about the right page.
+  assert.deepEqual(
+    after.untraceable,
+    [
+      `${victim}: "difficulty" (source=skill-frontmatter) — neither a spec field nor a metadata key this skill declares`,
+      `${victim}: "difficulty" (source=skill-frontmatter) — the skill declares no such key`,
+    ],
+    `THE GATE DID NOT CATCH AN INVENTED ROW planted into the real artifact:\n` +
+      `${after.untraceable.join("\n")}`,
+  );
+  // It caught the plant and nothing else — one extra row seen, one complaint.
+  assert.equal(after.checked, before.checked + 1, "the plant changed the population by more than one row");
+});
+
+test("AC8: exactly ONE field label in the renderer is data-driven, and it is the metadata loop", async () => {
+  // The measurement the control above rests on, so that "no data plant can
+  // reach a page" is a fact this suite CHECKS rather than a claim its comments
+  // make. Every `data-field-label` in the renderer is a hardcoded literal but
+  // one; the exception iterates `metadata`, whose vocabulary the Agent Skills
+  // spec leaves open.
+  //
+  // On the day a second interpolated label appears, this fails — and that is
+  // the day a planted key could reach a page, the day the forward form of AC8
+  // stops being vacuous, and the day this file's header needs rereading.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("../src/components/EntryMeta.astro", import.meta.url), "utf8");
+  // Scoped to real `<dt>` ELEMENTS. An earlier draft of this matched the
+  // attribute name anywhere and swallowed the comment on line 20 that merely
+  // mentions it — the test caught my own instrument before it could report on
+  // anything else, which is the order these things are supposed to happen in.
+  const labels = [...src.matchAll(/<dt data-field-label[^>]*>\s*([^<]*?)\s*</g)].map((m) =>
+    m[1].trim(),
+  );
+  const declaredSites = (src.match(/<dt data-field-label/g) ?? []).length;
+  assert.equal(
+    labels.length,
+    declaredSites,
+    `the extractor read ${labels.length} of the ${declaredSites} label sites in the renderer`,
+  );
+  assert.ok(labels.length >= 13, `found only ${labels.length} label sites in the renderer`);
+  const interpolated = labels.filter((l) => l.includes("{"));
+  assert.deepEqual(
+    interpolated,
+    ["{key}"],
+    `the renderer's data-driven field labels are no longer just the metadata loop:\n` +
+      `${interpolated.join("\n")}\nAll label sites: ${labels.join(" | ")}`,
+  );
+  // …and that one is inside the metadata iteration, not somewhere else.
+  assert.match(
+    src,
+    /Object\.entries\(metadata\)\.map\(\(\[key, value\]\)/,
+    "the interpolated label no longer comes from Object.entries(metadata)",
+  );
 });
 
 test("AC8: no site page renders a field label at all except its own provenance", async () => {
@@ -410,47 +598,85 @@ test("AC8: no site page renders a field label at all except its own provenance",
   assert.deepEqual(wrong, [], `a site page rendered a field it cannot have:\n${wrong.join("\n")}`);
 });
 
-test("AC8 control: the backwards gate fires on a label that traces to nothing", () => {
-  // POSITIVE control for the scanner. The gate above is a set of containments
-  // that currently hold; this shows each rejection branch can reject.
+test("AC8 control: the backwards gate's OWN PREDICATE rejects a label that traces to nothing", () => {
+  // POSITIVE control for the scanner. Every case below is driven through
+  // `traceRow` — the same function the gate above calls on all 327 real rows —
+  // so a drift between gate and control is now impossible by construction.
+  // Before the Phase 3 fix round this control re-expressed each rejection
+  // branch as its own callback and never invoked the gate (review, Advisory 2).
+  //
+  // The context a skill page supplies: one skill declaring `name` and one
+  // metadata key, and a manifest whose keys are the real closed vocabulary.
+  const skill = { declared: { name: "okf-author", metadata: { version: "1.0.0" } } };
+  const ctx = { where: "TEST", manifestKeys: [...MANIFEST_FIELDS], skill };
+
   const cases = [
     {
       what: "an invented label claiming to come from the skill",
       html: `<dt data-field-label data-field-source="skill-frontmatter">difficulty <span class="src">from this skill's SKILL.md</span></dt><dd>hard</dd>`,
-      expect: (r, declared) => !declared.includes(r.label.trim()),
+      because: /neither a spec field nor a metadata key/,
+    },
+    {
+      what: "a spec-legal name the skill does not actually declare",
+      html: `<dt data-field-label data-field-source="skill-frontmatter">license <span class="src">from this skill's SKILL.md</span></dt><dd>MIT</dd>`,
+      because: /declares no such key/,
     },
     {
       what: "a manifest-sourced label that is not a manifest key",
       html: `<dt data-field-label data-field-source="plugin-manifest">downloads <span class="src">from plugin.json</span></dt><dd>1200</dd>`,
-      expect: (r) => !MANIFEST_FIELDS.includes(r.label.trim()),
+      because: /not a key of plugin\.json/,
     },
     {
       what: "a derived row that does not say so to a reader",
       html: `<dt data-field-label data-field-source="derived">popularity</dt><dd>high</dd>`,
-      expect: (r) => !/derived/i.test(r.note),
+      because: /not marked derived to a reader/,
     },
     {
       what: "a row with no source attribution",
       html: `<dt data-field-label>rating</dt><dd>5</dd>`,
-      expect: (r) => r.source === null,
+      because: /no source attribution at all/,
+    },
+    {
+      what: "a skill-frontmatter row on a page that is not a skill",
+      html: `<dt data-field-label data-field-source="skill-frontmatter">name <span class="src">from this skill's SKILL.md</span></dt><dd>x</dd>`,
+      ctx: { where: "TEST", manifestKeys: [...MANIFEST_FIELDS], skill: null },
+      because: /on a page that is not a skill/,
+    },
+    {
+      what: "a correctly-named row that hides where it came from",
+      html: `<dt data-field-label data-field-source="plugin-manifest">version</dt><dd>1.0.0</dd>`,
+      because: /unattributed/,
     },
   ];
-  const declared = [...SPEC_TOP_LEVEL_FIELDS, "version", "sources", "author", "trigger", "framework"];
+
   for (const c of cases) {
     const rows = fieldRows(`<main><dl><div class="field-row">${c.html}</div></dl></main>`);
     assert.equal(rows.length, 1, `the extractor found no row for: ${c.what}`);
-    assert.ok(c.expect(rows[0], declared), `the gate would ACCEPT ${c.what}`);
+    const complaints = traceRow(rows[0], c.ctx ?? ctx);
+    assert.ok(complaints.length > 0, `THE GATE WOULD ACCEPT ${c.what}`);
+    assert.ok(
+      complaints.some((m) => c.because.test(m)),
+      `the gate rejected ${c.what} but for the wrong reason: ${complaints.join(" | ")}`,
+    );
   }
-  // NEGATIVE: a well-formed row of each kind must be accepted, or the gate is
-  // a detector for the existence of rows.
-  const ok = fieldRows(
-    `<main><dl><div class="field-row">` +
-      `<dt data-field-label data-field-source="plugin-manifest">version <span class="src">from plugin.json</span></dt><dd>1.0.0</dd>` +
-      `</div></dl></main>`,
-  );
-  assert.equal(ok.length, 1);
-  assert.ok(MANIFEST_FIELDS.includes(ok[0].label.trim()));
-  assert.match(ok[0].note, /from plugin\.json/);
+
+  // NEGATIVE: well-formed rows of each of the three kinds must be accepted, or
+  // the gate is merely a detector for the existence of rows. Run through the
+  // same predicate, so "accepted" means the gate accepted it.
+  const good = [
+    `<dt data-field-label data-field-source="plugin-manifest">version <span class="src">from plugin.json</span></dt><dd>1.0.0</dd>`,
+    `<dt data-field-label data-field-source="skill-frontmatter">name <span class="src">from this skill's SKILL.md</span></dt><dd>okf-author</dd>`,
+    `<dt data-field-label data-field-source="derived">source <span class="src">derived by this build</span></dt><dd>x</dd>`,
+  ];
+  for (const html of good) {
+    const rows = fieldRows(`<main><dl><div class="field-row">${html}</div></dl></main>`);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(
+      traceRow(rows[0], ctx),
+      [],
+      `the gate REJECTED a well-formed row, so its greens on the real pages mean nothing: ${html}`,
+    );
+  }
 });
 
 test("AC8 control: the closed-vocabulary branch is live — a seventh key is dropped, with an advisory", () => {

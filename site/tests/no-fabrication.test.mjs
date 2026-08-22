@@ -30,6 +30,7 @@ import {
   distContentPages,
   elementsWithAttr,
   fieldRows,
+  mainOf,
   rel,
   repoRoot,
   siteRoot,
@@ -896,5 +897,138 @@ test("over-claim control: the accurate hedge §12 mandates is permitted, in ever
     overclaimHits("Use it in any skills-compatible agent; it works with any agent.").map((h) => h.id),
     ["works-with-any"],
     "the hedge exemption swallowed a genuine over-claim next to it",
+  );
+});
+
+// ── REQUIRED 1 (Phase 3 review): the SmartyPants fix needs a DETECTION ────────
+//
+// `astro.config.mjs` sets `markdown: { smartypants: false }` because Astro's
+// renderer was rewriting declared ASCII punctuation into typographic forms —
+// 34 of 58 pages differed byte-for-byte. That fix is a PREVENTION, and the
+// reviewer's mutation MC proved nothing defended it: flipping the flag back to
+// `true` left all 239 tests green. A change that rewrites 59% of the site's
+// rendered bytes was invisible to the suite, so the next config edit would
+// revert it in silence.
+//
+// AC9 legitimately cannot catch it: SmartyPants does not touch fenced code, so
+// the installer comparison is immune. The exposure is PROSE, and nothing
+// asserted on prose bytes. This does.
+//
+// The gate is DERIVED, not a hand-picked canary page. For each typographic
+// character, we ask the SOURCE whether it declares that character anywhere. A
+// character the source never declares must never appear on a page — that is
+// fabrication, the same defect this file exists to catch, arriving through the
+// renderer instead of through the loader. Characters the source DOES declare
+// (em dash, en dash, ellipsis — this repo writes all three deliberately) are
+// excluded by measurement rather than by a list, so the gate cannot go stale
+// when the corpus changes.
+
+/** The transformations SmartyPants performs, as {rendered character → the
+ *  ASCII the author actually typed}. Keys are what a page must not gain. */
+const TYPOGRAPHIC = {
+  "’": "'", // right single quote  ← apostrophe
+  "‘": "'", // left single quote
+  "“": '"', // left double quote
+  "”": '"', // right double quote
+  "–": "--", // en dash
+  "—": "---", // em dash
+  "…": "...", // ellipsis
+};
+
+const countOf = (haystack, needle) => haystack.split(needle).length - 1;
+
+/** Every source file whose bytes can reach a rendered page. Markdown and JSON
+ *  only: those are the declaring formats. Excludes `site/` — the site's own
+ *  sources are not the catalog's declarations. */
+async function sourceCorpus() {
+  const files = (await walk(repoRoot)).filter((f) => {
+    const r = rel(f);
+    if (r.startsWith("site/") || r.startsWith(".git/") || r.includes("node_modules/")) return false;
+    return r.endsWith(".md") || r.endsWith(".json");
+  });
+  const texts = await Promise.all(files.map((f) => readFile(f, "utf8")));
+  return { text: texts.join("\n"), fileCount: files.length };
+}
+
+test("REQUIRED 1: no page renders a typographic character the source never declares", async () => {
+  const { text: corpus, fileCount } = await sourceCorpus();
+  assert.ok(fileCount > 20, `only ${fileCount} source files found — the corpus is too small to be the corpus`);
+
+  // DERIVE which characters are gated. A character the repo writes on purpose
+  // is not evidence of a transformation and is excluded here, by measurement.
+  const gated = Object.keys(TYPOGRAPHIC).filter((ch) => countOf(corpus, ch) === 0);
+  const declared = Object.keys(TYPOGRAPHIC).filter((ch) => countOf(corpus, ch) > 0);
+
+  assert.ok(
+    gated.length > 0,
+    "the source now declares every typographic character, so this gate covers nothing — re-derive it",
+  );
+
+  // NON-VACUITY, and it is the part that matters. A gate over characters that
+  // could never have appeared is worthless. Require that the ASCII the
+  // renderer would have transformed is actually PRESENT in the source in
+  // quantity, so there is real material for SmartyPants to act on.
+  const transformable = gated.reduce((n, ch) => n + countOf(corpus, TYPOGRAPHIC[ch]), 0);
+  assert.ok(
+    transformable > 100,
+    `only ${transformable} transformable ASCII sequences in the source — too few for the absence below to mean anything`,
+  );
+
+  const pages = await distContentPages();
+  assert.equal(pages.length, 58, `swept ${pages.length} pages, not 58`);
+
+  const found = [];
+  let renderedTransformable = 0;
+  for (const p of pages) {
+    const text = toText(mainOf(p.html));
+    for (const ch of gated) {
+      const n = countOf(text, ch);
+      if (n > 0) found.push(`${p.route || "(landing)"}: ${n}× U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
+      renderedTransformable += countOf(text, TYPOGRAPHIC[ch]);
+    }
+  }
+
+  // Second non-vacuity check, this one on the ARTIFACT rather than the source:
+  // the pages must actually carry the untransformed ASCII. If they carried
+  // none, the absence of the smart form would prove only that the prose never
+  // reached the page.
+  assert.ok(
+    renderedTransformable > 100,
+    `the pages render only ${renderedTransformable} of the ASCII forms — the absence above is not evidence`,
+  );
+
+  assert.deepEqual(
+    found,
+    [],
+    `pages render typographic characters absent from every source file — SmartyPants (or an equivalent) is on:\n${found.join("\n")}\n` +
+      `gated: ${gated.join(" ")} | excluded because the source declares them: ${declared.join(" ") || "(none)"}`,
+  );
+});
+
+test("REQUIRED 1 control: the typographic detector fires on transformed prose", async () => {
+  // The gate above reports an ABSENCE. Standard 19: show the path is live.
+  // This drives the same two primitives over a page-shaped string that HAS
+  // been through SmartyPants, and requires each transformation to be caught.
+  const { text: corpus } = await sourceCorpus();
+  const gated = Object.keys(TYPOGRAPHIC).filter((ch) => countOf(corpus, ch) === 0);
+
+  const straight = `<main><p>the model's window, "quoted", done.</p></main>`;
+  const curled = `<main><p>the model’s window, “quoted”, done.</p></main>`;
+
+  const hits = (html) => {
+    const text = toText(mainOf(html));
+    return gated.filter((ch) => countOf(text, ch) > 0);
+  };
+
+  assert.deepEqual(hits(straight), [], "the detector fires on prose that was never transformed");
+  const caught = hits(curled);
+  assert.ok(caught.includes("’"), "the detector missed a curled apostrophe");
+  assert.ok(caught.includes("“") && caught.includes("”"), "the detector missed curled double quotes");
+
+  // And the derivation itself must be live: if the corpus stopped excluding
+  // the em dash the gate would start firing on legitimate declared text.
+  assert.ok(
+    !gated.includes("—"),
+    "the em dash is gated, but this repository writes em dashes on purpose — the exclusion is not being derived",
   );
 });

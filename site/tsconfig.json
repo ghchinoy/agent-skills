@@ -88,10 +88,19 @@
   //   tests/markdown 7   src/sidebar.mjs 6   src/loaders/frontmatter.mjs 6
   //   tests/site-pages 6   scripts/prepare-assets.mjs 3   tests/versions 1
   //
-  // The two SOURCE files Phase 3 added account for 28 errors; the four test
-  // files it added account for 27; the remainder of the rise from Phase 2's
-  // 399 is in tests Phase 3 widened. src/loaders/skills.ts stays at 0 because
-  // it is checked today.
+  // Phase 3 added THREE source files, and TWO of them are visible to this
+  // census: src/loaders/site-pages.mjs 25 + scripts/prepare-assets.mjs 3 = 28
+  // errors. The third, src/components/SiteIndex.astro, contributes 0 — not
+  // because it is clean but because checkJs covers .mjs and .ts and this table
+  // has no .astro row at all. The four test files Phase 3 added account for 27;
+  // the remainder of the rise from Phase 2's 399 is in tests Phase 3 widened.
+  // src/loaders/skills.ts stays at 0 because it is checked today.
+  //
+  // That sentence said "the two SOURCE files Phase 3 added" until the Phase 3
+  // review caught it: three were added, and the count was over a population the
+  // sentence did not name. The arithmetic was right and the word was wrong,
+  // which is the failure this very comment goes on to warn about — one
+  // paragraph below.
   //
   // The lesson is not the arithmetic, it is that a sizing figure sitting three
   // lines below an edit is exactly the figure nobody re-runs. Standard 2: a

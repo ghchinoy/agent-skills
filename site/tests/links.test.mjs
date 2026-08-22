@@ -114,13 +114,25 @@ test("AC5 control: the detector fires on an unrewritten target", () => {
 });
 
 test("0 broken links: every internal href in dist resolves to a built file", async () => {
+  // THE POPULATION THIS ZERO IS OVER, stated here rather than inferred.
+  //
+  // Report §AC6 published "0 broken of 255". The 255 is a real figure but it is
+  // a DIFFERENT population: internal `<a href>` inside `<main>` over the 58
+  // content pages. This crawl is much wider — every `<a href>` on every HTML
+  // file in dist, chrome and sidebars and the 404 included. Reporting the
+  // narrow denominator beside the wide numerator is a standard 5 defect even
+  // though it understates the work done (review, Advisory 7; self-reported as
+  // addendum finding (d)). Both numbers are now measured in one place, so
+  // neither can be quoted without the other.
   const files = await distHtmlFiles();
   const broken = [];
+  let crawled = 0;
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
     for (const raw of hrefsIn(html)) {
       if (isExternal(raw)) continue;
+      crawled += 1;
       const href = toSitePath(raw);
       const [path] = href.split("#");
       if (isErrorDocCanonical(from, path, html)) continue;
@@ -137,6 +149,58 @@ test("0 broken links: every internal href in dist resolves to a built file", asy
     }
   }
   assert.deepEqual(broken, [], `broken internal links:\n${broken.join("\n")}`);
+
+  // THE WIDE POPULATION — the one the zero above is actually over.
+  assert.equal(files.length, 59, `crawled ${files.length} HTML files, not 59`);
+  assert.ok(
+    crawled > 2000,
+    `only ${crawled} internal <a href> across ${files.length} files — this zero is over a ` +
+      `far smaller population than the crawl is supposed to reach`,
+  );
+
+  // THE NARROW POPULATION — the one the report quoted, DECOMPOSED, because
+  // measuring it turned up a third figure nobody had named.
+  //
+  // The published 255 and the reviewer's independently reproduced 255 are both
+  // right, and both are one definition short. Internal `<a href>` inside
+  // `<main>` over the 58 content pages is 257. Two of those are PURE FRAGMENTS
+  // — in-page anchors that resolve to no file and that the crawl above skips at
+  // `path === ""`. 257 − 2 = 255. So the quoted denominator was silently "links
+  // that resolve to a file", and the difference sat inside the agreement of two
+  // instruments that never stated it. The fragment set is PRINTED rather than
+  // its count inverted (standard 27), so a third anchor appearing changes a
+  // named list and not just a total.
+  const pages = await distContentPages();
+  const internal = [];
+  for (const p of pages) {
+    for (const raw of hrefsIn(mainOf(p.html))) {
+      if (!isExternal(raw)) internal.push({ route: p.route, raw });
+    }
+  }
+  const fragments = internal.filter((x) => x.raw.startsWith("#"));
+  assert.equal(pages.length, 58, `${pages.length} content pages, not 58`);
+  assert.equal(internal.length, 257, `internal <a href> inside <main> is ${internal.length}, not 257`);
+  assert.deepEqual(
+    fragments.map((x) => `${x.route} ${x.raw}`),
+    [
+      "plugins/okf-authoring/okf-author #cli-is-opportunistic-never-required",
+      "plugins/okf-authoring/okf-validate #prefer-a-validator-fall-back-by-hand",
+    ],
+    "the in-page anchor set changed; the 257/255 decomposition below is stale",
+  );
+  assert.equal(
+    internal.length - fragments.length,
+    255,
+    `file-resolving internal <a href> inside <main> is ${internal.length - fragments.length}, ` +
+      `not the 255 AC6 published. The three load-bearing figures are: ${crawled} (what the zero ` +
+      `above is actually over), ${internal.length} (all internal links in <main>), and 255 ` +
+      `(those of them that name a file).`,
+  );
+  assert.ok(
+    crawled > internal.length,
+    `the wide crawl (${crawled}) is not wider than the <main>-scoped count (${internal.length}), ` +
+      `so the two populations this test exists to distinguish have collapsed into one`,
+  );
 });
 
 test("0 broken links control: a fabricated href is caught by the same resolver", () => {
