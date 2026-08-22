@@ -3,7 +3,7 @@
 // All of them are about the same thing from six angles: a resource file exists
 // on disk, and the site says so without saying anything else about it.
 //
-//   AC1  all 22 references, 12 scripts and 24 assets appear on their owning
+//   AC1  all 23 references, 12 scripts and 24 assets appear on their owning
 //        skill page with real filenames, including the four orphans and the
 //        dotfile two levels down
 //   AC2  no resource carries a description the repo does not declare
@@ -12,7 +12,7 @@
 //   AC5  all 12 script blob links return 200
 //   AC7  the dead pointer renders as text and as no hyperlink
 //
-// THE FIGURES 22, 12, 24 AND 4 ARE RE-DERIVED HERE. Every one of them was
+// THE FIGURES 23, 12, 24 AND 4 ARE RE-DERIVED HERE. Every one of them was
 // measured when the proposal was written and is measured again below, from the
 // filesystem, by this file's own directory walk. Where the derived and the
 // designed disagree it is the designed figure that is reported as wrong; no
@@ -135,7 +135,7 @@ test("AC1: the rendered resource set equals the on-disk set, in both directions"
   assert.ok(onDisk.size > 50, `only ${onDisk.size} resources found on disk`);
 });
 
-test("AC1: the per-group totals are 22 references, 12 scripts and 24 assets — derived", async () => {
+test("AC1: the per-group totals are 23 references, 12 scripts and 24 assets — derived", async () => {
   const disk = await resourcesOnDisk();
   const shown = await resourcesRendered();
   const tally = (rows) =>
