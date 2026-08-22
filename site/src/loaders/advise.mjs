@@ -182,9 +182,37 @@ export function adviseDeadPointers(raw, skill) {
  * fences included, against the file's path within its group and against its
  * bare name. Deliberately GENEROUS: this advisory is an accusation that the
  * author documented nothing, and the cheap error to make is to stay quiet.
- * The generosity was measured, not assumed — a token-boundary variant that
- * refuses matches glued to an identifier character selects the same nine
- * files, symmetric difference zero.
+ *
+ * WHAT THIS PREDICATE DOES NOT ESTABLISH, AND THE MESSAGE NO LONGER CLAIMS.
+ * It reads ONE file — the owning SKILL.md. It therefore establishes nothing
+ * about the repository as a whole, and until the Phase 4 review it printed a
+ * message that read as if it did. Measured counter-example, from that review:
+ * assets/example-bundle/references/skills/run-on-bq.md is flagged here and is
+ * described in TWO other repository files — example-bundle/index.md links it
+ * with the text "executor run instructions", and computations/revenue.md
+ * names it as `resource:`. The finding is real; the old wording was not.
+ *
+ * THE TWO-VARIANT DEFENCE THAT USED TO SIT HERE WAS ONE LOSS PROFILE, NOT
+ * TWO, and it is withdrawn rather than restated. A token-boundary variant
+ * that refuses matches glued to an identifier character does select the same
+ * nine files with symmetric difference zero — but BOTH variants match on
+ * BASENAME, so they share a blind spot and their agreement follows from that
+ * shared construction rather than from evidence. Two renderings of one
+ * predicate are not two predicates. The
+ * review measured genuinely different profiles: a fence-and-link-aware
+ * structural variant gives 7 and a path-anchored variant gives 17.
+ *
+ * THE CONSEQUENCE OF THE BASENAME PROFILE, WHICH A READER OF THIS POPULATION
+ * MUST KNOW. Of the 9 bundle files, exactly the 2 whose basenames do not
+ * collide with unrelated prose elsewhere in okf-author/SKILL.md are flagged.
+ * The other bundle basenames — index.md, log.md, revenue.md, customers.md,
+ * orders.md — occur in that SKILL.md 8, 3, 1, 2 and 2 times respectively, and
+ * every one of those occurrences is about the OKF FORMAT rather than about a
+ * bundle file (e.g. "Reserved filenames (`index.md`, `log.md`) are not
+ * concepts"). So the partition of the bundle into orphan and not-orphan here
+ * is produced by ACCIDENTAL BASENAME COLLISION, not by documentation. That is
+ * a property of this predicate, it is disclosed rather than tuned away, and
+ * it is the reason the message above is scoped to this one file.
  *
  * No line number. The finding is an ABSENCE — there is no line in SKILL.md
  * where the mention fails to be — and `line: null` is how this loader says
@@ -209,9 +237,9 @@ export function adviseOrphans(raw, skill) {
         line: null,
         message:
           `orphan resource: ${skill.repoPath} never mentions this file by ` +
-          `name, so nothing in the repository says what it is for. It is ` +
-          `listed on the skill page by its real filename and carries no ` +
-          `description, because there is none to carry.`,
+          `name, so this page carries no description for it. It is listed ` +
+          `on the skill page by its real filename. THIS CHECKS THE OWNING ` +
+          `SKILL.md ONLY — another file in the repository may describe it.`,
       });
     }
   }

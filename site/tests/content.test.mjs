@@ -281,6 +281,18 @@ test("AC3: no witness string unique to the example bundle appears anywhere in di
   assert.ok(witnesses.length >= 5, "too few witness strings to be a meaningful check");
 
   const pages = await distContentPages();
+  // O2 — GUARD THE OTHER POPULATION. The witnesses are floored above; `pages`
+  // was not, so an empty dist/ passed this vacuously and the positive control
+  // could not tell, because it asserts string containment on a synthetic
+  // string rather than that anything was scanned. A sibling test pins the
+  // exact page count, so the population WAS bound — just not anywhere this
+  // test could see it, and a scanner should state the population it scanned
+  // rather than only its verdict.
+  assert.ok(
+    pages.length > 0,
+    "no pages were scanned, so this proved nothing about the built site",
+  );
+
   const leaked = [];
   for (const w of witnesses) {
     for (const p of pages) {
