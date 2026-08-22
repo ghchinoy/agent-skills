@@ -148,6 +148,13 @@ export const skillsSchema = Declared.extend({
 export function skillsLoader(options: SkillsLoaderOptions): Loader {
   const ref = options.ref ?? "main";
   const base = options.baseUrl.replace(/\/$/, "");
+  // The `owner/repo` slug the install command needs, DERIVED from repoUrl rather
+  // than written out again. It was a literal `ghchinoy/agent-skills` below, which
+  // is a copy of REPO_URL's owner/repo component: rename the repository and every
+  // skill page would have shipped a failing install command with the suite green.
+  // Found by the round-4 constant gate once that gate learned to read .ts files
+  // and to grade components separately (F9's lesson). Output-identical today.
+  const repoSlug = new URL(options.repoUrl).pathname.replace(/^\/|\/$/g, "");
   const blobBase = `${options.repoUrl.replace(/\/$/, "")}/blob/${ref}`;
   const treeBase = `${options.repoUrl.replace(/\/$/, "")}/tree/${ref}`;
 
@@ -233,7 +240,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             sourceUrl: blobUrl(skill.repoPath),
             // Form lifted verbatim from the repository README's own
             // "Installing via Open Agent Skills CLI" block.
-            installCommand: `npx skills add ghchinoy/agent-skills --skill ${declared.name}`,
+            installCommand: `npx skills add ${repoSlug} --skill ${declared.name}`,
             resources: {
               references: decorate(skill.resources.references, `${skill.repoDir}/references`),
               scripts: decorate(skill.resources.scripts, `${skill.repoDir}/scripts`),

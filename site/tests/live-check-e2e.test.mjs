@@ -1,0 +1,598 @@
+// live-check-e2e.test.mjs — the AC3 checker, run for real against a server we
+// control and deliberately break.
+//
+// WHY THIS FILE EXISTS. Review found that the byte comparison inside
+// check-live-links.mjs was a gate nothing asserted: REMOVING it entirely left
+// the whole suite green. Its unit tests cover the pure decision-making —
+// classification, URL mapping, hashing — and pure tests cannot notice when the
+// code that CALLS them is deleted. Same class as the workflow findings: correct
+// about the parts, silent about whether they are wired to anything.
+//
+// So this drives the real `runOnce` against a loopback server serving the real
+// `dist`, and asserts that specific breakages produce specific failures. If a
+// future change strips or weakens the comparison, the clean case still passes
+// and these go red.
+//
+// The two axes review separated are asserted SEPARATELY here, because they are
+// independent defects that happened to share a symptom:
+//
+//   AXIS 1, REACHABILITY — a file the deploy shipped is not served at all. Only
+//   the artifact sweep can see this; the reference crawl never requests it.
+//   Asserted by dropping an unreferenced file.
+//
+//   AXIS 2, SUFFICIENCY OF 200 — a file is served, returns 200, and is the
+//   wrong bytes. Coverage does not touch this one: the file is fetched and
+//   reachable. Asserted by serving same-length wrong content, which also
+//   defeats the length comparison originally specified for this fix.
+//
+// NO EXTERNAL NETWORK. The server is 127.0.0.1 on an ephemeral port, so this is
+// safe on a pull request alongside the offline tests.
+//
+// AND IT ANSWERS AS THE SITE'S OWN ORIGIN. The first version of this fixture
+// pointed the checker at http://127.0.0.1:PORT and was, by construction,
+// incapable of testing the thing that actually breaks: the artifact hard-codes
+// https://ghchinoy.github.io/... into seven canonical tags, and `classify()`
+// files anything whose origin differs from the site's as off-site and never
+// fetches it. Seven references silently left the crawl and the fixture still
+// looked like production. So the loopback server is presented AT THE REAL
+// ORIGIN by routing fetch, rather than by rewriting the served HTML — the bytes
+// have to stay identical to the artifact or the freshness comparison this file
+// exists to protect would have nothing to compare.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+
+import { runOnce } from "../scripts/check-live-links.mjs";
+import { BASE, ORIGIN, dist, plantOrThrow, walk } from "./_helpers.mjs";
+
+/** A route that is never built. Planted as an absolute same-origin reference,
+ *  which is the class the local suite could not see. */
+const UNBUILT = `${ORIGIN}${BASE}/no-such-route-synthetic-control/`;
+
+/** Enough of a static server to be honest about content types. get() decides
+ *  text-vs-binary from the header, so getting these wrong would make HTML
+ *  compare as an empty string and the whole file vacuous. */
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".wasm": "application/wasm",
+  ".pf_meta": "application/octet-stream",
+  ".pf_fragment": "application/octet-stream",
+  ".pf_index": "application/octet-stream",
+  ".txt": "text/plain; charset=utf-8",
+};
+const mimeFor = (p) => MIME[p.slice(p.lastIndexOf("."))] ?? "application/octet-stream";
+
+/**
+ * Serve `dist` at BASE, with optional sabotage.
+ *
+ * @param {(rel: string) => boolean} [opts.drop]    404 these files.
+ * @param {(rel: string) => boolean} [opts.corrupt] serve these with the SAME
+ *   number of bytes and different content.
+ * @param {(rel: string) => boolean} [opts.plant] inject a link to an unbuilt
+ *   route into these pages.
+ * @param {(rel: string) => boolean} [opts.plantCanonical] give these pages the
+ *   error document's canonical — a reference that IS exempt on 404.html and
+ *   must not be anywhere else.
+ * @param {boolean} [opts.jitter] delay each response by a random 0-40ms, to
+ *   vary the order responses COMPLETE in.
+ */
+async function serveDist(opts = {}) {
+  /** Every pathname the server was asked for, in arrival order, including
+   *  duplicates. The coverage claim is measured by counting server hits, so
+   *  the fixture has to be able to count them. */
+  const hits = [];
+  const files = await walk(dist);
+  const byUrlPath = new Map();
+  for (const abs of files) {
+    const rel = relative(dist, abs).split("\\").join("/");
+    byUrlPath.set(`${BASE}/${rel}`, { abs, rel });
+  }
+
+  const resolve = (pathname) => {
+    // Directory routes: /agent-skills/ and /agent-skills/x/ serve index.html.
+    if (pathname.endsWith("/")) return byUrlPath.get(`${pathname}index.html`);
+    return byUrlPath.get(pathname);
+  };
+
+  const server = createServer(async (req, res) => {
+    const { pathname } = new URL(req.url, "http://127.0.0.1");
+    hits.push(pathname);
+    const hit = resolve(pathname);
+    if (!hit || opts.drop?.(hit.rel)) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("not found");
+      return;
+    }
+    let body = await readFile(hit.abs);
+    if (opts.plant?.(hit.rel)) {
+      body = rewriteOrThrow(body, "</body>", `<a href="${UNBUILT}">planted</a></body>`, "an unbuilt link");
+    }
+    if (opts.plantCanonical?.(hit.rel)) {
+      // Anchored on `<body`, because this artifact has no closing head tag.
+      body = rewriteOrThrow(
+        body,
+        "<body",
+        `<link rel="canonical" href="${ORIGIN}${BASE}/404/"/><body`,
+        "the error document's canonical",
+      );
+    }
+    if (opts.jitter) await new Promise((r) => setTimeout(r, Math.random() * 40));
+    if (opts.corrupt?.(hit.rel)) {
+      // Same length, different bytes. A length check cannot tell these apart;
+      // that is the point of the scenario.
+      body = Buffer.from(body);
+      body[0] = body[0] ^ 0xff;
+    }
+    res.writeHead(200, { "content-type": mimeFor(hit.rel) });
+    res.end(body);
+  });
+
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  return {
+    localOrigin: `http://127.0.0.1:${port}`,
+    hits,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
+
+/**
+ * Run the checker against `localOrigin` while it believes it is talking to
+ * ORIGIN. Requests are routed at the last moment and the response reports the
+ * URL the CALLER asked for, so `redirectVerdict` sees the site's own origin
+ * instead of reading every response as a hop to a loopback address.
+ */
+async function withOrigin(localOrigin, fn) {
+  const realFetch = globalThis.fetch;
+  const toLocal = (u) => (u.startsWith(ORIGIN) ? localOrigin + u.slice(ORIGIN.length) : u);
+  const toPublic = (u) => (u.startsWith(localOrigin) ? ORIGIN + u.slice(localOrigin.length) : u);
+  globalThis.fetch = async (input, init) => {
+    const res = await realFetch(toLocal(String(input)), init);
+    return new Proxy(res, {
+      get(target, prop) {
+        if (prop === "url") return toPublic(target.url);
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+/**
+ * Rewrite `body`, and REFUSE TO SILENTLY DO NOTHING.
+ *
+ * THE SILENT NO-OP IS NOW A CLASS AT THREE INSTANCES IN THREE DIFFERENT HANDS
+ * on this phase: a review harness whose Python replace matched an absent
+ * pattern, a patch script of mine that exited early leaving half its edits
+ * unapplied, and this fixture, which anchored a planted canonical on a closing
+ * head tag that Astro does not emit — so it planted nothing, served the page
+ * verbatim, and reported "a dangling canonical was not caught" about a run
+ * where nothing had been planted.
+ *
+ * WHAT MAKES THE CLASS NASTY IS THAT THE DIRECTION OF THE ERROR IS NOT
+ * PREDICTABLE. The review harness's no-op produced a FALSE GREEN — a gate that
+ * looked blind. This one produced a FALSE RED — a finding against code that was
+ * correct. Whichever way the control's polarity points is the way the mistake
+ * comes out, so there is no symptom to pattern-match on. Only refusing to
+ * rewrite nothing works, and it has to be a property of every rewriting step
+ * rather than three separate fixes.
+ *
+ * Exported so the guard itself is reachable: with correct anchors it never
+ * fires, and deleting it left the suite green.
+ */
+export function rewriteOrThrow(body, find, replaceWith, what) {
+  // Buffer adaptation only. The rule itself lives in _helpers.mjs and is shared
+  // with the build fixtures, because two copies of "fail when you rewrite
+  // nothing" is the same mistake one level up.
+  return Buffer.from(plantOrThrow(body.toString("utf8"), find, replaceWith, `${what} in the served page`));
+}
+
+const run = async (opts) => {
+  const srv = await serveDist(opts);
+  try {
+    const out = await withOrigin(srv.localOrigin, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
+    return { ...out, hits: srv.hits };
+  } finally {
+    await srv.close();
+  }
+};
+
+/** A file the crawl DOES reference, and one it does not. Chosen from the real
+ *  artifact rather than hard-coded, so a build change cannot make these tests
+ *  quietly test nothing. */
+async function pickTargets() {
+  const rels = (await walk(dist)).map((f) => relative(dist, f).split("\\").join("/"));
+  const unreferenced = rels.find((r) => r.startsWith("pagefind/") && r.endsWith(".js"));
+  const asset = rels.find((r) => r.startsWith("_astro/") && r.endsWith(".css"));
+  const page = rels.find((r) => r.endsWith("index.html"));
+  assert.ok(unreferenced, "no pagefind JS in dist — the axis-1 scenario would test nothing");
+  assert.ok(asset, "no _astro CSS in dist — the axis-2 scenario would test nothing");
+  assert.ok(page, "no HTML in dist");
+  return { unreferenced, asset, page };
+}
+
+test("the live checker passes against a server that serves the artifact correctly", async () => {
+  // THE CONTROL FOR EVERY OTHER TEST HERE. Without it, a checker that failed
+  // unconditionally would make all the breakage tests below pass.
+  const { failures, stats } = await run();
+  assert.deepEqual(failures, [], `clean serve should produce no failures:\n${failures.join("\n")}`);
+
+  const total = (await walk(dist)).length;
+  assert.equal(stats.artifactFiles, total, "the sweep did not consider every file in dist");
+  assert.equal(stats.artifactVerified, total, "coverage is not complete against a correct server");
+  assert.equal(stats.bytesIdentical, stats.distPages, "not every page was byte-compared");
+  assert.ok(stats.refsResolved > 0 && stats.livePagesFetched > 0);
+  // The two counters U3 separated. Occurrences must EXCEED distinct requests
+  // here — the same stylesheet is referenced from every page — and if they are
+  // ever equal, the deduplication has silently stopped and the run is making
+  // one request per reference.
+  assert.ok(
+    stats.refsResolved > stats.httpRequests,
+    `refsResolved (${stats.refsResolved}) should exceed httpRequests (${stats.httpRequests})`,
+  );
+  assert.ok(stats.httpRequests > 0, "no HTTP requests were counted");
+});
+
+test("AXIS 1: a shipped file that is never referenced and never served is caught", async () => {
+  // The reference crawl cannot see this: nothing links to the pagefind bundle,
+  // so before the artifact sweep existed this exact scenario — site search
+  // completely dead — exited 0.
+  const { unreferenced } = await pickTargets();
+  const { failures, stats } = await run({ drop: (rel) => rel === unreferenced });
+
+  const named = failures.filter((f) => f.includes(unreferenced));
+  assert.ok(named.length > 0, `dropping ${unreferenced} produced no failure naming it`);
+  assert.ok(
+    named.some((f) => f.startsWith("ARTIFACT") && /HTTP 404/.test(f)),
+    `expected an ARTIFACT 404 for ${unreferenced}, got:\n${named.join("\n")}`,
+  );
+  // Only the sweep can produce an ARTIFACT failure, so this is also the proof
+  // that coverage — not the crawl — is what caught it.
+  assert.equal(stats.artifactVerified, stats.artifactFiles - 1);
+  assert.ok(
+    failures.some((f) => f.startsWith("CONTROL:") && /artifact files verified/.test(f)),
+    "the coverage control did not fire on an unverified file",
+  );
+});
+
+test("AXIS 2: a shipped file served as 200 with the wrong bytes is caught", async () => {
+  // Coverage does not touch this one. The file is requested, reachable, and
+  // returns 200 — the CRITERION is what has to be strong enough. Same length as
+  // the real file, so a length comparison passes it.
+  const { asset } = await pickTargets();
+  const { failures, stats } = await run({ corrupt: (rel) => rel === asset });
+
+  const named = failures.filter((f) => f.includes(asset));
+  assert.ok(named.length > 0, `serving ${asset} corrupted produced no failure naming it`);
+  assert.ok(
+    named.some((f) => f.startsWith("ARTIFACT") && /bytes differ/.test(f)),
+    `expected an ARTIFACT byte-difference failure for ${asset}, got:\n${named.join("\n")}`,
+  );
+  assert.equal(stats.artifactVerified, stats.artifactFiles - 1);
+});
+
+test("AXIS 2 applies to the HTML pages too, not only the assets", async () => {
+  // The freshness comparison on the 7 pages was likewise asserted by nothing —
+  // removing it left the suite green. This is the red that stops that.
+  const { page } = await pickTargets();
+  const { failures } = await run({ corrupt: (rel) => rel === page });
+
+  assert.ok(
+    failures.some((f) => f.startsWith("STALE-OR-DIFFERENT")),
+    `serving a modified ${page} produced no staleness failure:\n${failures.join("\n")}`,
+  );
+});
+
+test("a server that answers 200 to everything cannot pass", async () => {
+  // The negative control, end to end. If a host answers 200 for URLs that were
+  // never built, every other 200 in the run is meaningless.
+  const server = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end("<html><body>everything is fine</body></html>");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  try {
+    const { failures } = await withOrigin(`http://127.0.0.1:${port}`, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
+    assert.ok(
+      failures.some((f) => f.startsWith("CONTROL:") && /never built/.test(f)),
+      "the negative control did not fire against a server that 200s everything",
+    );
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});
+
+// ── U1: the class the fixture could not previously represent ───────────────
+
+test("SYNTHETIC CONTROL: an absolute same-origin link to an unbuilt route is caught", async () => {
+  // THIS CONTROL EXISTS BECAUSE THE EXCEPTION BELOW WOULD OTHERWISE EAT THE
+  // ONLY PROOF. The one real instance of this class in the artifact is the 404
+  // page's canonical, and that is exempted by name — so if this class were only
+  // ever demonstrated through the 404 case, the exemption and the class fix
+  // would land together and leave a widened checker whose single piece of
+  // evidence had been carved out of it.
+  //
+  // So the class is proved on an ORDINARY page, with a reference that has
+  // nothing to do with 404s, and it must stay red with the exemption in place.
+  const { failures } = await run({ plant: (rel) => rel === "index.html" });
+
+  const named = failures.filter((f) => f.includes("no-such-route-synthetic-control"));
+  assert.ok(
+    named.some((f) => /HTTP 404/.test(f)),
+    `a planted absolute same-origin link to an unbuilt route was not caught:\n${failures.join("\n")}`,
+  );
+});
+
+test("the error document's canonical is exempt, and NOTHING ELSE is", async () => {
+  // The exemption is real: dist/404.html declares rel=canonical for <base>/404/,
+  // nothing is built there, and Pages does not resolve /foo/ to foo.html. It is
+  // also the narrowest thing that works — page, rel and target must all match.
+  const { failures, stats } = await run();
+  assert.deepEqual(failures, [], `clean run should be green:\n${failures.join("\n")}`);
+  assert.equal(
+    stats.exemptions,
+    1,
+    "expected exactly one exempted reference — the error document's canonical",
+  );
+});
+
+// ── the pool's two invariants, asserted against a COUNTING server ──────────
+
+test("the request cache dedupes IN-FLIGHT requests, not just completed ones", async () => {
+  // PRE-REGISTERED BY REVIEW, WITH A REPRODUCTION, BEFORE THE POOL EXISTED.
+  // The natural spelling of a memoising fetch puts an await between the has()
+  // and the set():
+  //
+  //     if (!fetched.has(url)) fetched.set(url, await get(url));
+  //
+  // Sequentially that dedupes perfectly, because there is no interleaving
+  // point — so it is not a bug until the day the calls are pooled, and then
+  // every concurrent caller for the same URL sees has() false and issues its
+  // own request. Review measured 6 logical fetches becoming 6 HTTP requests
+  // under a pool of 6, against 1 when the PROMISE is cached.
+  //
+  // This is asserted here rather than left as a comment because it fails
+  // SILENTLY. Nothing errors, no gate goes red, the counters stay plausible,
+  // and the duplicates are visible only from the server side. It is also load
+  // bearing for something outside this repository: the coverage claim is
+  // verified by counting server hits, so duplicate requests would cost the
+  // artifact sweep its denominator and make "39 of 39" unverifiable.
+  const { stats, hits } = await run();
+
+  const counts = new Map();
+  for (const p of hits) counts.set(p, (counts.get(p) ?? 0) + 1);
+  const repeated = [...counts].filter(([, n]) => n > 1);
+  assert.deepEqual(
+    repeated,
+    [],
+    `these URLs were requested more than once — the cache is storing results ` +
+      `rather than in-flight promises:\n${repeated.map(([p, n]) => `  ${n}x ${p}`).join("\n")}`,
+  );
+
+  // The counter the runtime is sized from must agree with the wire.
+  assert.equal(stats.httpRequests, hits.length, "httpRequests disagrees with actual server hits");
+  // ...and the crawl must genuinely be resolving more references than it makes
+  // requests, or this test would pass on a run that deduped by checking less.
+  assert.ok(
+    stats.refsResolved > stats.httpRequests,
+    `expected reuse: ${stats.refsResolved} references resolved via ${stats.httpRequests} requests`,
+  );
+});
+
+test("the failure list is ordered independently of when responses complete", async () => {
+  // WHAT THIS CLAIMS AND WHAT WOULD HAVE FAILED TO SHOW IT. The claim is that
+  // reporting order carries no scheduling information. The obvious control —
+  // run the same scenario twice and require identical arrays — does NOT
+  // establish that: on a loopback fixture with p95 at 0.030s the two runs
+  // schedule identically almost every time, so it passes whether the property
+  // holds or not. That is the flaky-test shape with the flakiness on the green
+  // side, which is the side nobody investigates.
+  //
+  // So completion order is VARIED ON PURPOSE with a random per-response delay,
+  // large enough relative to the responses themselves to reorder them. The
+  // property itself holds by construction — every order key is the item's INDEX
+  // IN ITS INPUT LIST (pageTargets, decided, sweepTargets), assigned before any
+  // request is issued, never a counter incremented where the finding is raised.
+  // This control exists to keep that true, not to discover whether it is.
+  const broken = {
+    corrupt: (rel) => rel.endsWith(".css") || rel.endsWith(".html"),
+    jitter: true,
+  };
+  const a = await run(broken);
+  const b = await run(broken);
+  assert.ok(a.failures.length > 3, `expected several failures, got ${a.failures.length}`);
+  assert.deepEqual(
+    a.failures,
+    b.failures,
+    "reporting order changed when response completion order changed",
+  );
+});
+
+test("SYNTHETIC CONTROL: the exemption is narrow AT ITS SINGLE DECISION POINT", async () => {
+  // The classify-once refactor MOVED where this exemption is applied — from the
+  // evaluation loop to the one place each reference is decided. Relocating an
+  // exemption is exactly the change that can silently widen it, and this
+  // exemption is now the only thing between a dangling canonical and a green
+  // run. So the narrowness control is re-run against the new decision point.
+  //
+  // The reference planted here is CHARACTER-FOR-CHARACTER the one that is
+  // exempt on 404.html. Only the page differs. If the exemption has decayed
+  // into "references to /404/ are not checked", this goes green and the site
+  // can ship a canonical pointing at a route that does not exist.
+  const { failures, stats } = await run({ plantCanonical: (rel) => rel === "index.html" });
+
+  assert.ok(
+    failures.some((f) => /404\/? — HTTP 404|HTTP 404 at .*\/404\//.test(f)),
+    `a dangling canonical on an ordinary page was not caught:\n${failures.join("\n")}`,
+  );
+  assert.equal(
+    stats.exemptions,
+    1,
+    "the exemption fired more than once — it is no longer one reference wide",
+  );
+});
+
+test("CONTROL: an empty dist returns the WHOLE contract, and keeps its diagnostic (F2)", async () => {
+  // F2. THE POSITIVE CONTROL FOR THE SINGLE CONSTRUCTION SITE.
+  //
+  // runOnce had two return paths. The main one returned
+  // `{ failures, stats, deterministic }`; the empty-dist early return omitted
+  // `deterministic`. `main` then does `last.deterministic.has(f)`, so on an
+  // empty dist the process died with a TypeError and threw away the one
+  // diagnostic written for that exact condition — "no HTML files found".
+  //
+  // Nothing exercised this path. Every runOnce test in this file serves the
+  // real `dist`, which is never empty, so the divergence was reachable only in
+  // production and only in the case the artifact hand-off had already failed.
+  //
+  // This control does not assert the fix; it asserts the CONTRACT, which is why
+  // it is written as a comparison against the populated path rather than as a
+  // hand-written list of three key names. A hand-written list is another mirror
+  // of the same decision and would drift the same way the return did.
+  const empty = await mkdtemp(join(tmpdir(), "live-empty-dist-"));
+  const out = await runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: empty });
+
+  const srv = await serveDist();
+  let populated;
+  try {
+    populated = await withOrigin(srv.localOrigin, () =>
+      runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist }),
+    );
+  } finally {
+    await srv.close();
+  }
+
+  assert.deepEqual(
+    Object.keys(out).sort(),
+    Object.keys(populated).sort(),
+    "the empty-dist return and the populated return are different shapes — this is the " +
+      "F2 defect, and it is a crash in `main`, not a missing field",
+  );
+
+  // The specific dereference that crashed, performed here exactly as `main`
+  // performs it. Shape equality alone would pass if both paths returned a
+  // `deterministic` that was not a Set.
+  assert.doesNotThrow(
+    () => out.failures.every((f) => out.deterministic.has(f)),
+    "main's deterministic-failure check cannot run against the empty-dist result",
+  );
+
+  // And the thing the crash destroyed: the explanation.
+  assert.ok(
+    out.failures.some((f) => /no HTML files found/.test(f)),
+    `the empty-dist diagnostic did not survive:\n${out.failures.join("\n")}`,
+  );
+  assert.equal(
+    out.failures.every((f) => out.deterministic.has(f)),
+    true,
+    "an empty dist is a build-side problem: retrying cannot conjure files, so the run " +
+      "must stop rather than wait out the retry schedule",
+  );
+});
+
+test("a fetch that THROWS is reported as a failure, not memoised as a rejection", async () => {
+  // The promise cache is only safe if get() never rejects, and review flagged
+  // that premise as load bearing: a cached rejection replays for every later
+  // caller of that URL, and would do it for the whole run. Rather than verify
+  // the premise, the cache converts rejections at the boundary. This proves the
+  // conversion, by making fetch throw for one URL that several pages reference.
+  const srv = await serveDist();
+  const victim = `${ORIGIN}${BASE}/pagefind/pagefind.js`;
+  try {
+    const realFetch = globalThis.fetch;
+    const out = await withOrigin(srv.localOrigin, async () => {
+      const routed = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        if (String(input).startsWith(victim)) throw new Error("synthetic transport explosion");
+        return routed(input, init);
+      };
+      try {
+        return await runOnce({ liveUrl: `${ORIGIN}${BASE}/`, distDir: dist });
+      } finally {
+        globalThis.fetch = routed;
+      }
+    });
+    assert.equal(globalThis.fetch, realFetch, "fetch was not restored");
+    assert.ok(
+      out.failures.some((f) => /synthetic transport explosion/.test(f)),
+      `a throwing fetch should surface as a failure:\n${out.failures.join("\n")}`,
+    );
+  } finally {
+    await srv.close();
+  }
+});
+
+test("the request set is exactly the artifact plus the negative control", async () => {
+  // THE DENOMINATOR, PINNED. O1's claim is verified by counting server hits, so
+  // the set of URLs this run requests has to be knowable from the artifact
+  // alone. Two failures hide on either side of it and neither is visible from
+  // the exit code:
+  //
+  //   TOO FEW — the sweep exists, reports success and never executes. A green
+  //   run whose request count did not rise is a sweep that is not wired in.
+  //
+  //   TOO MANY — measured, not hypothetical. classify() was being called twice,
+  //   once in the prefetch filter and once in the evaluation loop, and the
+  //   error-document exemption was applied only in the second. The run fetched
+  //   the exempted URL, discarded the answer, and reported 41 distinct requests
+  //   against a classification that implied 40. Duplicate or surplus hits cost
+  //   the coverage instrument its denominator, so it would have been measuring
+  //   the wrong thing with no symptom.
+  const { stats, hits } = await run();
+
+  const expected = new Set([`${BASE}/${"__no-such-page-negative-control__"}/`]);
+  for (const abs of await walk(dist)) {
+    const rel = relative(dist, abs).split("\\").join("/");
+    expected.add(rel.endsWith("index.html") ? `${BASE}/${rel.slice(0, -"index.html".length)}` : `${BASE}/${rel}`);
+  }
+
+  const actual = new Set(hits);
+  const surplus = [...actual].filter((u) => !expected.has(u));
+  const missing = [...expected].filter((u) => !actual.has(u));
+  assert.deepEqual(surplus, [], `requested URLs that are not deployed files:\n${surplus.join("\n")}`);
+  assert.deepEqual(missing, [], `deployed files never requested:\n${missing.join("\n")}`);
+  assert.equal(stats.httpRequests, expected.size, "httpRequests disagrees with the artifact");
+
+  // And the exempted URL is not merely un-judged, it is never asked for.
+  assert.ok(!actual.has(`${BASE}/404/`), "the exempted URL was still fetched");
+  assert.equal(stats.exemptions, 1);
+});
+
+test("CONTROL: the fixture refuses to plant nothing", () => {
+  // This guard cannot fire during a normal run — the anchors match — so
+  // deleting it changed nothing observable and mutation reported it as an
+  // assertion that cannot fire. Exercised directly instead, with the exact
+  // anchor that caused the incident.
+  const page = Buffer.from("<html><head><title>x</title><body>y</body></html>");
+
+  assert.equal(
+    rewriteOrThrow(page, "<body", "<link rel=canonical><body", "a canonical").toString(),
+    "<html><head><title>x</title><link rel=canonical><body>y</body></html>",
+  );
+
+  // `</head>` is the anchor that silently matched nothing in this artifact.
+  assert.throws(
+    () => rewriteOrThrow(page, "</head>", "<x/></head>", "a canonical"),
+    /could not plant a canonical/,
+    "the fixture planted nothing and did not say so",
+  );
+});

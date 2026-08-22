@@ -15,6 +15,7 @@
   //                src/loaders/frontmatter.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
+  //                scripts/check-live-links.mjs
   //                tests/*.mjs
   //
   // That is most of the loader. Verified, not assumed: a `@type {number}`
@@ -29,13 +30,34 @@
   // code they sit in. Treat them as comments that happen to be
   // machine-readable, not as a guarantee.
   //
-  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` currently surfaces 204
-  // errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
-  // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro), which are
-  // overwhelmingly missing annotations and implicit `any` under `strict`
-  // rather than latent bugs. Fixing them is real work and out of scope for
-  // Phase 1. Logged as a PHASE 5 CANDIDATE with that count so the phase can
-  // size it.
+  // PHASE 2 added one file to that list: scripts/check-live-links.mjs, the
+  // live-deployment link checker. Its decision-making — reference extraction,
+  // internal/external classification, dist-path-to-URL mapping — is factored
+  // out and unit-tested in tests/live-links.test.mjs precisely because the type
+  // checker is not watching it.
+  //
+  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces 399 errors across
+  // 27 files, which are overwhelmingly missing annotations and implicit `any`
+  // under `strict` rather than latent bugs. Fixing them is real work and out of
+  // scope for Phase 2. Logged as a PHASE 5 CANDIDATE with that count so the
+  // phase can size it.
+  //
+  // RE-MEASURED IN FIX ROUND 2, AND THE OLD NUMBER WAS THE FINDING. This said
+  // "204 errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
+  // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro)" — a Phase 1
+  // measurement quoted unchanged by a Phase 2 commit that edited the lines
+  // directly above it to ADD a file to the unchecked list. The five per-file
+  // loader figures are all still exactly right; every one of the 195 new errors
+  // is in code Phase 2 wrote. Today, by the same run:
+  //
+  //   scripts/check-live-links.mjs 62   tests/live-check-e2e   51
+  //   tests/workflows 39   tests/enumeration 37   src/loaders/enumerate.mjs 26
+  //   src/loaders/links.mjs 21   src/loaders/markdown.mjs 14
+  //   src/loaders/frontmatter.mjs 6   src/sidebar.mjs 5   (rest in tests/)
+  //
+  // The lesson is not the arithmetic, it is that a sizing figure sitting three
+  // lines below an edit is exactly the figure nobody re-runs. Standard 2: a
+  // number is re-measured at the moment it is quoted, not inherited.
   //
   // If you turn it on, do it as its own change with its own review. Do not
   // widen it as a side effect of something else, and do not restate the

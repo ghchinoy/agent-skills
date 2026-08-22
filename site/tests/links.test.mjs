@@ -9,6 +9,10 @@
 // and the test would pass on four-fifths of a page.
 
 import { test } from "node:test";
+
+// The live checker's exemption rule, imported rather than reimplemented. See
+// isErrorDocCanonical below for why this import exists.
+import { classify, errorDocExemption, liveUrlForFile } from "../scripts/check-live-links.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join, normalize, relative } from "node:path";
@@ -16,6 +20,7 @@ import { existsSync, statSync } from "node:fs";
 
 import {
   BASE,
+  ORIGIN,
   PLUGIN,
   dist,
   distContentPages,
@@ -113,9 +118,11 @@ test("0 broken links: every internal href in dist resolves to a built file", asy
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
-    for (const href of hrefsIn(html)) {
-      if (isExternal(href)) continue;
+    for (const raw of hrefsIn(html)) {
+      if (isExternal(raw)) continue;
+      const href = toSitePath(raw);
       const [path] = href.split("#");
+      if (isErrorDocCanonical(from, path, html)) continue;
       if (path === "") continue; // pure fragment
       if (!path.startsWith("/")) {
         broken.push(`${from} -> ${href} (relative href; the site emits absolute ones)`);
@@ -154,10 +161,12 @@ test("0 broken assets: every src= and <link href> in dist resolves to a built fi
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
-    for (const { kind, ref } of assetRefsIn(html)) {
-      if (isExternal(ref) || ref === "") continue;
+    for (const { kind, ref: rawRef } of assetRefsIn(html)) {
+      if (isExternal(rawRef) || rawRef === "") continue;
+      const ref = toSitePath(rawRef);
       const [path] = ref.split("#");
       if (path === "") continue;
+      if (isErrorDocCanonical(from, path, html)) continue;
       checked += 1;
       if (!path.startsWith("/")) {
         broken.push(`${from} -> ${kind} ${ref} (relative; the site emits absolute ones)`);
@@ -237,8 +246,8 @@ test("0 dangling anchors: every in-page fragment names an id that exists", async
   const dangling = [];
   for (const p of pages) {
     for (const href of hrefsIn(p.html)) {
-      if (isExternal(href) || !href.includes("#")) continue;
-      const [path, frag] = href.split("#");
+      if (isExternal(href) || !toSitePath(href).includes("#")) continue;
+      const [path, frag] = toSitePath(href).split("#");
       if (!frag || frag === "top") continue;
       const targetRoute = path === "" ? `/${p.route}/` : path.slice(BASE.length) || "/";
       const html = path === "" ? p.html : byRoute.get(targetRoute);
@@ -347,8 +356,71 @@ function decodeAmp(s) {
   return s.replace(/&amp;/g, "&");
 }
 
+/**
+ * True when a reference points somewhere this suite cannot resolve.
+ *
+ * THIS FUNCTION USED TO TREAT EVERY ABSOLUTE URL AS EXTERNAL, and that is the
+ * defect that let a broken reference sit in dist through a full green run. The
+ * artifact hard-codes its own origin into `rel=canonical` on every page, so
+ * `^https?:` matched them and this suite skipped the entire class of
+ * SAME-ORIGIN ABSOLUTE references. Meanwhile the live checker's `classify()`
+ * resolves them and fetches them. Local green, live red — and the divergence,
+ * not the one link it hid, is the actual bug. See `toSitePath` below.
+ */
 function isExternal(href) {
-  return /^(https?:|mailto:|tel:|data:|\/\/)/.test(href);
+  if (/^(mailto:|tel:|data:|javascript:)/i.test(href)) return true;
+  if (/^\/\//.test(href)) return true; // protocol-relative: another origin
+  if (!/^https?:/i.test(href)) return false; // relative or root-relative: ours
+  try {
+    return new URL(href).origin !== ORIGIN;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * An absolute same-origin reference, reduced to the site-absolute path the
+ * resolver below understands. Anything else is returned unchanged.
+ *
+ * Kept separate from `isExternal` so the two questions stay separate: "is this
+ * ours" and "where does it point". Folding them together is roughly how the
+ * origin check went missing in the first place.
+ */
+function toSitePath(ref) {
+  if (!/^https?:/i.test(ref)) return ref;
+  try {
+    const u = new URL(ref);
+    return `${u.pathname}${u.hash}`;
+  } catch {
+    return ref;
+  }
+}
+
+/**
+ * The one reference on this site not required to resolve.
+ *
+ * THIS IS AN ADAPTER, NOT A COPY, and it used to be a copy. The local gate
+ * speaks in dist-relative filenames and site-absolute paths; the live gate
+ * speaks in absolute URLs. Reconciling those two vocabularies by writing the
+ * rule out twice is how the two gates drift, and mutation proved it was already
+ * happening: deleting the live checker's "the reference must BE the page's
+ * canonical" clause left the whole suite green, because the only test of that
+ * clause was exercising this copy instead. The copy was correct and the thing
+ * it was standing in for was unguarded — the same defect this phase keeps
+ * finding, arriving inside the fix for it.
+ *
+ * So there is one implementation, in scripts/check-live-links.mjs, and this
+ * translates. BASE and ORIGIN are still the suite's own duplicated constants,
+ * passed in, so the deliberate drift check on the VALUES survives: what is
+ * shared is the decision, not the numbers it is made about.
+ */
+function isErrorDocCanonical(fromFile, path, html) {
+  return (
+    errorDocExemption(`${ORIGIN}${path}`, html, `${ORIGIN}${BASE}/${fromFile}`, {
+      origin: ORIGIN,
+      base: BASE,
+    }) !== null
+  );
 }
 
 /** True when a site-absolute path corresponds to something actually built:
@@ -373,3 +445,214 @@ function mainOf(html) {
   const m = html.match(/<main\b[\s\S]*?<\/main>/i);
   return m ? m[0] : html;
 }
+
+// ── U1: the class this suite could not see ─────────────────────────────────
+//
+// THESE TWO TESTS WERE WRITTEN DURING THE U1 FIX AND NEVER LANDED. The patch
+// script that appended them exited early on an unrelated import mismatch, the
+// import was fixed by hand, and the append was never re-run. Every suite run
+// afterwards was green, because what was missing was the CONTROL and not the
+// fix: `isExternal` was correctly origin-aware the whole time and nothing
+// asserted it. Reverting it to the broken form left the suite green, which is
+// how this was found — by mutation, from a committed baseline, not by reading.
+// The fix-round lesson generalises past this file: A PARTIALLY APPLIED PATCH
+// LEAVES THE CODE LOOKING FINISHED AND THE EVIDENCE MISSING.
+
+test("CONTROL: an absolute same-origin reference to an unbuilt route is caught", () => {
+  // THE POINT OF THIS TEST IS THAT IT DOES NOT USE THE 404 PAGE. The only real
+  // instance of this class in the artifact is the error document's canonical,
+  // and that is exempted by name a few lines above — so proving the class fix
+  // through the 404 case alone would leave an exemption carved exactly where
+  // the evidence used to be, and no way to tell the fix still worked.
+  const unbuilt = `${ORIGIN}${BASE}/no-such-route-synthetic-control/`;
+  const built = `${ORIGIN}${BASE}/plugins/${PLUGIN}/`;
+
+  // The assertion that was false before the fix: isExternal returned true for
+  // both of these, so this suite skipped the entire class.
+  assert.equal(isExternal(unbuilt), false, "a same-origin absolute URL is not external");
+  assert.equal(isExternal(built), false);
+
+  // ...and they reduce to paths the resolver can answer for.
+  assert.equal(resolvesInDist(toSitePath(unbuilt)), false, "an unbuilt route must not resolve");
+  assert.equal(resolvesInDist(toSitePath(built)), true, "a built route must resolve");
+
+  // The exemption cannot swallow it: wrong file, wrong target, no canonical.
+  const html = '<link rel="canonical" href="' + ORIGIN + BASE + '/404/"/>';
+  assert.equal(isErrorDocCanonical("index.html", toSitePath(unbuilt), html), false);
+  assert.equal(isErrorDocCanonical("404.html", toSitePath(unbuilt), html), false);
+
+  // Genuinely external references stay external.
+  assert.equal(isExternal("https://github.com/ghchinoy/agent-skills"), true);
+  assert.equal(isExternal("//cdn.example.com/x.js"), true);
+  assert.equal(isExternal("mailto:x@example.com"), true);
+  assert.equal(isExternal(`${BASE}/x/`), false);
+});
+
+test("CONTROL: the error-document exemption is exactly one reference wide", async () => {
+  const html = await read(join(dist, "404.html"));
+  const target = `${BASE}/404/`;
+
+  assert.equal(isErrorDocCanonical("404.html", target, html), true);
+
+  // And on nothing else: not another page, not another target, and not when
+  // the page's canonical says something different from the reference.
+  assert.equal(isErrorDocCanonical("index.html", target, html), false);
+  assert.equal(isErrorDocCanonical("404.html", `${BASE}/404`, html), false);
+  assert.equal(isErrorDocCanonical("404.html", `${BASE}/plugins/`, html), false);
+  assert.equal(
+    isErrorDocCanonical("404.html", target, '<link rel="canonical" href="/elsewhere/"/>'),
+    false,
+    "the exemption fired on a page whose canonical is not the exempted URL",
+  );
+
+  // F1 — THE CASE THAT ISOLATES CLAUSE 2, AND THE REASON THIS TEST'S TITLE WAS
+  // A PROMISE IT DID NOT KEEP.
+  //
+  // The exemption has three clauses: the page must be 404.html, the target must
+  // be <base>/404/, and the reference must BE that page's own canonical. Review
+  // deleted clause 2 and all 171 tests stayed green. Every wrong-target case
+  // above passes HTML whose canonical is /404/, so clause 3 rejects them all
+  // and clause 2 is never the reason for a single one — a control correct about
+  // the cases it names and blind to the clause it is named after. Same defect
+  // as everything else this phase, now inside the control written to prevent it.
+  //
+  // Isolating clause 2 requires the other two to be SATISFIED: the page is
+  // 404.html, and the canonical genuinely equals the reference. The only thing
+  // wrong is that the target is not <base>/404/. Without clause 2 this returns
+  // true and a genuinely dangling canonical on the error document is absorbed
+  // by the exemption while the run exits 0.
+  const elsewhere = `${BASE}/plugins/`;
+  assert.equal(
+    isErrorDocCanonical(
+      "404.html",
+      elsewhere,
+      `<link rel="canonical" href="${ORIGIN}${elsewhere}"/>`,
+    ),
+    false,
+    "clause 2 is not doing anything: the error document exempted a self-consistent " +
+      "canonical pointing somewhere other than <base>/404/, which is how a real " +
+      "dangling canonical would get absorbed",
+  );
+
+  // ...and the same input with the target corrected IS exempt, which is what
+  // makes the assertion above about clause 2 rather than about the page or the
+  // canonical. Without this pair the case could pass for either of the other
+  // two reasons and nobody would know which.
+  assert.equal(
+    isErrorDocCanonical("404.html", target, `<link rel="canonical" href="${ORIGIN}${target}"/>`),
+    true,
+    "the positive half of the clause-2 pair stopped holding",
+  );
+
+  // The artifact still declares what we think it declares. If Starlight ever
+  // stops emitting this, the exemption should be deleted, not left lying about.
+  assert.match(
+    html,
+    new RegExp(`rel="canonical"[^>]*href="${ORIGIN}${BASE}/404/"`),
+    "dist/404.html no longer declares the canonical this exemption exists for",
+  );
+});
+
+// ── SWEEP 2: the two gates must agree, and be shown to ─────────────────────
+
+test("the local gate and the live gate classify the artifact's references identically", async () => {
+  // WHY THIS EXISTS. `isExternal` and `toSitePath` above are a partial
+  // reimplementation of the live checker's `classify()`. The exemption next to
+  // them WAS a full reimplementation, and mutation showed the copy was absorbing
+  // the only test coverage the original had; that one is now an adapter over the
+  // real function. These two cannot be adapters as cheaply — `classify` answers
+  // in absolute URLs against a page URL, and this suite resolves against the
+  // filesystem — so the copies stay and this test is what holds them together.
+  //
+  // Stating the correspondence precisely, because "they agree" is not a
+  // property until you say about what:
+  //
+  //   isExternal(ref) === true   <=>   classify(...).verdict === "offsite"
+  //   and when internal, toSitePath(ref) names the same path+hash that
+  //   classify resolved.
+  //
+  // Note what the second clause makes visible: "escapes" — same origin, outside
+  // the base path — is INTERNAL to both, which is right. That is the classic
+  // missing-base bug on project Pages, and it must resolve locally or fail, not
+  // be waved through as somebody else's origin.
+  //
+  // THE CORPUS IS THE REAL ARTIFACT, not a hand-written list, so the agreement
+  // is asserted over exactly the inputs that ship. Hand-written edge cases are
+  // below, separately, because they are a different claim.
+  const files = await distHtmlFiles();
+  let compared = 0;
+
+  for (const file of files) {
+    const relPath = relative(dist, file).split("\\").join("/");
+    const html = await read(file);
+    const pageUrl = ORIGIN + liveUrlForFile(relPath, BASE);
+
+    const refs = [...hrefsIn(html), ...[...assetRefsIn(html)].map((a) => a.ref)];
+    for (const ref of refs) {
+      // Both call sites guard the empty reference before asking either
+      // question, so it is out of scope for the correspondence rather than a
+      // disagreement. `isExternal("")` is false and `classify("")` says
+      // offsite; neither is ever consulted.
+      if (ref.trim() === "") continue;
+
+      const c = classify(ref, { origin: ORIGIN, base: BASE }, pageUrl);
+      compared += 1;
+
+      assert.equal(
+        isExternal(ref),
+        c.verdict === "offsite",
+        `the two gates disagree about ${ref} on ${relPath}: isExternal=${isExternal(ref)}, ` +
+          `classify=${c.verdict}. One of them is skipping a reference the other checks.`,
+      );
+
+      if (c.verdict === "offsite") continue;
+      const local = toSitePath(ref);
+      const [path, frag = ""] = local.split("#");
+      const expectedPath = new URL(c.url).pathname;
+      // A relative reference is resolved by classify and left alone by
+      // toSitePath, so compare only where toSitePath claims to have an answer:
+      // absolute same-origin references, which are the class this whole fix is
+      // about.
+      if (/^https?:/i.test(ref)) {
+        assert.equal(
+          path,
+          expectedPath,
+          `the two gates resolve ${ref} differently: local=${path}, live=${expectedPath}`,
+        );
+        assert.equal(frag, c.fragment ?? "", `fragment mismatch on ${ref}`);
+      }
+    }
+  }
+
+  // The agreement is worthless if there was nothing to agree about. 100+ refs
+  // is the artifact's own scale; the floor is deliberately far below it so this
+  // fails on "the corpus vanished", not on ordinary content churn.
+  assert.ok(compared >= 50, `only ${compared} references compared — the corpus is not the artifact`);
+});
+
+test("CONTROL: the agreement test can see a disagreement", () => {
+  // The test above is a comparison, and a comparison between two things that
+  // are both wrong in the same way passes. This is the assertion that it is
+  // comparing at all: a deliberately weaker local gate — the ORIGINAL defect,
+  // "anything absolute is external" — must disagree with classify on exactly
+  // the class that defect hid.
+  const wasBroken = (href) => /^(https?:|mailto:|tel:|data:|\/\/)/.test(href);
+  const page = `${ORIGIN}${BASE}/index.html`;
+  const selfRef = `${ORIGIN}${BASE}/plugins/${PLUGIN}/`;
+
+  assert.equal(wasBroken(selfRef), true, "the old gate called a same-origin URL external");
+  assert.equal(
+    classify(selfRef, { origin: ORIGIN, base: BASE }, page).verdict,
+    "check",
+    "classify checks it",
+  );
+  // ...so the correspondence above is false under the old implementation, which
+  // is what makes it a test rather than a restatement.
+  assert.notEqual(wasBroken(selfRef), classify(selfRef, { origin: ORIGIN, base: BASE }, page).verdict === "offsite");
+
+  // And the current implementation gets it right, which is the same claim the
+  // corpus loop makes, asserted here on a single named input so a failure says
+  // which one.
+  assert.equal(isExternal(selfRef), false);
+  assert.equal(classify(selfRef, { origin: ORIGIN, base: BASE }, page).verdict === "offsite", false);
+});

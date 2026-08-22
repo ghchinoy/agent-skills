@@ -1,0 +1,213 @@
+# docs.yml — build the catalog site and publish it to GitHub Pages.
+#
+# TRIGGER: push to `main`. Deliberately NOT a tag (proposal §10.1). A sibling
+# project triggers its equivalent workflow on `push: tags: ['v*']`, and its
+# `github-pages` environment protection REJECTS `v*` tag refs — so the deploy
+# fires at release time and dies at the environment gate. Do not "improve" this
+# into a tag or release trigger.
+#
+# THE TRIGGER LIST IS NOT THE WHOLE STORY, and an earlier version of this
+# comment claimed it was. `workflow_dispatch` below has no ref restriction:
+# GitHub's "Run workflow" selector and `gh workflow run --ref <tag>` both accept
+# a TAG, which lands `refs/tags/...` at the environment gate and reproduces
+# §10.1's failure through the one trigger that looks harmless. The job-level
+# `if:` on build-deploy is what actually closes that, not the trigger list.
+#
+# This repo's `github-pages` environment has exactly ONE deployment branch
+# policy — `{name: main, type: branch}`, no reviewers, no wait timer (read from
+# the API, and independently confirmed in review). So `refs/heads/main` is the
+# only ref this environment will ever admit, and the guard below mirrors that
+# exactly rather than merely excluding tags.
+#
+# SCOPE, CORRECTED. This workflow used to say "it deploys, it does not test",
+# and delegated testing to `site-ci.yml` on the pull request. That sentence was
+# true about this file and wrong about the system, and the design read found the
+# hole: `main` carries NO branch protection and NO rulesets — checked against the
+# API, not assumed — and `site-ci.yml` triggers only on `pull_request`. So
+# nothing whatsoever required the suite to have RUN on the commit this workflow
+# deploys. A direct push to `main`, an admin merge, or a merge of a pull request
+# whose paths filter did not match all deployed content, each reaches
+# `deploy-pages` having executed zero tests.
+#
+# Two rounds of gate-building — the artifact sweep, search-declaration,
+# EXPECTED_ROUTES — sat on a path the deploy did not traverse. The gates were
+# real and the deploy was not obliged to pass them.
+#
+# Repository SETTINGS are the owner's and are not ours to change, so this is
+# fixed where we do have authority: the deploy job now runs the same `npm test`
+# as `site-ci.yml`, on the deploying ref, before Pages is configured or anything
+# is uploaded. Branch protection would be the better instrument and this is the
+# one available to a workflow file. `site-ci.yml` keeps its job: it fails on the
+# pull request, attributed to the change, which is earlier and more useful.
+# tests/workflows.test.mjs asserts this step exists, precedes the deploy, and
+# runs the identical command.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    # The content the site is built FROM, plus the site itself, plus this file.
+    # `plugins/**` is the load-bearing entry: a SKILL.md edit changes the built
+    # pages, so it has to redeploy them (proposal §9.1).
+    paths:
+      - 'plugins/**'
+      - '.claude-plugin/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'site/**'
+      - '.github/workflows/docs.yml'
+  # Redeploy without a content change — e.g. after a Pages settings change.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and an in-flight one is allowed to FINISH.
+#
+# `cancel-in-progress: false` DEVIATES FROM PROPOSAL §10.2, which prescribes
+# `true`. This is deliberate, ruled by the EM in Phase 2 review, and recorded
+# here so a later phase reading §10.2 does not helpfully "restore" it: GitHub's
+# own "Deploy static content to Pages" starter ships `false` with the comment
+# "do NOT cancel in-progress runs as we want to allow these production
+# deployments to complete". The concrete hazard with `true` is that a second
+# push to `main` inside the window kills run #1 part-way through `deploy-pages`
+# or inside verify-live's retry window, leaving a deployment in flight and an
+# AC3 check that never reported. A cancelled run is neither green nor red.
+# Superseding a queued BUILD is cheap; superseding a running DEPLOY is not the
+# same trade.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    # THE REF GUARD. `push` above can only be `main`, so this exists for
+    # `workflow_dispatch`, which accepts any ref including a tag. It mirrors the
+    # environment's deployment branch policy exactly: refs the environment would
+    # reject never reach it, so a mis-aimed dispatch is a skipped job with the
+    # reason visible here, not a red run at the environment gate.
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      # Consumed by verify-live below. Taken from the deploy step rather than
+      # hard-coded, so the post-deploy check cannot end up verifying a URL the
+      # deployment did not actually publish to.
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # site/package.json declares engines.node ">=22.19.0"; "22" resolves
+          # to the current 22.x, which satisfies it. tests/workflows.test.mjs
+          # pins the two to each other so they cannot drift apart.
+          node-version: '22'
+          cache: npm
+          # site/ is a self-contained npm project, NOT a workspace member, so
+          # both the cache key and `npm ci` are scoped to site/ (proposal §10.4).
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Build the site
+        run: npm run build
+        working-directory: site
+
+      # THE GATE, ON THE PATH THAT DEPLOYS. Placed after the build because most
+      # of the suite asserts on the bytes in dist/, and BEFORE Configure Pages
+      # so a red suite stops the run without having touched the Pages
+      # deployment state at all. Same command as site-ci.yml, deliberately: two
+      # gates running different subsets is a gate whose coverage nobody can
+      # state.
+      - name: Type-check and run the guardrail suite
+        run: npm test
+        working-directory: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Pages is already enabled on this repository (build_type: workflow),
+          # so this is a no-op today. Kept so a fresh clone of this setup does
+          # not need a manual settings step.
+          enablement: true
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Upload dist for the live check
+        uses: actions/upload-artifact@v4
+        with:
+          # The SAME bytes that were just deployed, handed to verify-live so its
+          # comparison is against the artifact rather than against a rebuild
+          # that merely ought to be identical.
+          name: site-dist
+          path: site/dist
+          retention-days: 1
+
+  # AC3 — "every internal link and asset resolves ON THE LIVE DEPLOYMENT, not
+  # just in dist/". A filesystem walk cannot show this; only fetches against the
+  # published URL can. Runs after the deploy, against the URL the deploy
+  # reported, and fails loudly rather than skipping when the site is
+  # unreachable. Propagation delay is handled inside the script by a bounded
+  # retry — see site/scripts/check-live-links.mjs.
+  #
+  # This job carries NO `continue-on-error:` and NO `if:` on purpose, and
+  # tests/workflows.test.mjs asserts their absence across the whole file. Either
+  # one would leave the workflow green while AC3 verified nothing, which is the
+  # "gate that cannot fire" shape the rest of this suite is written against —
+  # and review found both mutations passed silently before that test existed.
+  verify-live:
+    needs: build-deploy
+    runs-on: ubuntu-latest
+    # Backstop for a hung fetch. The script keeps itself inside a smaller
+    # internal budget (15 minutes) and reports properly; this is what stops a
+    # wedged runner holding the `pages` concurrency group if that ever fails —
+    # which matters more now that `cancel-in-progress` is false, since the next
+    # deploy queues behind this job rather than replacing it.
+    #
+    # 20 rather than 15: the artifact sweep took the run from 8 requests to 39.
+    # Pooled at 8 the happy path is about 3 seconds, but the unreachable-host
+    # worst case is bounded by request count, and the script's own budget has to
+    # be able to expire BEFORE the runner kills the job or the failure arrives
+    # as a killed job with no diagnosis.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download the deployed dist
+        uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: site/dist
+
+      - name: Check every link and asset on the live deployment
+        working-directory: site
+        env:
+          # Passed through the environment rather than interpolated into the
+          # shell command.
+          LIVE_URL: ${{ needs.build-deploy.outputs.page_url }}
+        run: node scripts/check-live-links.mjs --url "$LIVE_URL"
