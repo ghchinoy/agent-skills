@@ -61,25 +61,37 @@ if [ -f .beads/daemon-error ]; then
   fi
   ISSUES=$((ISSUES+1))
 else
-  # Check bd doctor output directly even if daemon-error file is missing
-  REPO_MISMATCH=$(bd doctor 2>&1 | grep -i "Database belongs to different repository" || true)
-  if [ -n "$REPO_MISMATCH" ]; then
-    red "    PROBLEM: Repo Fingerprint mismatch (Database belongs to different repository)."
-    red "    Fix: bd migrate --update-repo-id --yes"
+  DOLT_SHOW=$(bd dolt show 2>/dev/null || true)
+  if echo "$DOLT_SHOW" | grep -qi "Server not reachable" && [ -f .beads/dolt-server.lock ]; then
+    red "    PROBLEM: Dolt server is unreachable but .beads/dolt-server.lock exists (lock contention / orphaned process)."
+    red "    Fix: Run scripts/find-dolt-server.sh to isolate and stop the orphan, then clear stale runtime files."
     ISSUES=$((ISSUES+1))
+    SKIP_DB_CALLS=1
   else
-    green "    No daemon-error or repo fingerprint mismatch. Good."
+    # Check bd doctor output directly even if daemon-error file is missing
+    REPO_MISMATCH=$(bd doctor 2>&1 | grep -i "Database belongs to different repository" || true)
+    if [ -n "$REPO_MISMATCH" ]; then
+      red "    PROBLEM: Repo Fingerprint mismatch (Database belongs to different repository)."
+      red "    Fix: bd migrate --update-repo-id --yes"
+      ISSUES=$((ISSUES+1))
+    else
+      green "    No daemon-error or repo fingerprint mismatch. Good."
+    fi
   fi
 fi
 
 info "0b. Schema version skew & pending migrations (client binary vs database)"
-DOCTOR_OUT=$(bd doctor 2>&1 || true)
-SKEW=$(echo "$DOCTOR_OUT" | grep -i -E "schema version mismatch|schema skew|pending schema migration|refusing to auto-apply" | head -1 || true)
-if [ -z "$SKEW" ]; then
-  # Also check bd list or bd migrate --inspect output for migration gates
-  MIG_CHECK=$(bd migrate --inspect 2>&1 || true)
-  if echo "$MIG_CHECK" | grep -qi -E "refusing to auto-apply|pending schema migration"; then
-    SKEW=$(echo "$MIG_CHECK" | grep -i -E "refusing to auto-apply|pending schema migration" | head -1)
+if [ "${SKIP_DB_CALLS:-0}" -eq 1 ]; then
+  yellow "    Skipping schema checks (resolve lock contention / unreachable server first)."
+else
+  DOCTOR_OUT=$(bd doctor 2>&1 || true)
+  SKEW=$(echo "$DOCTOR_OUT" | grep -i -E "schema version mismatch|schema skew|pending schema migration|refusing to auto-apply" | head -1 || true)
+  if [ -z "$SKEW" ]; then
+    # Also check bd list or bd migrate --inspect output for migration gates
+    MIG_CHECK=$(bd migrate --inspect 2>&1 || true)
+    if echo "$MIG_CHECK" | grep -qi -E "refusing to auto-apply|pending schema migration"; then
+      SKEW=$(echo "$MIG_CHECK" | grep -i -E "refusing to auto-apply|pending schema migration" | head -1)
+    fi
   fi
 fi
 
@@ -89,7 +101,7 @@ if [ -n "$SKEW" ]; then
   if echo "$SKEW" | grep -qi -E "binary knows up to|is ahead of binary"; then
     red "    Your bd binary is BEHIND the database (another agent/machine migrated it forward)."
     red "    Reads warn; writes FAIL (\"Field 'id' doesn't have a default value\" or unexpected schema errors)."
-    red "    Fix: UPGRADE the client to match — go install github.com/steveyegge/beads/cmd/bd@main"
+    red "    Fix: UPGRADE the client to match — scripts/restore-bd.sh (or go install github.com/steveyegge/beads/cmd/bd@main)"
     red "         (CGO/ICU + PATH-copy caveats: SKILL.md 'Client BEHIND the Database')."
     red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
   else
@@ -105,8 +117,19 @@ info "0c. Client binary & PATH shadowing check"
 PATH_BINS=$(which -a bd 2>/dev/null | sort -u || true)
 BIN_COUNT=$(echo "$PATH_BINS" | grep -c . || echo 0)
 ACTIVE_BIN=$(which bd 2>/dev/null || true)
-if [ "$BIN_COUNT" -gt 1 ]; then
-  red "    PROBLEM: Multiple 'bd' binaries found in PATH ($BIN_COUNT installed):"
+UNIQUE_REAL_BINS=""
+for bin in $PATH_BINS; do
+  rbin=$(realpath "$bin" 2>/dev/null || echo "$bin")
+  case " $UNIQUE_REAL_BINS " in
+    *" $rbin "*) ;;
+    *) UNIQUE_REAL_BINS="$UNIQUE_REAL_BINS $rbin" ;;
+  esac
+done
+REAL_COUNT=0
+for r in $UNIQUE_REAL_BINS; do [ -n "$r" ] && REAL_COUNT=$((REAL_COUNT+1)); done
+
+if [ "$REAL_COUNT" -gt 1 ]; then
+  red "    PROBLEM: Multiple distinct 'bd' binaries found in PATH ($BIN_COUNT found, $REAL_COUNT distinct):"
   for bin in $PATH_BINS; do
     if [ "$bin" = "$ACTIVE_BIN" ]; then
       echo "      * $bin (ACTIVE)"
@@ -116,9 +139,11 @@ if [ "$BIN_COUNT" -gt 1 ]; then
   done
   red "    Upgrade hazard: Running 'go install' installs to ~/go/bin/bd, but an older active copy in ~/.local/bin/bd"
   red "    or /usr/local/bin/bd will shadow it, causing schema skew errors to persist after upgrading."
-  red "    Fix: Sync or remove duplicates — cp ~/go/bin/bd \"$ACTIVE_BIN\" && hash -r"
+  red "    Fix: Sync or link duplicates — ln -sf ~/go/bin/bd \"$ACTIVE_BIN\" && hash -r"
   red "    Tip: Run scripts/inspect-binary.sh to inspect git commit revisions across all installed binaries."
   ISSUES=$((ISSUES+1))
+elif [ "$BIN_COUNT" -gt 1 ]; then
+  green "    Multiple PATH entries found for bd, but all resolve via symlink to the same binary ($ACTIVE_BIN). Good."
 else
   green "    Single bd binary found in PATH ($ACTIVE_BIN). Good."
 fi
