@@ -224,19 +224,17 @@ function stripDataSourced(text) {
   return out;
 }
 
-// The exemption, priced. Standard 17b: state what it hides.
-const UNPERTURBABLE = {
-  PHASE_1_PLUGINS:
-    "Not a string export. It is an array of plugin DIRECTORY names, so its " +
-    "values are filesystem paths that must exist; perturbing it does not " +
-    "measure rendering sensitivity, it removes the only plugin. Measured: with " +
-    "a perturbed value the build renders zero skill pages, so the control would " +
-    "'pass' by producing nothing to contradict it rather than by following the " +
-    "constant. What the exemption hides: whether PHASE_1_PLUGINS reaches the " +
-    "output. It does, and it is covered elsewhere by construction — every page " +
-    "under plugins/okf-authoring/ exists only because this array names it, and " +
-    "the harness control below asserts three of those pages were built.",
-};
+// The exemptions, priced. Standard 17b: state what each one hides.
+//
+// EMPTY AS OF PHASE 3, and that is a strengthening rather than a gap. Phase 1
+// exempted `PHASE_1_PLUGINS` here — an array of plugin DIRECTORY names, whose
+// values are filesystem paths that must exist, so perturbing it did not measure
+// rendering sensitivity, it removed the only plugin. Phase 3 deleted the
+// constant when the catalog fanned out to all ten plugins, so the exemption is
+// removed WITH its subject rather than left as a rule about nothing. Every
+// export of site.config.mjs is now perturbed and shown to reach rendered HTML;
+// this object is kept because the next non-string constant will need it.
+const UNPERTURBABLE = {};
 
 // The five builds are independent, so they all start here at module load and
 // each test awaits the one it needs. Sequential would multiply the wall clock

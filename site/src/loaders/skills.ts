@@ -179,6 +179,89 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
 
       let pages = 0;
 
+      /**
+       * Emits ONE reference page, at either scope.
+       *
+       * Plugin-level (`plugins/<p>/references/<f>.md`) and skill-level
+       * (`plugins/<p>/skills/<s>/references/<f>.md`) references are the same
+       * kind of document — an untitled-in-frontmatter markdown file whose title
+       * is its own H1 — differing only in where they sit and therefore in what a
+       * bare sibling link inside them means. Phase 1 routed the two
+       * plugin-level ones; Phase 3 routes the 18 skill-level ones too. Writing
+       * it once means the H1 rule, the frontmatter warning and the link scoping
+       * cannot drift apart between the two.
+       */
+      async function emitReference(
+        reference: { name: string; slug: string; path: string; repoPath: string },
+        scope: {
+          plugin: any;
+          pluginDisplayName: string | null;
+          skill?: string;
+          idPrefix: string;
+          routedPluginRefs: Set<string>;
+          routedSkillRefs: Set<string>;
+          routedSkills: Set<string>;
+        },
+      ): Promise<{ title: string; href: string; notes: any[] }> {
+        const raw = await readFile(reference.path, "utf8");
+        if (/^﻿?---\r?\n/.test(raw)) {
+          logger.warn(
+            `${reference.repoPath} appears to carry frontmatter; reference ` +
+              `files in this repo have none and their title is taken from the H1.`,
+          );
+        }
+        const title = firstH1(raw);
+        if (title === null) {
+          // Prettifying the filename into a title would invent one. The build
+          // stops instead.
+          throw new Error(
+            `skills-loader: ${reference.repoPath} has no level-1 heading, so ` +
+              `there is no declared title to render. A reference page title ` +
+              `is EXTRACTED from the H1, never derived from the filename.`,
+          );
+        }
+        const notes: any[] = [];
+        // Reference files carry no frontmatter (all 20 in the repo begin with
+        // their H1), so the only offset is the stripped title.
+        const { body: withoutH1, removed } = stripLeadingH1(raw);
+        const { body: rewritten } = rewriteLinks(withoutH1, (target, at) =>
+          resolveTarget(target, at, {
+            kind: "reference",
+            base,
+            blobBase,
+            treeBase,
+            plugin: scope.plugin.name,
+            skill: scope.skill,
+            pluginRepoPath: scope.plugin.repoPath,
+            routedPluginRefs: scope.routedPluginRefs,
+            routedSkillRefs: scope.routedSkillRefs,
+            routedSkills: scope.routedSkills,
+            resources: null,
+            sourceRepoPath: reference.repoPath,
+            note: (n: any) => notes.push(n),
+          }),
+          { lineOffset: removed },
+        );
+
+        const id = `${scope.idPrefix}/references/${reference.slug}`;
+        await emit(id, reference.repoPath, {
+          // Byte-identical to the source H1, em-dash and all.
+          title,
+          _skill: {
+            kind: "reference" as const,
+            plugin: scope.plugin.name,
+            pluginDisplayName: scope.pluginDisplayName,
+            skill: scope.skill,
+            sourcePath: reference.repoPath,
+            sourceUrl: blobUrl(reference.repoPath),
+            specNotes: notes,
+          },
+          _manifest: scope.plugin.manifest,
+        }, rewritten, raw);
+
+        return { title, href: `${base}/${id}/`, notes };
+      }
+
       for (const plugin of plugins) {
         const pluginDisplayName = displayNames.get(plugin.name) ?? null;
         const routedPluginRefs = new Set(plugin.references.map((r: any) => r.slug));
@@ -242,9 +325,9 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             // "Installing via Open Agent Skills CLI" block.
             installCommand: `npx skills add ${repoSlug} --skill ${declared.name}`,
             resources: {
-              references: decorate(skill.resources.references, `${skill.repoDir}/references`),
-              scripts: decorate(skill.resources.scripts, `${skill.repoDir}/scripts`),
-              assets: decorate(skill.resources.assets, `${skill.repoDir}/assets`),
+              references: decorate(skill.resources.references, `${skill.repoDir}/references`, true),
+              scripts: decorate(skill.resources.scripts, `${skill.repoDir}/scripts`, false),
+              assets: decorate(skill.resources.assets, `${skill.repoDir}/assets`, false),
             },
             specNotes: notes,
           };
@@ -282,78 +365,76 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           });
           pluginNotes.push(...notes);
 
-          function decorate(list: any[] | null, repoDir: string) {
+          // ── This skill's own reference pages ─────────────────────────────
+          // Phase 1 inventoried these and routed none of them; Phase 3 routes
+          // the markdown ones, which is where 18 of the 58 pages come from. The
+          // non-markdown ones (3 .swift, 1 .sql) stay unrouted for the reason
+          // §6.3 gives: a page needs a title and no title exists in the data.
+          for (const r of skill.resources.references ?? []) {
+            if (r.kind !== "file" || !/\.md$/i.test(r.name)) continue;
+            const { notes: refNotes } = await emitReference(
+              {
+                name: r.name,
+                slug: r.name.replace(/\.md$/i, ""),
+                path: join(skill.dir, "references", r.name),
+                repoPath: `${skill.repoDir}/references/${r.name}`,
+              },
+              {
+                plugin,
+                pluginDisplayName,
+                skill: skill.name,
+                idPrefix: id,
+                routedPluginRefs,
+                routedSkillRefs,
+                routedSkills,
+              },
+            );
+            pluginNotes.push(...refNotes);
+          }
+
+          /**
+           * The resource inventory's hrefs.
+           *
+           * `routed` says whether a markdown entry in this group has a page on
+           * this site. It does for `references/` as of Phase 3, and a listing
+           * that still sent the reader to GitHub for a file the site itself
+           * renders would be a link that leaves the site for no reason — and
+           * one the internal-link check would never see. Everything else keeps
+           * the blob/tree URL: canonical, syntax-highlighted, carries history.
+           */
+          function decorate(list: any[] | null, repoDir: string, routed: boolean) {
             if (list === null) return null;
-            return list.map((r: any) => ({
-              name: r.name,
-              kind: r.kind,
-              href: r.kind === "directory"
-                ? treeUrl(`${repoDir}/${r.name}`)
-                : blobUrl(`${repoDir}/${r.name}`),
-            }));
+            return list.map((r: any) => {
+              if (routed && r.kind === "file" && /\.md$/i.test(r.name)) {
+                return {
+                  name: r.name,
+                  kind: r.kind,
+                  href: `${base}/${id}/references/${r.name.replace(/\.md$/i, "")}/`,
+                };
+              }
+              return {
+                name: r.name,
+                kind: r.kind,
+                href: r.kind === "directory"
+                  ? treeUrl(`${repoDir}/${r.name}`)
+                  : blobUrl(`${repoDir}/${r.name}`),
+              };
+            });
           }
         }
 
         // ── The plugin-level reference pages ───────────────────────────────
         const childRefs: any[] = [];
         for (const reference of plugin.references) {
-          const raw = await readFile(reference.path, "utf8");
-          if (/^﻿?---\r?\n/.test(raw)) {
-            logger.warn(
-              `${reference.repoPath} appears to carry frontmatter; plugin-level ` +
-                `references in this repo have none and their title is taken ` +
-                `from the H1.`,
-            );
-          }
-          const title = firstH1(raw);
-          if (title === null) {
-            // Prettifying the filename into a title would invent one. The
-            // build stops instead.
-            throw new Error(
-              `skills-loader: ${reference.repoPath} has no level-1 heading, so ` +
-                `there is no declared title to render. A reference page title ` +
-                `is EXTRACTED from the H1, never derived from the filename.`,
-            );
-          }
-          const notes: any[] = [];
-          // Plugin-level references carry no frontmatter (all 20 reference
-          // files in the repo begin with their H1), so the only offset is the
-          // stripped title.
-          const { body: withoutH1, removed } = stripLeadingH1(raw);
-          const { body: rewritten } = rewriteLinks(withoutH1, (target, at) =>
-            resolveTarget(target, at, {
-              kind: "reference",
-              base,
-              blobBase,
-              treeBase,
-              plugin: plugin.name,
-              pluginRepoPath: plugin.repoPath,
-              routedPluginRefs,
-              routedSkillRefs: new Set<string>(),
-              routedSkills,
-              resources: null,
-              sourceRepoPath: reference.repoPath,
-              note: (n: any) => notes.push(n),
-            }),
-            { lineOffset: removed },
-          );
-
-          const id = `plugins/${plugin.name}/references/${reference.slug}`;
-          await emit(id, reference.repoPath, {
-            // Byte-identical to the source H1, em-dash and all.
-            title,
-            _skill: {
-              kind: "reference" as const,
-              plugin: plugin.name,
-              pluginDisplayName,
-              sourcePath: reference.repoPath,
-              sourceUrl: blobUrl(reference.repoPath),
-              specNotes: notes,
-            },
-            _manifest: plugin.manifest,
-          }, rewritten, raw);
-
-          childRefs.push({ title, href: `${base}/${id}/` });
+          const { title, href, notes } = await emitReference(reference, {
+            plugin,
+            pluginDisplayName,
+            idPrefix: `plugins/${plugin.name}`,
+            routedPluginRefs,
+            routedSkillRefs: new Set<string>(),
+            routedSkills,
+          });
+          childRefs.push({ title, href });
           pluginNotes.push(...notes);
         }
 

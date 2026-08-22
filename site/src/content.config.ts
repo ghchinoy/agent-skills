@@ -1,7 +1,7 @@
 import { defineCollection } from "astro:content";
 import { docsSchema } from "@astrojs/starlight/schema";
 import { skillsLoader, skillsSchema } from "./loaders/skills";
-import { BASE, REPO_URL, REPO_REF, PHASE_1_PLUGINS } from "./site.config.mjs";
+import { BASE, REPO_URL, REPO_REF } from "./site.config.mjs";
 
 // One collection, three entry kinds, distinguished by `_skill.kind`:
 // `plugin`, `skill`, `reference`.
@@ -16,7 +16,7 @@ export const collections = {
       baseUrl: BASE,
       repoUrl: REPO_URL,
       ref: REPO_REF,
-      plugins: PHASE_1_PLUGINS,
+      // No `plugins` scope: every plugin declared in marketplace.json renders.
     }),
     schema: docsSchema({ extend: skillsSchema }),
   }),

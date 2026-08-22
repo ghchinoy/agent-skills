@@ -2,7 +2,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
-import { BASE, PHASE_1_PLUGINS, REPO_URL, SITE } from "./src/site.config.mjs";
+import { BASE, REPO_URL, SITE } from "./src/site.config.mjs";
 import { buildSidebar } from "./src/sidebar.mjs";
 
 // Hosting: the project GitHub Pages site at
@@ -14,20 +14,12 @@ export default defineConfig({
   site: SITE,
   base: BASE,
 
-  // Phase 1 routes five content pages and no landing page, because §13's
-  // acceptance criterion 2 enumerates the slice exhaustively: 1 plugin, 2
-  // skills, 2 plugin-level references. Starlight's masthead still links home,
-  // so the site root is a REDIRECT to the one overview page that exists in the
-  // slice. A redirect stub asserts nothing and renders no content; it just
-  // stops the masthead link and the deployed root from 404ing. The landing
-  // page proper arrives with the fan-out, in Phase 3.
-  // NOTE the explicit BASE on the destination: Astro base-prefixes the redirect
-  // SOURCE route but emits the destination verbatim, so a bare
-  // "/plugins/…" here would ship a link that leaves the project sub-path and
-  // 404s on Pages. tests/links.test.mjs covers this file like any other.
-  redirects: {
-    "/": `${BASE}/plugins/${PHASE_1_PLUGINS[0]}/`,
-  },
+  // NO `redirects` HERE, AND THAT IS THE CHANGE. Phase 1 routed five content
+  // pages and no landing page, so the site root was a redirect stub whose only
+  // job was to stop the masthead link from 404ing. Phase 3 emits a real landing
+  // page at `/` from the content loader, so the stub is gone rather than
+  // pointing at a page that now has a peer. A redirect that shadows a real
+  // route is a page nobody can reach.
 
   integrations: [
     starlight({
@@ -61,7 +53,7 @@ export default defineConfig({
       // Derived from marketplace.json + the plugin trees, in the index's own
       // declared order. Adding a skill is a marketplace.json edit and nothing
       // here.
-      sidebar: await buildSidebar(PHASE_1_PLUGINS),
+      sidebar: await buildSidebar(),
 
       // REPO_URL, not a literal. site.config.mjs calls itself the constants
       // "written once so they cannot drift apart" and exports REPO_URL as "the
