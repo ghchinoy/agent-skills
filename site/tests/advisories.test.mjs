@@ -188,24 +188,13 @@ test("D4: the dead-pointer population is derived from a class rule over every sk
   const skills = await skillsWithResources();
   const found = skills.flatMap((s) => adviseDeadPointers(s.raw, s).map((a) => `${a.file}:${a.line}`));
 
-  // Proposal §3.4 names two, at lines 42 and 48 of one file. Derived here by
-  // scanning all 23 skills for resource-shaped code spans, which is the class
-  // the proposal stated an instance of.
+  // All 23 skills are scanned for resource-shaped code spans pointing to missing files.
+  // With macos-hig-reviewer updated to point to assets/swiftlint.yml, the catalog is clean.
   assert.equal(
     found.length,
-    2,
-    `expected 2 dead resource pointers across the catalog, found ${found.length}: ` +
+    0,
+    `expected 0 dead resource pointers across the catalog, found ${found.length}: ` +
       `${JSON.stringify(found)}`,
-  );
-  assert.deepEqual(
-    found.map((f) => f.slice(f.lastIndexOf(":") + 1)).sort(),
-    ["42", "48"],
-    `the dead pointers are no longer at the lines proposal §3.4 measured: ${JSON.stringify(found)}`,
-  );
-  assert.equal(
-    new Set(found.map((f) => f.slice(0, f.lastIndexOf(":")))).size,
-    1,
-    "the two dead pointers are no longer in the same file",
   );
 
   // NON-VACUITY, and it is the assertion that matters most here. The catalog is
@@ -453,9 +442,11 @@ test("AC6: the log carries all six codes the criterion names, and its totals rec
   const by = (code) => logged.filter((l) => l.code === code);
 
   // ── The active AC6 names, each present ──────────────────────────────────────
-  for (const code of ["D3", "D4", "I3", "I4"]) {
+  for (const code of ["D3", "I3", "I4"]) {
     assert.ok(by(code).length > 0, `AC6 names ${code} and the build log carries none`);
   }
+  // D4 is now 0 after macos-hig-reviewer was fixed:
+  assert.equal(by("D4").length, 0, "D4 should be absent now that dead pointers are resolved");
 
   // ── D1 & D2: now resolved in the catalog ─────────────────────────────────
   assert.equal(by("D1").length, 0, "D1 is 0 now that metadata.sources was moved to body");

@@ -39,13 +39,13 @@ This skill can utilize SwiftLint to enforce macOS-specific coding guidelines.
   ```bash
   brew install swiftlint
   ```
-- **Configuration:** A customized `swiftlint.yml` tailored for macOS applications and idiomatic Swift is provided in the `references/` directory.
+- **Configuration:** A customized `swiftlint.yml` tailored for macOS applications and idiomatic Swift is provided in the `assets/` directory.
 
 ## Instructions
 When invoked to review a codebase or design:
 1. Systematically analyze the provided code against the four categories above.
 2. Flag any custom UI components that reinvent standard macOS controls (e.g., custom scrollbars or window control buttons) as violations unless explicitly justified by the app's nature (e.g., a game).
-3. If SwiftLint is available (or after helping the user install it), run it using the provided `references/swiftlint.yml` to catch stylistic or structural issues.
+3. If SwiftLint is available (or after helping the user install it), run it using the provided `assets/swiftlint.yml` to catch stylistic or structural issues.
 4. Run `scripts/check_menubar.sh` to quickly verify if the project has Menu Bar definitions.
 5. Generate a structured report highlighting PASS, WARNING, and FAIL items.
 6. Provide actionable code or design recommendations to fix any WARNING or FAIL items.
