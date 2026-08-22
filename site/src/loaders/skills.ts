@@ -134,6 +134,18 @@ const SitePage = z.object({
             title: z.string(),
             description: z.string(),
             href: z.string(),
+            /**
+             * The keywords the SHIPPING PLUGIN declares (§6.6). `null` when its
+             * plugin.json declares none — distinct from `[]`, which would be
+             * this site saying a manifest declared an empty list.
+             *
+             * Zod strips unknown keys, so a field added to the object in
+             * skills.ts and not added here reaches no template and renders
+             * nowhere, with no error. That is how this one first arrived: the
+             * data was built, the component read it, and every row came out
+             * with an empty attribute and a green build.
+             */
+            pluginKeywords: z.array(z.string()).nullable(),
           }),
         )
         .optional(),
@@ -501,6 +513,20 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             title,
             description: declared.description,
             href: `${base}/${id}/`,
+            // ── The only facet in the data (§6.6) ─────────────────────────
+            //
+            // `plugin.json.keywords`, which Agent Plugins §5.4 defines as
+            // "Search and discovery tags". It is a PLUGIN's field. It travels
+            // on the skill row because that is the row a reader filters, and
+            // it travels under a name that says whose it is, because the one
+            // fabrication this catalog invites is a per-skill taxonomy: a
+            // skill does not declare "cobra", its plugin does. Carried as the
+            // declared array, unsorted and unmerged. Absent when the manifest
+            // declares none — not defaulted to [], which would be this site
+            // asserting a manifest declared an empty list.
+            pluginKeywords: Array.isArray(plugin.manifest.keywords)
+              ? plugin.manifest.keywords
+              : null,
           });
           // Everything in the resource inventory that this site does NOT route:
           // scripts, assets, and non-markdown references. Counted here, at the

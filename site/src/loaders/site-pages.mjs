@@ -120,10 +120,11 @@ function subHeadings(sectionBody) {
  * @param {(repoPath: string) => string} opts.blobUrl
  * @param {any[]} opts.plugins              enumerate()'s output, in index order
  * @param {Map<string,string>} opts.displayNames
- * @param {{plugin: string, skill: string, name: string, title: string, description: string, href: string}[]} opts.skillIndex
+ * @param {{plugin: string, skill: string, name: string, title: string, description: string,
+ *   href: string, pluginKeywords: string[]|null}[]} opts.skillIndex
  *   one entry per emitted skill page, in emission order
  * @param {number} opts.referencePages      routed reference pages, counted
- * @param {number} opts.unroutedResources   depth-1 resource entries not routed
+ * @param {number} opts.unroutedResources   resource entries not routed
  */
 export async function buildSitePages(opts) {
   const { repoRoot, base, blobUrl, plugins, displayNames, skillIndex } = opts;
@@ -256,6 +257,14 @@ export async function buildSitePages(opts) {
       "Each entry shows the title the skill's `SKILL.md` gives itself, the `name` the",
       "spec defines and the CLI takes, the plugin that ships it, and the skill's own",
       "`description` — all verbatim, none summarised.",
+      "",
+      "**The filter is on plugin keywords, and a skill has none of its own.** Neither",
+      "the Agent Skills spec nor this repository gives a skill tags, a category or any",
+      "other facet; the only such field anywhere is `keywords` in a plugin's",
+      "`plugin.json`, which Agent Plugins calls search and discovery tags. Filtering a",
+      "skill by one selects it because of the plugin that ships it. Every skill in a",
+      "plugin carries that plugin's whole keyword list, which is why two skills that do",
+      "quite different jobs answer to the same keyword.",
     ].join("\n"),
     lists: { skills: skillIndex },
   }));
