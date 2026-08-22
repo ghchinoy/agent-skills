@@ -76,68 +76,169 @@ for skill_md in plugins/*/skills/*/SKILL.md; do
   skill_dir="$(dirname "$skill_md")"
   expected_name="$(basename "$skill_dir")"
 
-  # Single Python script to safely parse frontmatter from the file
+  # Python script with real YAML parse and Agent Skills specification enforcement
   read_res="$(python3 -c "
-import json, sys, os
-
-filepath = '$skill_md'
-content = open(filepath, 'r', encoding='utf-8').read()
-
-if not content.startswith('---'):
-    print(json.dumps({'error': 'No YAML frontmatter delimiter at start'}))
+import json, sys, os, re
+try:
+    import yaml
+except ImportError:
+    print(json.dumps({'critical_error': 'PyYAML is not installed. Please run: pip install pyyaml'}))
     sys.exit(0)
 
-parts = content.split('---', 2)
+ALLOWED_FIELDS = {'name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools'}
+NAME_RE = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
+
+filepath = '$skill_md'
+expected_name = '$expected_name'
+
+try:
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+except Exception as e:
+    print(json.dumps({'critical_error': f'Cannot read file: {e}'}))
+    sys.exit(0)
+
+errors = []
+warnings = []
+
+# Strip optional BOM
+if content.startswith('\ufeff'):
+    content = content[1:]
+
+# Check 1: Frontmatter structure & YAML parsing
+if not content.startswith('---'):
+    errors.append('Missing YAML frontmatter delimiter (---) at start of file')
+    print(json.dumps({'errors': errors, 'warnings': warnings, 'name': expected_name, 'desc_len': 0}))
+    sys.exit(0)
+
+parts = re.split(r'^---[ \t]*$', content, maxsplit=2, flags=re.MULTILINE)
 if len(parts) < 3:
-    print(json.dumps({'error': 'Malformed YAML frontmatter delimiters'}))
+    errors.append('Malformed YAML frontmatter delimiters (missing closing ---)')
+    print(json.dumps({'errors': errors, 'warnings': warnings, 'name': expected_name, 'desc_len': 0}))
     sys.exit(0)
 
 fm_text = parts[1]
+try:
+    data = yaml.safe_load(fm_text)
+except Exception as e:
+    errors.append(f'YAML parse error in frontmatter: {e}')
+    print(json.dumps({'errors': errors, 'warnings': warnings, 'name': expected_name, 'desc_len': 0}))
+    sys.exit(0)
 
-# Fallback simple parser for name, description, license
-import re
-def get_val(key, text):
-    m = re.search(r'^' + key + r':\s*(.*)$', text, re.MULTILINE)
-    if not m:
-        return ''
-    val = m.group(1).strip()
-    if (val.startswith('\"') and val.endswith('\"')) or (val.startswith(\"'\") and val.endswith(\"'\")):
-        val = val[1:-1]
-    return val
+if data is None or not isinstance(data, dict):
+    type_name = 'null' if data is None else type(data).__name__
+    errors.append(f'Frontmatter must parse as a YAML mapping, got {type_name}')
+    print(json.dumps({'errors': errors, 'warnings': warnings, 'name': expected_name, 'desc_len': 0}))
+    sys.exit(0)
 
-name = get_val('name', fm_text)
-desc = get_val('description', fm_text)
-lic = get_val('license', fm_text)
+# Check 2: Top-level field vocabulary (closed at 6 specification fields)
+for k in data.keys():
+    if k not in ALLOWED_FIELDS:
+        errors.append(f'Unexpected field in frontmatter: {k!r}. Only {sorted(list(ALLOWED_FIELDS))} are allowed.')
 
-print(json.dumps({'name': name, 'desc': desc, 'desc_len': len(desc), 'license': lic}))
-" 2>/dev/null || echo '{"error": "python execution failed"}')"
+# Check 3: Metadata value types (must be string values; keys stay open)
+if 'metadata' in data:
+    meta = data['metadata']
+    if meta is None or not isinstance(meta, dict) or isinstance(meta, list):
+        type_name = 'null' if meta is None else type(meta).__name__
+        errors.append(f'metadata must be a YAML mapping, got {type_name}')
+    else:
+        for mk, mv in meta.items():
+            if not isinstance(mv, str):
+                type_name = 'list' if isinstance(mv, list) else ('null' if mv is None else type(mv).__name__)
+                errors.append(f'metadata.{mk} must be a string, got {type_name}: {repr(mv)}')
 
-  has_err="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || true)"
-  if [ -n "$has_err" ]; then
-    err "Skill '$expected_name' at '$skill_md': $has_err"
+# Check 4: Field rules and limits
+# name
+if 'name' not in data or data['name'] is None:
+    errors.append('Missing required field \'name\' in frontmatter')
+elif not isinstance(data['name'], str):
+    errors.append(f'Field \'name\' must be a string, got {type(data[\"name\"]).__name__}')
+else:
+    name = data['name']
+    if len(name) == 0:
+        errors.append('Field \'name\' cannot be empty')
+    elif len(name) > 64:
+        errors.append(f'Field \'name\' exceeds 64 character limit ({len(name)} chars)')
+    elif not NAME_RE.match(name):
+        errors.append(f'Field \'name\' ({name!r}) must be lowercase alphanumeric and hyphens only, with no leading, trailing, or consecutive hyphens')
+
+    if name != expected_name:
+        errors.append(f'Frontmatter name ({name!r}) does not match directory name ({expected_name!r})')
+
+# description
+desc_len = 0
+if 'description' not in data or data['description'] is None:
+    errors.append('Missing required field \'description\' in frontmatter')
+elif not isinstance(data['description'], str):
+    errors.append(f'Field \'description\' must be a string, got {type(data[\"description\"]).__name__}')
+else:
+    desc = data['description']
+    desc_len = len(desc)
+    if len(desc.strip()) == 0:
+        errors.append('Field \'description\' cannot be empty')
+    elif len(desc) > 1024:
+        errors.append(f'Field \'description\' exceeds 1024 character limit ({len(desc)} chars)')
+
+# compatibility
+if 'compatibility' in data and data['compatibility'] is not None:
+    if not isinstance(data['compatibility'], str):
+        errors.append(f'Field \'compatibility\' must be a string, got {type(data[\"compatibility\"]).__name__}')
+    elif len(data['compatibility']) > 500:
+        errors.append(f'Field \'compatibility\' exceeds 500 character limit ({len(data[\"compatibility\"])} chars)')
+
+# allowed-tools
+if 'allowed-tools' in data and data['allowed-tools'] is not None:
+    if not isinstance(data['allowed-tools'], str):
+        errors.append(f'Field \'allowed-tools\' must be a string, got {type(data[\"allowed-tools\"]).__name__}')
+
+# license
+if 'license' not in data or not data['license']:
+    warnings.append('Missing \'license\' in frontmatter')
+elif not isinstance(data['license'], str):
+    errors.append(f'Field \'license\' must be a string, got {type(data[\"license\"]).__name__}')
+
+print(json.dumps({
+    'errors': errors,
+    'warnings': warnings,
+    'name': data.get('name', expected_name),
+    'desc_len': desc_len,
+}))
+" 2>/dev/null || echo '{"critical_error": "python execution failed"}')"
+
+  crit_err="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('critical_error',''))" 2>/dev/null || true)"
+  if [ -n "$crit_err" ]; then
+    err "Skill '$expected_name' at '$skill_md': $crit_err"
     continue
   fi
 
-  name_in_fm="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('name',''))" 2>/dev/null || true)"
-  desc_len="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('desc_len',0))" 2>/dev/null || echo 0)"
-  lic_in_fm="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('license',''))" 2>/dev/null || true)"
-
-  if [ "$name_in_fm" != "$expected_name" ]; then
-    err "Skill '$expected_name' frontmatter name ('$name_in_fm') does not match directory '$expected_name'"
+  # Report skill errors
+  err_count="$(echo "$read_res" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('errors', [])))" 2>/dev/null || echo 0)"
+  if [ "$err_count" -gt 0 ]; then
+    while IFS= read -r err_msg; do
+      [ -n "$err_msg" ] && err "Skill '$expected_name': $err_msg"
+    done < <(echo "$read_res" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for e in data.get('errors', []):
+    print(e)
+")
   else
-    ok "Skill '$expected_name' frontmatter name matches directory"
+    desc_len="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('desc_len', 0))" 2>/dev/null || echo 0)"
+    ok "Skill '$expected_name' frontmatter valid (name matches, description $desc_len chars)"
   fi
 
-  if [ "$desc_len" -eq 0 ]; then
-    err "Skill '$expected_name' missing 'description' in frontmatter"
-  elif [ "$desc_len" -gt 1024 ]; then
-    err "Skill '$expected_name' description exceeds 1024 characters ($desc_len chars)"
-  else
-    ok "Skill '$expected_name' description length OK ($desc_len chars)"
-  fi
-
-  if [ -z "$lic_in_fm" ]; then
-    warn "Skill '$expected_name' missing 'license' in frontmatter"
+  # Report skill warnings
+  warn_count="$(echo "$read_res" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('warnings', [])))" 2>/dev/null || echo 0)"
+  if [ "$warn_count" -gt 0 ]; then
+    while IFS= read -r warn_msg; do
+      [ -n "$warn_msg" ] && warn "Skill '$expected_name': $warn_msg"
+    done < <(echo "$read_res" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for w in data.get('warnings', []):
+    print(w)
+")
   fi
 
   # Executable scripts check
