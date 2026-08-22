@@ -1,6 +1,3 @@
-// AC7 MEASUREMENT -- DELIBERATE REGRESSION, REVERTED BY THE NEXT COMMIT.
-// This commit exists to observe site-ci go red. It is not a mistake.
-const PLUGIN_TOTAL = 10;
 // site-pages.mjs — the five pages that are ABOUT the catalog rather than in it.
 //
 //   /                     landing
