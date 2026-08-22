@@ -1073,3 +1073,117 @@ const NORMATIVE_PATTERNS = [
 function normativeHits(text) {
   return NORMATIVE_PATTERNS.filter((re) => re.test(text)).map((re) => text.match(re)[0]);
 }
+
+// ── AC4 ─────────────────────────────────────────────────────────────────────
+//
+// AC4: "No page describes `marketplace.json` as an Agent Plugins component."
+//
+// THE GROUND FACT, WITH THE CONTROL THAT MAKES IT A MEASUREMENT. The Agent
+// Plugins specification does not contain the string "marketplace" anywhere in
+// its repository at ff8ab5e3 — not in the spec, not in the schemas, not in the
+// README. `grep -rni marketplace .` returns zero. That zero is not a dead
+// selector: the identical grep against spec/1.0.0.md returns 24 hits for
+// `plugin.json`, 5 for `mcpServers` and 2 for `commands`, which ARE the things
+// the specification defines. So `marketplace.json` is not an Agent Plugins
+// component, not an optional one, and not a deprecated one — it is a Claude
+// Code marketplace index that this repository also happens to carry, and the
+// two standards have nothing to say about it.
+//
+// WHY THAT IS EASY TO GET WRONG AND WORTH A GATE: both files are JSON, both
+// live under a dot-directory, both are called manifests in casual speech, and
+// `plugin.json` IS an Agent Plugins component. A sentence that puts
+// marketplace.json in the same breath as the specification inherits its
+// authority for free.
+//
+// SITE-AUTHORED PROSE ONLY, on the same rule and for the same reason as AC3:
+// the plugin pages under /plugins/agent-plugin-authoring/ discuss
+// marketplace.json at length, and that is a plugin author writing about their
+// own migration workflow. The site renders it as declared data. Attributing
+// the author's words to the site would make this gate fire on the catalog's
+// contents rather than on the catalog's claims, and it would be deleted for it.
+//
+// LOSS PROFILE, STATED SO A SILENCE IS INTERPRETABLE. UNIT: sentence.
+// DENOMINATOR: rendered sentences on all 59 pages that contain the literal
+// string "marketplace.json". This is co-occurrence matching and it is PARA-1
+// all over again — "the index the standard expects at the repository root"
+// names neither string and would pass. It catches the careless sentence, not
+// the fluent one.
+
+const AGENT_PLUGINS_ATTRIBUTION =
+  /\b(Agent Plugins|the specification|the spec|a component|conformant|normative)\b/i;
+
+test("AC4: no site-authored sentence calls marketplace.json an Agent Plugins component", async () => {
+  const corpus = await declaredProse();
+  const pages = await distContentPages();
+
+  let sentencesScanned = 0;
+  const offenders = [];
+
+  for (const page of pages) {
+    for (const block of proseBlocks(page.html)) {
+      for (const sentence of block.split(/(?<=[.;:])\s+/)) {
+        if (!sentence.includes("marketplace.json")) continue;
+        sentencesScanned += 1;
+        if (!AGENT_PLUGINS_ATTRIBUTION.test(sentence)) continue;
+        // Lifted author text is the author's claim, rendered as declared data.
+        const flat = flattenProse(sentence);
+        if (flat.length >= 40 && corpus.includes(flat)) continue;
+        offenders.push(`${page.route || "(landing)"}: ${sentence.trim().slice(0, 200)}`);
+      }
+    }
+  }
+
+  // DENOMINATOR. A scan that matched no sentences reports clean, and the
+  // repository genuinely does discuss this file on several pages, so a zero
+  // here would mean the extractor broke rather than that the site is careful.
+  assert.ok(
+    sentencesScanned >= 8,
+    `only ${sentencesScanned} rendered sentences mentioning marketplace.json were found; ` +
+      "the sentence extractor is not reaching the pages that discuss it",
+  );
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "a site-authored sentence attaches marketplace.json to the Agent Plugins " +
+      "specification. It is not in that specification at all — the string does " +
+      "not occur in its repository. Say what the file is (a Claude Code " +
+      "marketplace index this repository carries) rather than what it resembles:\n  " +
+      offenders.join("\n  "),
+  );
+});
+
+test("AC4 control: the scan fires on the sentence AC4 forbids, and not on the true ones", async () => {
+  const corpus = await declaredProse();
+  const check = (sentence) => {
+    if (!sentence.includes("marketplace.json")) return false;
+    if (!AGENT_PLUGINS_ATTRIBUTION.test(sentence)) return false;
+    const flat = flattenProse(sentence);
+    return !(flat.length >= 40 && corpus.includes(flat));
+  };
+
+  // POSITIVE. Written from AC4's own words — "describes marketplace.json as an
+  // Agent Plugins component" — not from the regex above. These are the
+  // sentences someone would actually write, and each is FALSE.
+  for (const bad of [
+    "The marketplace.json index is an Agent Plugins component.",
+    "Agent Plugins defines marketplace.json alongside plugin.json.",
+    "marketplace.json is the component manifest required by the specification.",
+    "This repository is conformant because marketplace.json declares every plugin.",
+  ]) {
+    assert.equal(check(bad), true, `AC4's own forbidden sentence was not detected: ${bad}`);
+  }
+
+  // NEGATIVE, and these are the site's REAL sentences, lifted from the rendered
+  // pages. A gate that fires on any of them is a gate that gets deleted.
+  for (const good of [
+    "Every number on this page is counted by the build that produced it, from " +
+      ".claude-plugin/marketplace.json and the plugin trees it names.",
+    "The order is .claude-plugin/marketplace.json's own — plugin by plugin in the " +
+      "order the index declares.",
+    "The Open Agent Skills CLI works natively with this repository via " +
+      ".claude-plugin/marketplace.json.",
+  ]) {
+    assert.equal(check(good), false, `the scan flags a true and legitimate sentence: ${good}`);
+  }
+});
