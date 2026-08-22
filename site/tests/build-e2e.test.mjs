@@ -296,6 +296,26 @@ const UNPERTURBABLE = {};
 // The five builds are independent, so they all start here at module load and
 // each test awaits the one it needs. Sequential would multiply the wall clock
 // for nothing.
+/**
+ * The Agent Plugins spec version as `specification-source.json` declares it.
+ *
+ * Read from the file rather than typed, so this control cannot go stale into a
+ * false GREEN. If the pin is bumped and this were a literal, the perturbation
+ * plant would stop matching — and `plantOrThrow` would catch that — but the
+ * absence assertion would then be checking that a version nobody publishes has
+ * vanished, which is true of every string and proves nothing.
+ */
+const REAL_SPEC_VERSION = JSON.parse(
+  await readFile(join(siteRoot, "specification-source.json"), "utf8"),
+).specifications.find((s) => s.id === "agent-plugins").version;
+
+/**
+ * Self-identifying, and it has to be: a perturbed value that could plausibly
+ * occur in ordinary page text would make the presence half of the control
+ * meaningless. Matches the convention `PERTURBATIONS` already uses above.
+ */
+const PERTURBED_SPEC_VERSION = "9.9.9-perturbed";
+
 const cases = {
   // POSITIVE 1 — a bad link in an ordinary region. This one always worked;
   // it is here so a failure in the other two can be attributed to the region
@@ -393,7 +413,72 @@ const cases = {
     }
     await writeFile(p, raw);
   }),
+
+  // ── PHASE 5, AC5. THE TWO CONTROLS THE ABSENCE GATE NEEDS ──────────────────
+  //
+  // `specification-source.json` OMITS the version and status keys for Agent
+  // Skills, because that specification declares neither of itself — measured at
+  // 69ef37e9, with a positive control, and re-verified at source independently.
+  // Two things have to be true for that omission to be a GATE rather than a
+  // hole, and neither is provable by reading the file:
+  //
+  //   1. If someone later fills the key in, something must go RED.
+  //   2. The version that IS declared must reach the page BY BEING READ, not by
+  //      being typed somewhere that happens to agree with the file today.
+  //
+  // Both are driven through a real build here rather than asserted in-process,
+  // for the reason R5 established in this file: A GATE PROVEN ONLY AT UNIT
+  // LEVEL IS NOT PROVEN. `spec-source.test.mjs` drives the validator directly
+  // with mutated objects, which shows the function can throw; only these show
+  // that the throw stops a build and that the value moves the output.
+
+  // POSITIVE CONTROL FOR (1). Fill in the key that is declared absent. The
+  // planted value is deliberately well-formed — a plausible semver, not
+  // garbage — because the failure this guards against is a future maintainer
+  // helpfully supplying a REASONABLE-LOOKING version, not a typo.
+  specAbsentKeyFilled: buildWith(async (root) => {
+    const p = join(root, "site/specification-source.json");
+    const raw = await readFile(p, "utf8");
+    await writeFile(
+      p,
+      plantOrThrow(
+        raw,
+        /("id": "agent-skills",)/,
+        '$1\n      "version": "1.0.0",',
+        "a version on the spec that declares none",
+      ),
+    );
+  }),
+
+  // POSITIVE CONTROL FOR (2), and it is the same method that caught a hardcoded
+  // owner/repo in this very phase: perturb the source of truth, rebuild, and
+  // require the output to FOLLOW.
+  //
+  // WHY NOT A GREP OVER src/ INSTEAD. Because "1.0.0" legitimately appears in
+  // four comments under src/ — enumerate.mjs and skills.ts cite "Agent Plugins
+  // v1.0.0" when naming which spec section they implement, EntryMeta.astro
+  // names it in a prohibition, and spec-source.mjs names it as a value NOT to
+  // invent. A static scan therefore needs a comment-stripper and an exemption
+  // list, and an exemption list is where this class of gate quietly dies: the
+  // fifth exemption is indistinguishable from the first real defect. The
+  // perturbation needs neither. If any page hardcodes the version, the real
+  // value survives a rebuild that no longer contains it, and that is a fact
+  // about rendered bytes rather than about a regex.
+  specVersionPerturbed: buildWith(async (root) => {
+    const p = join(root, "site/specification-source.json");
+    const raw = await readFile(p, "utf8");
+    await writeFile(
+      p,
+      plantOrThrow(
+        raw,
+        /"version": "1\.0\.0"/,
+        `"version": ${JSON.stringify(PERTURBED_SPEC_VERSION)}`,
+        "a perturbed Agent Plugins spec version",
+      ),
+    );
+  }),
 };
+
 
 test.after(async () => {
   for (const p of Object.values(cases)) {
@@ -727,6 +812,57 @@ test("E2E: EVERY site constant is shown to reach rendered HTML (dist sensitivity
     [],
     "a site constant does NOT reach the rendered output, so an unchanged dist digest proves " +
       `nothing about it:\n  ${misses.join("\n  ")}`,
+  );
+});
+
+test("AC5 CONTROL: filling in a declared-absent spec version FAILS THE BUILD", async () => {
+  // The gate the EM required before the omission could be called a gate at all:
+  // "plant a version value, confirm the test goes RED." Without this, the claim
+  // "a test fails if anyone later fills the key in" is itself an untested
+  // claim — and an untested claim about a test is worth less than no test,
+  // because it is believed.
+  const { ok, output } = await cases.specAbsentKeyFilled;
+  assert.equal(
+    ok,
+    false,
+    "THE BUILD SUCCEEDED with a version filled in on the specification that " +
+      "declares none. The absence in specification-source.json is then a hole " +
+      "rather than a gate: nothing stops the next maintainer supplying a " +
+      "plausible-looking version for a spec that publishes no version at all, " +
+      "which is precisely the fabrication the file exists to prevent.",
+  );
+  // Named, not merely red. A build that failed for an unrelated reason would
+  // satisfy the assertion above while proving nothing about this gate.
+  assert.match(output, /agent-skills/, "the failure does not name the offending specification");
+  assert.match(output, /declaredAbsent/, "the failure does not name the invariant that caught it");
+});
+
+test("AC5: the rendered spec version FOLLOWS the pin file — it is read, not hardcoded", async () => {
+  // AC5's operative clause is "the build READS IT rather than hardcoding a
+  // version string". Existence of the file proves nothing about that; a JSON
+  // file nobody parses renders exactly like one that is parsed.
+  const { ok, root } = await cases.specVersionPerturbed;
+  assert.equal(ok, true, "the perturbed-version build did not complete");
+
+  const page = join(root, "site/dist/about/standards/index.html");
+  const html = await readFile(page, "utf8");
+
+  // Half one: the output MOVED with the file.
+  assert.ok(
+    html.includes(PERTURBED_SPEC_VERSION),
+    `/about/standards/ does not render the perturbed version ` +
+      `(${PERTURBED_SPEC_VERSION}). The page is not reading the pin file.`,
+  );
+
+  // Half two, and this is the half that catches hardcoding: the real value is
+  // GONE. Half one alone would pass if the page rendered both — a hardcoded
+  // "1.0.0" sitting beside a correctly-read perturbed value.
+  assert.ok(
+    !html.includes(REAL_SPEC_VERSION),
+    `/about/standards/ still renders the real version (${REAL_SPEC_VERSION}) ` +
+      `under a config that no longer contains it anywhere. Some page or ` +
+      `component carries a hardcoded copy, and it agrees with the pin file ` +
+      `only by coincidence — it will not follow the next spec bump.`,
   );
 });
 
