@@ -335,9 +335,17 @@ test("R6: tsconfig.json documents exactly which files the type check covers", as
   for (const d of dirs) {
     const abs = join(siteRoot, d);
     if (!(await exists(abs))) continue;
-    for (const f of await walk(abs)) if (f.endsWith(".mjs")) sources.push(rel(f, siteRoot));
+    for (const f of await walk(abs)) {
+      if (UNCHECKED_BY_ASTRO_CHECK.includes(extensionOf(f))) sources.push(rel(f, siteRoot));
+    }
   }
-  assert.ok(sources.length >= 6, "the source scan found suspiciously few .mjs files");
+  assert.deepEqual(
+    UNCHECKED_BY_ASTRO_CHECK.sort(),
+    [".js", ".mjs"],
+    "the unchecked-extension complement has drifted — SCANNED_EXTENSIONS or " +
+      "CHECKED_BY_ASTRO_CHECK changed and this disclosure test's population moved with it",
+  );
+  assert.ok(sources.length >= 6, "the source scan found suspiciously few unchecked sources");
   for (const s of sources) {
     assert.ok(disclosed.includes(s), `${s} is not type-checked and tsconfig.json does not say so`);
   }
@@ -517,10 +525,139 @@ test("Phase 2's workflows are the only ones this site added", async () => {
 // audit must state a denominator, and the mechanism must be able to notice when
 // the denominator is short. Naming REPO_REF as uncovered in prose was correct
 // and insufficient, because prose depends on the next person remembering.
+//
+// ROUND 4, R2 — THE THIRD DENOMINATOR WAS STILL HAND-WRITTEN, AND IT WAS THE ONE
+// I DID NOT LOOK AT. Round 3 derived the file set over DIRECTORIES and the
+// constant set over EXPORTS, then bounded the files by a bare `.endsWith(".mjs")
+// || .endsWith(".js")` — a hand-written extension list with no exemption entry,
+// no reason and no control, sitting inside the commit whose whole subject was
+// removing hand-written bounds. The review demonstrated it: `src/mut10.ts` and
+// `src/mut10.astro`, each carrying a mirrored constant, left the suite at exactly
+// baseline. Reproduced here before accepting it, and it is exactly right.
+//
+// The asymmetry IS the finding. One dimension of the same fix got an exhaustive
+// partition, priced exemptions and a staleness check; the other got a bare
+// string comparison. That is what an incomplete class fix looks like from the
+// inside: the dimension you are thinking about gets the discipline, and the one
+// you are merely using does not.
+//
+// THE RULE IS NOW A PROPERTY, NOT A LIST: a file is scanned if the language it
+// is written in CAN IMPORT the constant. If it can import and it copies instead,
+// that is the defect. If it cannot import, a literal is the only thing the author
+// could have written, so it is exempt — and the exemption is MEASURED below
+// rather than assumed, because an exemption nobody tests is a blind spot.
+const SCANNED_EXTENSIONS = [".mjs", ".js", ".ts", ".astro"];
+
+const EXEMPT_EXTENSIONS = {
+  ".json": "JSON has no import mechanism, so a URL in a manifest cannot be " +
+    "expressed as a reference to site.config.mjs — the literal is the only option",
+  ".md": "prose documentation, where quoting the deployed URL is the point rather " +
+    "than a defect; a reader cannot resolve an import",
+  ".css": "CSS cannot import a JavaScript binding, so a URL in a stylesheet has no " +
+    "in-language fix and would be a finding about the design rather than the file",
+};
+
+/**
+ * Files in an exempt extension that DO carry a copy, each with the reason it is
+ * allowed to. Asserted to be exactly the set found on disk, so a new copy in a
+ * non-importing file reds this test and has to be argued for rather than
+ * inherited. Same shape as the package-lock exemption above: the exclusion is
+ * priced every run, not granted once.
+ */
+const DOCUMENTED_COPIES = {
+  "README.md": "the site README quotes the deployed URL and the repository URL as " +
+    "documentation; both are for a human to read and neither is consumed by code",
+};
+
+/**
+ * Extensions `astro check` DOES see. `checkJs` is false, so it reads the TypeScript
+ * and the Astro component scripts and nothing else — verified, not assumed, by the
+ * planted-annotation experiment recorded in tsconfig.json's scope comment.
+ */
+const CHECKED_BY_ASTRO_CHECK = [".ts", ".astro"];
+
+/**
+ * Extensions `astro check` cannot see, DERIVED as the complement rather than
+ * written out a second time.
+ *
+ * The review counted three populations and two definitions. Making this the
+ * complement of the scan population means there is now ONE hand-written source of
+ * extensions in this file, and the second population falls out of it. Add `.tsx`
+ * to SCANNED_EXTENSIONS and it becomes type-check-unchecked automatically unless
+ * someone also declares it checked — which is the direction that fails safe.
+ *
+ * The divergence between the two lists is real and is the reason they are two:
+ * `.ts` and `.astro` ARE type-checked, so they belong in the constant scan and
+ * must never appear in tsconfig's NOT CHECKED disclosure. Two lists that differ
+ * for a stated reason are fine; two that differ because nobody noticed are R2.
+ */
+const UNCHECKED_BY_ASTRO_CHECK = SCANNED_EXTENSIONS.filter(
+  (e) => !CHECKED_BY_ASTRO_CHECK.includes(e),
+);
+
+/** Is this file read by the mirrored-constant scan? */
+const isScannedSource = (name) => SCANNED_EXTENSIONS.includes(extensionOf(name));
+
+/** The extension of a file NAME, or "" for a dotfile or an extensionless file. */
+function extensionOf(name) {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(i) : "";
+}
+
 const EXEMPT_CONSTANTS = {
   REPO_REF: 'the value is "main" — too short and too common to scan for without ' +
     "flooding the report with false positives from ordinary prose and code",
 };
+
+/**
+ * COMPONENTS OF A CONSTANT, DERIVED — not a list of the ones I happened to think
+ * of.
+ *
+ * F9's lesson, and `ecf68e8` is the precedent: a mirrored constant can be coupled
+ * in one component and uncoupled in another, and grading the whole value hides
+ * the uncoupled half. `REPO_URL` is never copied whole; its `owner/repo`
+ * component was, in an install command rendered on every skill page.
+ *
+ * MY FIRST VERSION OF THIS WAS A HAND-WRITTEN INCLUSION LIST holding exactly the
+ * one component the review had already found. That is R2's own defect at one more
+ * level up — deriving the population and then hand-bounding it — and it failed
+ * criterion (d) of the symmetry check in the brief. Caught by running that check
+ * against my own diff before pushing, which is the deliverable that matters more
+ * than the filter.
+ *
+ * Deriving instead of listing also ADDED coverage: the rule yields SITE's host,
+ * which the hand list did not contain and which nothing else scans for.
+ */
+const COMPONENT_MIN_LENGTH = 12;
+
+/**
+ * Components dropped for being too short to scan without flooding the report,
+ * each with a MEASURED reason rather than a predicted one.
+ */
+const SHORT_COMPONENTS = {
+  "REPO_URL host":
+    'the value is "github.com" at 10 characters. Measured rather than assumed, per ' +
+    "17b: it occurs 4 times in scanned files — three are JSDoc placeholder examples " +
+    '("https://github.com/o/r/blob/main", "https://github.com/<owner>/<repo>") and ' +
+    "the fourth is inside REPO_URL itself. Zero real instances are hidden by this.",
+};
+
+/** Every scannable component of every URL-valued constant, by the rule above. */
+function componentsOf(constants) {
+  const all = [];
+  for (const { name, value } of constants) {
+    let u;
+    try {
+      u = new URL(value);
+    } catch {
+      continue; // BASE is a path fragment, not a URL — it has no components
+    }
+    all.push({ name: `${name} host`, value: u.host });
+    const slug = u.pathname.replace(/^\/|\/$/g, "");
+    if (slug) all.push({ name: `${name} owner/repo`, value: slug });
+  }
+  return all;
+}
 
 /** Every `export const NAME = "literal"` in site.config.mjs, as name/value. */
 function stringExportsIn(config) {
@@ -560,33 +697,80 @@ test("no production file carries a second copy of a site constant", async () => 
     "a site.config.mjs string export is neither scanned nor exempted",
   );
 
+  // COMPONENTS, not just whole values — F9's lesson applied to the scan itself,
+  // derived from the exports and partitioned exhaustively by the length rule.
+  const candidates = componentsOf(scanned);
+  assert.ok(candidates.length >= 2, `component derivation produced ${candidates.length}, expected 2+`);
+  const components = candidates.filter((c) => c.value.length >= COMPONENT_MIN_LENGTH);
+  const dropped = candidates.filter((c) => c.value.length < COMPONENT_MIN_LENGTH);
+  assert.deepEqual(
+    dropped.map((c) => c.name).sort(),
+    Object.keys(SHORT_COMPONENTS).sort(),
+    "a constant component is below the scan threshold and is not declared in " +
+      "SHORT_COMPONENTS with a measured reason for dropping it",
+  );
+  for (const [name, reason] of Object.entries(SHORT_COMPONENTS)) {
+    assert.ok(reason.length > 30, `${name} is dropped with no stated reason`);
+  }
+  for (const c of components) {
+    const source = scanned.find((e) => c.name.startsWith(`${e.name} `));
+    assert.ok(source && source.value.includes(c.value), `${c.name} is not a component of its constant`);
+  }
+
   // Nothing shorter than this is worth matching: "/agent-skills" appears inside
   // the repo URL, so the longest values have to be checked first and the
   // matched span removed, or every REPO_URL hit double-counts as a BASE hit.
-  scanned.sort((a, b) => b.value.length - a.value.length);
+  const needles = [...scanned, ...components].sort((a, b) => b.value.length - a.value.length);
 
-  const files = [];
+  // THE FILE POPULATION, over every file in the walked roots, partitioned by
+  // extension rather than filtered by one. `seen` is what is actually on disk;
+  // nothing may fall outside the partition unclassified.
+  const all = [];
   for (const d of ["src", "scripts"]) {
     const abs = join(siteRoot, d);
     if (!(await exists(abs))) continue;
-    for (const f of await walk(abs)) if (f.endsWith(".mjs") || f.endsWith(".js")) files.push(f);
+    for (const f of await walk(abs)) all.push(f);
   }
   for (const ent of await readdir(siteRoot, { withFileTypes: true })) {
-    if (ent.isFile() && (ent.name.endsWith(".mjs") || ent.name.endsWith(".js"))) {
-      files.push(join(siteRoot, ent.name));
-    }
+    if (ent.isFile()) all.push(join(siteRoot, ent.name));
   }
 
-  // The file denominator reports on itself too, for the same reason.
+  const seen = [...new Set(all.map((f) => extensionOf(f.split("/").pop())))]
+    .filter((e) => e !== "")
+    .sort();
+  const classified = [...SCANNED_EXTENSIONS, ...Object.keys(EXEMPT_EXTENSIONS)].sort();
+  assert.deepEqual(
+    seen.filter((e) => !classified.includes(e)),
+    [],
+    `an extension in the walked roots is neither scanned nor exempted: ${seen.join(" ")} — ` +
+      "add it to SCANNED_EXTENSIONS, or to EXEMPT_EXTENSIONS with a reason",
+  );
+  for (const [ext, reason] of Object.entries(EXEMPT_EXTENSIONS)) {
+    assert.ok(reason.length > 30, `${ext} is exempt with no stated reason`);
+  }
+  assert.ok(
+    SCANNED_EXTENSIONS.every((e) => !(e in EXEMPT_EXTENSIONS)),
+    "an extension is both scanned and exempted",
+  );
+
+  const files = all.filter((f) => isScannedSource(f.split("/").pop()));
   assert.ok(
     files.length >= 8,
     `the production-file scan found ${files.length} files, expected at least 8`,
   );
+  // The scan must reach the languages R2 was demonstrated on, not merely enough
+  // files to look busy.
+  for (const ext of [".ts", ".astro"]) {
+    assert.ok(
+      files.some((f) => f.endsWith(ext)),
+      `the scan reaches no ${ext} file — R2's demonstration would pass again`,
+    );
+  }
 
   const offenders = [];
   for (const abs of files) {
     if (abs.endsWith("site.config.mjs")) continue; // the source itself
-    offenders.push(...copiesIn(await readFile(abs, "utf8"), rel(abs, siteRoot), scanned));
+    offenders.push(...copiesIn(await readFile(abs, "utf8"), rel(abs, siteRoot), needles));
   }
   assert.deepEqual(
     offenders,
@@ -594,6 +778,27 @@ test("no production file carries a second copy of a site constant", async () => 
     "a site constant is written twice in production code — import it from " +
       "src/site.config.mjs instead:\n  " + offenders.join("\n  "),
   );
+
+  // THE EXEMPTION IS PRICED. Files that cannot import are still READ; they are
+  // just allowed to carry a copy, and only the ones named here. A new literal in
+  // a manifest or a stylesheet reds this and has to be argued for.
+  const exemptFiles = all.filter((f) => extensionOf(f.split("/").pop()) in EXEMPT_EXTENSIONS);
+  const carrying = [];
+  for (const abs of exemptFiles) {
+    if (abs.endsWith("package-lock.json")) continue; // npm's, not ours; see UNSCANNED_JSON
+    if (plainCopiesIn(await readFile(abs, "utf8"), rel(abs, siteRoot), needles).length > 0) {
+      carrying.push(rel(abs, siteRoot));
+    }
+  }
+  assert.deepEqual(
+    carrying.sort(),
+    Object.keys(DOCUMENTED_COPIES).sort(),
+    "a file that cannot import a constant carries a copy of one, and it is not in " +
+      "DOCUMENTED_COPIES — decide whether it is documentation or a defect",
+  );
+  for (const [f, reason] of Object.entries(DOCUMENTED_COPIES)) {
+    assert.ok(reason.length > 30, `${f}'s documented copy has no stated reason`);
+  }
 });
 
 test("CONTROL: the mirrored-constant detector can actually fire", () => {
@@ -673,15 +878,111 @@ test("CONTROL: the file scan reaches scripts/ and the site root, not a named lis
   for (const d of ["src", "scripts"]) {
     const abs = join(siteRoot, d);
     if (!(await exists(abs))) continue;
-    for (const f of await walk(abs)) if (f.endsWith(".mjs")) dirs.add(rel(f, siteRoot).split("/")[0]);
+    for (const f of await walk(abs)) if (isScannedSource(f)) dirs.add(rel(f, siteRoot).split("/")[0]);
   }
   for (const ent of await readdir(siteRoot, { withFileTypes: true })) {
-    if (ent.isFile() && ent.name.endsWith(".mjs")) dirs.add(".");
+    if (ent.isFile() && isScannedSource(ent.name)) dirs.add(".");
   }
   assert.deepEqual(
     [...dirs].sort(),
     [".", "scripts", "src"],
     "the production-file scan no longer covers all three roots",
+  );
+});
+
+// R2's control. The finding was that the file population was derived over
+// DIRECTORIES and then hand-bounded by EXTENSION — a filter with no exemption
+// entry, no reason and no control, inside the commit whose subject was removing
+// hand-written bounds. Three dimensions, each asserted here.
+test("CONTROL: the extension bound is a partition, and it reaches .ts and .astro", async () => {
+  // ONE — the languages R2 was demonstrated on are actually scanned. Asserted on
+  // the predicate, so it holds for a file that does not exist yet.
+  for (const f of ["mut10.ts", "EntryMeta.astro", "x.mjs", "y.js"]) {
+    assert.ok(isScannedSource(f), `${f} is not read by the constant scan`);
+  }
+  for (const f of ["a.json", "b.md", "c.css"]) {
+    assert.ok(!isScannedSource(f), `${f} is scanned by an instrument that cannot be right for it`);
+  }
+
+  // TWO — the partition is exhaustive over what is PRESENT, so a language nobody
+  // anticipated cannot slip through by not being mentioned. `.tsx` is not in
+  // either list; if it appeared in src/ the real test reds until classified.
+  const classified = [...SCANNED_EXTENSIONS, ...Object.keys(EXEMPT_EXTENSIONS)];
+  assert.ok(!classified.includes(".tsx"), "the .tsx case is no longer unclassified — pick another");
+  assert.deepEqual(
+    SCANNED_EXTENSIONS.filter((e) => e in EXEMPT_EXTENSIONS),
+    [],
+    "an extension is both scanned and exempted",
+  );
+  for (const [ext, reason] of Object.entries(EXEMPT_EXTENSIONS)) {
+    assert.ok(reason.length > 30, `${ext} is exempt without a reason`);
+  }
+
+  // THREE — the detector fires on the review's exact planted content, at the
+  // exact paths it used, for both languages.
+  const constants = stringExportsIn(await readFile(join(siteRoot, "src/site.config.mjs"), "utf8"))
+    .filter((c) => !(c.name in EXEMPT_CONSTANTS))
+    .sort((a, b) => b.value.length - a.value.length);
+  assert.deepEqual(
+    copiesIn('export const t = "https://ghchinoy.github.io/agent-skills/";\n', "src/mut10.ts", constants),
+    ["src/mut10.ts:1 SITE", "src/mut10.ts:1 BASE"],
+  );
+  assert.deepEqual(
+    copiesIn('const r = "https://github.com/ghchinoy/agent-skills";\n', "src/mut10.astro", constants),
+    ["src/mut10.astro:1 REPO_URL"],
+  );
+});
+
+// The COMPONENT dimension, which is the one with a live instance behind it.
+test("CONTROL: a component of a constant is graded separately from the whole", async () => {
+  const exported = stringExportsIn(await readFile(join(siteRoot, "src/site.config.mjs"), "utf8"));
+  const repoUrl = exported.find((c) => c.name === "REPO_URL");
+  const derived = componentsOf([repoUrl]);
+  const slug = derived.find((c) => c.name === "REPO_URL owner/repo").value;
+  assert.equal(slug, "ghchinoy/agent-skills");
+
+  // The derivation is a RULE, so it also yields the component the hand list did
+  // not contain. Asserted here so a regression to a list is visible.
+  assert.deepEqual(derived.map((c) => c.name).sort(), ["REPO_URL host", "REPO_URL owner/repo"]);
+
+  // The literal that shipped, at the line it shipped on. A WHOLE-VALUE scan sees
+  // nothing here — that is the point, and it is F9's shape exactly: the copy is
+  // of a component, so grading the whole reads clean.
+  const shipped = 'installCommand: `npx skills add ghchinoy/agent-skills --skill ${d.name}`,\n';
+  assert.deepEqual(
+    copiesIn(shipped, "src/loaders/skills.ts", [repoUrl]),
+    [],
+    "the whole-value scan can see the component copy — then this control proves nothing",
+  );
+  assert.deepEqual(
+    copiesIn(shipped, "src/loaders/skills.ts", [{ name: "REPO_URL owner/repo", value: slug }]),
+    ["src/loaders/skills.ts:1 REPO_URL owner/repo"],
+    "the component scan cannot see the copy that actually shipped",
+  );
+
+  // And the fix is coupled rather than merely correct: the derived form contains
+  // no literal for the component scan to find.
+  const fixed = "installCommand: `npx skills add ${repoSlug} --skill ${d.name}`,\n";
+  assert.deepEqual(copiesIn(fixed, "src/loaders/skills.ts", [{ name: "REPO_URL owner/repo", value: slug }]), []);
+});
+
+// The instrument finding, kept as a test because it produced a clean report from
+// a dirty file and that is the failure direction nobody investigates.
+test("CONTROL: the plain scanner does not treat a URL as a comment", () => {
+  const constants = [{ name: "SITE", value: "https://ghchinoy.github.io" }];
+  const markdown = "The site is published at <https://ghchinoy.github.io/agent-skills/>.";
+
+  // copiesIn is JavaScript-aware: `//` starts a comment, so it discards the rest
+  // of the line — including the URL. Correct for .mjs, catastrophic for .md.
+  assert.deepEqual(
+    copiesIn(markdown, "README.md", constants),
+    [],
+    "copiesIn no longer truncates at // — re-examine whether plainCopiesIn is still needed",
+  );
+  assert.deepEqual(
+    plainCopiesIn(markdown, "README.md", constants),
+    ["README.md:1 SITE"],
+    "the plain scanner cannot see a URL in prose either",
   );
 });
 
@@ -743,6 +1044,32 @@ test("CONTROL: the constant list is derived, and an unknown export is not silent
  * @param {{name: string, value: string}[]} constants longest value FIRST
  * @returns {string[]}
  */
+/**
+ * The same scan WITHOUT JavaScript comment handling, for files that are not
+ * JavaScript.
+ *
+ * Found by using the wrong one: `copiesIn` treats `//` as the start of a comment
+ * and discards the rest of the line, which in a Markdown file means every line
+ * containing an `https://` URL outside a string literal is silently truncated to
+ * nothing. The priced-exemption check below reported ZERO copies in README.md
+ * while `grep` reported two. The instrument was wrong, not the file — and it was
+ * wrong in the direction that produces a clean report, which is the direction
+ * nobody investigates. Recorded rather than quietly patched, because "the scanner
+ * returned empty" and "there is nothing there" are the same output.
+ */
+function plainCopiesIn(text, label, constants) {
+  const out = [];
+  text.split("\n").forEach((raw, i) => {
+    let line = raw;
+    for (const { name, value } of constants) {
+      if (!line.includes(value)) continue;
+      line = line.split(value).join("");
+      out.push(`${label}:${i + 1} ${name}`);
+    }
+  });
+  return out;
+}
+
 function copiesIn(text, label, constants) {
   const out = [];
   let inBlock = false;

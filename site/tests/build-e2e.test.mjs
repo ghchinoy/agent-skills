@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { plantOrThrow, repoRoot, siteRoot } from "./_helpers.mjs";
+import { plantOrThrow, repoRoot, siteRoot, walk } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -189,6 +189,55 @@ async function append(root, relPath, text) {
 /** Set by the `afterIndentedFence` plant; read by the test that awaits it. */
 let plantedLine = null;
 
+// ── The perturbation registry for the dist positive control (round 4) ────────
+//
+// Each value is chosen to be UNMISTAKABLE in rendered output: nothing here can
+// be produced by any other means, so a match is proof the constant was consumed
+// rather than a coincidence of ordinary page text. `main` is exactly why that
+// matters — the real REPO_REF is a word that appears in every page as `<main>`,
+// so a control asserting the real value's PRESENCE would pass without the
+// constant existing at all.
+const PERTURBATIONS = {
+  SITE: "https://perturbed-origin.example",
+  BASE: "/perturbed-base",
+  REPO_URL: "https://github.com/perturbed-owner/perturbed-repo",
+  REPO_REF: "perturbed-ref",
+};
+
+// Strings that legitimately survive a perturbed config because they come from
+// repo DATA rather than from `site.config.mjs`. Each key is the exact literal;
+// each value is the measurement that justifies allowing it.
+const DATA_SOURCED = {
+  "https://github.com/ghchinoy/agent-skills":
+    "plugins/okf-authoring/plugin.json:10, the manifest's `repository` field, rendered as a " +
+    "metadata row on the plugin page. Measured under a fully perturbed config: 1 occurrence on " +
+    "1 page. It follows the MANIFEST, not REPO_URL, so its presence is correct. What this " +
+    "allowance hides, and it is worth knowing: the repository identity has a second source of " +
+    "truth outside site/, which a repo rename would break too, and no gate on this branch pins " +
+    "it — plugin.json is repo data rather than site source. Disclosed in round 4, not fixed here.",
+};
+
+/** Removes the allowed data-sourced literals, and nothing else. */
+function stripDataSourced(text) {
+  let out = text;
+  for (const literal of Object.keys(DATA_SOURCED)) out = out.split(literal).join(" ");
+  return out;
+}
+
+// The exemption, priced. Standard 17b: state what it hides.
+const UNPERTURBABLE = {
+  PHASE_1_PLUGINS:
+    "Not a string export. It is an array of plugin DIRECTORY names, so its " +
+    "values are filesystem paths that must exist; perturbing it does not " +
+    "measure rendering sensitivity, it removes the only plugin. Measured: with " +
+    "a perturbed value the build renders zero skill pages, so the control would " +
+    "'pass' by producing nothing to contradict it rather than by following the " +
+    "constant. What the exemption hides: whether PHASE_1_PLUGINS reaches the " +
+    "output. It does, and it is covered elsewhere by construction — every page " +
+    "under plugins/okf-authoring/ exists only because this array names it, and " +
+    "the harness control below asserts three of those pages were built.",
+};
+
 // The five builds are independent, so they all start here at module load and
 // each test awaits the one it needs. Sequential would multiply the wall clock
 // for nothing.
@@ -250,6 +299,44 @@ const cases = {
     // This one always had an ad-hoc no-op guard. It is now the shared one, so
     // the property holds for every plant rather than the one someone remembered.
     await writeFile(p, plantOrThrow(raw, /^(\s*)version: "1\.0\.0"$/m, '$1version: 1.10', "an unquoted metadata.version"));
+  }),
+
+  // ── THE DIST POSITIVE CONTROL, round 4 ──────────────────────────────────────
+  // Raised by the round-5 pre-registration, and it is right. An UNCHANGED dist
+  // digest is consistent with two incompatible states: the change is genuinely
+  // output-neutral, OR the change never reached the output at all — dead path,
+  // stale dist, cached build, loader not re-run. `installCommand` travels through
+  // a loader and then an Astro component; either hop can be silently bypassed.
+  //
+  // So byte-identity is only evidence of neutrality if the same apparatus can be
+  // shown to MOVE. Perturb REPO_URL, rebuild for real, and require the rendered
+  // install command to follow it. If this build produced the same bytes, then
+  // byte-identity under the real REPO_URL would prove nothing whatever.
+  //
+  // THE POPULATION HERE IS THE WHOLE CONSTANT SET, NOT THE ONE CONSTANT THAT WAS
+  // ASKED FOR. The round-4 brief named REPO_URL, and a control covering exactly
+  // REPO_URL is the round-4 defect one level up: a hand-written inclusion list
+  // holding precisely the item the review happened to find. The same mistake was
+  // already made once this round in `pins.test.mjs` (DERIVED_COMPONENTS) and
+  // caught by running the symmetry check against my own diff. Writing it a second
+  // time inside the deliverable added to catch it would be the ninth instance.
+  //
+  // So: every string export is perturbed in ONE build, the registry is asserted
+  // exhaustive over the real `site.config.mjs`, and the one export that cannot be
+  // perturbed carries a priced exemption. One build covers all four because the
+  // claim is per-constant presence, not a whole-output digest.
+  perturbedConstants: buildWith(async (root) => {
+    const p = join(root, "site/src/site.config.mjs");
+    let raw = await readFile(p, "utf8");
+    for (const [name, value] of Object.entries(PERTURBATIONS)) {
+      raw = plantOrThrow(
+        raw,
+        new RegExp(`^export const ${name} = "[^"]*";$`, "m"),
+        `export const ${name} = ${JSON.stringify(value)};`,
+        `the ${name} export`,
+      );
+    }
+    await writeFile(p, raw);
   }),
 };
 
@@ -455,4 +542,187 @@ test("E2E control: the harness itself is not what makes builds fail", async () =
   ]) {
     assert.ok(existsSync(join(root, "site", "dist", rel)), `the copy did not build ${rel}`);
   }
+});
+
+
+/** The perturbed build's rendered HTML, as `{rel, text}`. */
+async function perturbedHtml() {
+  const { root } = await cases.perturbedConstants;
+  const dist = join(root, "site/dist");
+  const out = [];
+  for (const f of await walk(dist)) {
+    if (f.endsWith(".html")) out.push({ rel: f.slice(dist.length + 1), text: await readFile(f, "utf8") });
+  }
+  return out;
+}
+
+test("E2E: the perturbation registry is exhaustive over site.config.mjs", async () => {
+  // (d). Without this the control covers whichever constants someone thought of,
+  // and a NEW site-wide constant — the most likely future addition to that file —
+  // joins the rendering path with no sensitivity proof and nothing says so. This
+  // is the assertion that makes the next constant announce itself.
+  const config = await readFile(join(siteRoot, "src/site.config.mjs"), "utf8");
+  const exported = [...config.matchAll(/^export const (\w+) =/gm)].map((m) => m[1]).sort();
+  assert.ok(exported.length > 0, "no exports parsed — the scan is looking at the wrong shape");
+
+  const covered = [...Object.keys(PERTURBATIONS), ...Object.keys(UNPERTURBABLE)].sort();
+  assert.deepEqual(
+    covered,
+    exported,
+    "site.config.mjs exports and the perturbation registry have diverged: every export must be " +
+      "either perturbed or exempted with a reason",
+  );
+
+  // And the exemptions must be priced rather than merely present.
+  for (const [name, reason] of Object.entries(UNPERTURBABLE)) {
+    assert.ok(reason.length > 60, `${name} is exempted without a real reason`);
+  }
+  // No perturbed value may be a substring producible by ordinary page text.
+  for (const [name, value] of Object.entries(PERTURBATIONS)) {
+    assert.match(value, /perturbed/, `${name}'s perturbed value is not self-identifying`);
+  }
+});
+
+test("E2E: EVERY site constant is shown to reach rendered HTML (dist sensitivity)", async () => {
+  // THE POINT OF THIS FILE'S ROUND-4 ADDITION. An unchanged `dist` digest is
+  // consistent with two incompatible states — the change is output-neutral, or the
+  // change never reached the output. The digest cannot tell them apart. This can:
+  // it shows the apparatus MOVING under a known perturbation, per constant.
+  //
+  // Reported as a measurement, not a boolean: the per-constant file counts below
+  // are the denominator for any future claim that byte-identity means neutrality.
+  const html = await perturbedHtml();
+  assert.ok(html.length >= 7, `only ${html.length} pages rendered`);
+
+  const misses = [];
+  for (const [name, value] of Object.entries(PERTURBATIONS)) {
+    const hits = html.filter((h) => h.text.includes(value)).length;
+    if (hits === 0) misses.push(`${name} (${value}) appears in 0 of ${html.length} rendered pages`);
+  }
+  assert.deepEqual(
+    misses,
+    [],
+    "a site constant does NOT reach the rendered output, so an unchanged dist digest proves " +
+      `nothing about it:\n  ${misses.join("\n  ")}`,
+  );
+});
+
+test("E2E control: the sensitivity check fails when the output does not follow the constant", async () => {
+  // (e). The check above is a presence test, and a presence test over a value
+  // nobody rendered would be silently vacuous. This drives the same predicate with
+  // a constant that was NOT perturbed into the build and requires it to miss.
+  const html = await perturbedHtml();
+  const absent = "https://perturbed-but-never-planted.example";
+  assert.equal(
+    html.filter((h) => h.text.includes(absent)).length,
+    0,
+    "an unplanted perturbation was found in the output; the predicate matches anything",
+  );
+  // …and the real values must be GONE, which is the half that catches a stale or
+  // cached dist being read instead of the perturbed one.
+  //
+  // THIS ASSERTION FAILED WHEN FIRST WRITTEN AND THE CODE WAS RIGHT. The real
+  // REPO_URL — and therefore the real BASE as a substring of it — still rendered
+  // on the plugin page under a fully perturbed config. It is not hard-coded: it
+  // is repo DATA, `plugins/okf-authoring/plugin.json:10 "repository"`, rendered as
+  // a metadata field. Measured before the exemption was written: one occurrence,
+  // one page, and it tracks the manifest rather than the constant.
+  //
+  // Narrowing an assertion to match observed output is exactly the move standard
+  // 10 forbids when the reason is "the code does that" — so the reason here is a
+  // measurement of an INDEPENDENT source, and the exemption is priced below.
+  const config = await readFile(join(siteRoot, "src/site.config.mjs"), "utf8");
+  for (const name of Object.keys(PERTURBATIONS)) {
+    const real = new RegExp(`^export const ${name} = "([^"]*)";$`, "m").exec(config)[1];
+    if (real === "main") continue; // `<main>` — see the note on PERTURBATIONS
+    const survivors = html.filter((h) => stripDataSourced(h.text).includes(real));
+    assert.deepEqual(
+      survivors.map((h) => h.rel),
+      [],
+      `the REAL ${name} (${real}) still renders under a perturbed config, and not from any ` +
+        `known data source — the build read a stale or cached dist, or the value is hard-coded`,
+    );
+  }
+});
+
+test("E2E: the data-sourced allowance is real, and it is a second source of repo identity", async () => {
+  // 17b: what does the exemption above hide? A copy of the repository URL that
+  // lives OUTSIDE site/ entirely, in repo data, and that a repository rename would
+  // break exactly as surely as the one R2 fixed. It is out of this branch's scope
+  // to change; it is not out of scope to know about, and an exemption nobody ever
+  // re-checks is how it would stop being known.
+  const manifest = JSON.parse(
+    await readFile(join(repoRoot, "plugins/okf-authoring/plugin.json"), "utf8"),
+  );
+  assert.equal(
+    manifest.repository,
+    Object.keys(DATA_SOURCED)[0],
+    "the manifest's repository field moved; the allowance in this file is now covering " +
+      "something else and must be re-measured, not edited to agree",
+  );
+  // The allowance must not be a blanket. It removes ONLY the exact strings listed.
+  // "keep " + the replacement space + " keep" — three spaces, not two. The first
+  // version of this line said two, and the helper was right; kept as written
+  // rather than loosened to a `match`, because the exact substitution is the
+  // property that stops the allowance eating adjacent text.
+  assert.equal(stripDataSourced("keep https://github.com/ghchinoy/agent-skills keep"), "keep   keep");
+  assert.equal(stripDataSourced("/agent-skills/plugins/"), "/agent-skills/plugins/");
+});
+
+test("E2E: the rendered install command is DERIVED from REPO_URL, not hard-coded", async () => {
+  // The gap the round-5 pre-registration found, and it is real independent of
+  // R2: the site's most reader-visible constant had no assertion tying it to a
+  // rendered byte. Every other test naming REPO_URL is about the detector.
+  //
+  // TWO GATES ARE NEEDED AND NEITHER IS SUFFICIENT ALONE. pins.test.mjs catches a
+  // LITERAL copy of the owner/repo component in source. This catches a rendered
+  // value that DISAGREES with REPO_URL. A re-hardcode of the correct literal
+  // passes this one and is caught there; a broken derivation passes there and is
+  // caught here.
+  const { ok, output, root } = await cases.perturbedConstants;
+  assert.ok(ok, `the perturbed build failed:\n${output}`);
+
+  const html = (await perturbedHtml()).map((h) => h.text);
+  assert.ok(html.length > 0, "the perturbed build produced no HTML");
+
+  const commands = [...new Set(html.flatMap((h) => [...h.matchAll(/npx skills add ([^\s<]+)/g)].map((m) => m[1])))];
+  assert.ok(
+    commands.length > 0,
+    "no install command is rendered anywhere, so this control cannot see the thing it controls",
+  );
+
+  // MOVED. Every rendered slug follows the perturbed constant.
+  assert.deepEqual(
+    commands,
+    ["perturbed-owner/perturbed-repo"],
+    "the rendered install command did NOT follow REPO_URL — it is hard-coded somewhere, " +
+      "or the loader did not re-run, and an unchanged dist digest would mean nothing",
+  );
+  assert.ok(
+    !html.some((h) => h.includes("npx skills add ghchinoy/agent-skills")),
+    "the real slug still renders under a perturbed REPO_URL",
+  );
+});
+
+test("E2E control: the real build renders the real slug, so the check above is not trivially true", async () => {
+  // The other half. Without this, an assertion that the slug is the PERTURBED one
+  // would also pass if the renderer emitted a constant string that happened to be
+  // the perturbed value — and, more plausibly, it pins the fact that the two
+  // builds differ in the way claimed rather than in some unrelated way.
+  const real = join(siteRoot, "dist");
+  if (!existsSync(real)) return; // `npm test` runs after `npm run build` in CI
+
+  const html = [];
+  for (const f of await walk(real)) if (f.endsWith(".html")) html.push(await readFile(f, "utf8"));
+  const commands = [...new Set(html.flatMap((h) => [...h.matchAll(/npx skills add ([^\s<]+)/g)].map((m) => m[1])))];
+  if (commands.length === 0) return;
+
+  const config = await readFile(join(siteRoot, "src/site.config.mjs"), "utf8");
+  const repoUrl = /^export const REPO_URL = "([^"]*)";$/m.exec(config)[1];
+  const slug = new URL(repoUrl).pathname.replace(/^\/|\/$/g, "");
+  assert.deepEqual(
+    commands,
+    [slug],
+    `the built site renders ${commands.join(", ")} but REPO_URL derives ${slug}`,
+  );
 });
