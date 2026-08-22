@@ -260,10 +260,30 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
   m = /^assets\/(.+)$/.exec(path);
   if (m) {
     const rest = m[1];
-    const first = rest.replace(/\/.*$/, "");
-    const entry = (ctx.resources?.assets ?? []).find((r) => r.name === first);
-    if (!entry) {
-      throw fail(target, ctx, line, `${skillRepoDir}/assets/ has no entry named "${first}".`);
+    // The asset inventory is a flat list of FILE paths relative to `assets/`
+    // (enumerate.mjs `listTree`), so a target is checked along its WHOLE path
+    // rather than by its first segment: `X` names a file when an entry equals
+    // it, and a directory when some entry sits beneath it.
+    //
+    // This is stricter than the depth-1 predecessor, which matched only the
+    // first segment against a directory entry and therefore resolved
+    // `assets/<dir>/<anything>` — including files that do not exist — to a
+    // blob URL nothing ever checked. Closing that was a side effect of the
+    // recursion, not its purpose, and it is the kind of hole that only shows
+    // up when the data underneath a lookup changes shape.
+    const bare = rest.replace(/\/$/, "");
+    const assets = ctx.resources?.assets ?? [];
+    const isFile = assets.some((r) => r.name === bare);
+    const isDirectory = assets.some((r) => r.name.startsWith(`${bare}/`));
+    if (!isFile && !isDirectory) {
+      throw fail(
+        target,
+        ctx,
+        line,
+        `${skillRepoDir}/assets/ holds no file at "${bare}" and no directory ` +
+          `containing one. The inventory lists every asset file at every ` +
+          `depth, so this target matches nothing that exists.`,
+      );
     }
     if (isImage) {
       // §6.5 routes an IMAGE asset through public/skill-assets/, because an
@@ -281,21 +301,22 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
       // over the same post-H1-strip body and collecting exactly the targets
       // that reach exactly this branch. tests/assets.test.mjs then checks the
       // rendered <img src> values against the files actually in dist/.
-      if (entry.kind === "directory" && rest === first) {
+      if (!isFile) {
         throw fail(
           target,
           ctx,
           line,
           `an image link cannot point at a DIRECTORY ` +
-            `(${skillRepoDir}/assets/${first}).`,
+            `(${skillRepoDir}/assets/${bare}).`,
         );
       }
-      return `${base}/skill-assets/${plugin}/${skill}/${rest}${anchor}`;
+      return `${base}/skill-assets/${plugin}/${skill}/${bare}${anchor}`;
     }
-    const isDir = rest.endsWith("/") || (entry.kind === "directory" && rest === first);
-    const cleanRest = rest.replace(/\/$/, "");
+    // A trailing slash is the author saying "directory"; otherwise the
+    // filesystem says which it is, and a path that is both is impossible.
+    const isDir = rest.endsWith("/") || (!isFile && isDirectory);
     const urlBase = isDir ? ctx.treeBase : blobBase;
-    return `${urlBase}/${skillRepoDir}/assets/${cleanRest}${anchor}`;
+    return `${urlBase}/${skillRepoDir}/assets/${bare}${anchor}`;
   }
 
   throw fail(

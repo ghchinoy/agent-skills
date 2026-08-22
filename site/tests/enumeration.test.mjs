@@ -77,17 +77,64 @@ function skillProbesBelowDepthOne(calls) {
     .map((c) => `${c.op} ${c.path}`);
 }
 
-/** Any touch at all inside the example-bundle teaching asset (I5). */
+/**
+ * Any touch inside the example-bundle teaching asset (I5) OTHER THAN listing
+ * its names.
+ *
+ * NARROWED IN PHASE 4 UNDER EM RULING (Option A). It previously asserted zero
+ * calls of ANY op whose path contained `example-bundle`. AC1 requires every
+ * asset file to appear on its owning skill page by real filename and names a
+ * depth-2 file explicitly, which cannot be done without a `readdir` inside an
+ * asset subtree.
+ *
+ * WHAT THE OLD FORM PROTECTED, AND WHERE THAT PROTECTION LIVES NOW. It was a
+ * PROXY for two invariants, neither of which moved:
+ *   - bundle bytes are never read  -> `assetFileReads()` below, which is
+ *     STRICTER than the clause replaced here because it covers every asset
+ *     tree rather than this one directory.
+ *   - no bundle file becomes a page -> the witness-string leak detector in
+ *     tests/content.test.mjs.
+ * Both were given fresh planted negative controls in Phase 4; neither is
+ * inherited from Phase 3's green.
+ *
+ * Only NAME LISTING is newly permitted. A `readFile` or a `stat` inside the
+ * bundle is still caught here, unchanged.
+ */
 function exampleBundleTouches(calls) {
-  return calls.filter((c) => c.path.includes("example-bundle")).map((c) => `${c.op} ${c.path}`);
+  return calls
+    .filter((c) => c.path.includes("example-bundle"))
+    .filter((c) => c.op !== "readdir")
+    .map((c) => `${c.op} ${c.path}`);
 }
 
-/** Any directory read deeper than the depth-1 inventory the design allows. */
+/**
+ * Any directory read outside the shape the design allows.
+ *
+ * NARROWED IN PHASE 4 UNDER EM RULING (Option A): one pattern was ADDED, the
+ * last one, permitting descent at any depth below a skill's `assets/`. The
+ * other three are unchanged.
+ *
+ * WHAT SURVIVES. Descent under `references/`, under `scripts/`, under
+ * `skills/<s>/` itself, or anywhere else in the tree still trips this gate.
+ * The class "no unexpected descent" is intact; the single instance "no descent
+ * under assets/" is deliberately given up, because AC1 names a depth-2 asset
+ * file as required output.
+ *
+ * WHY ONLY `assets/`. A `references/*.md` is ROUTED to a page by slug, and a
+ * nested reference has no route this design defines — descending there would
+ * silently produce a route collision or a dropped file rather than an error.
+ * Assets are never routed, so depth is harmless. Scripts are flat today and
+ * widening a gate where nothing needs it buys nothing; the consequence is that
+ * a future nested file under `scripts/` would be missed by the inventory and
+ * would not trip anything, which is recorded as an accepted hole in the Phase
+ * 4 boundary ledger rather than left for a reader to find.
+ */
 function readdirsOutsideAllowedShape(calls) {
   const ALLOWED = [
     /^plugins\/[^/]+\/skills$/,
     /^plugins\/[^/]+\/references$/,
     /^plugins\/[^/]+\/skills\/[^/]+\/(references|scripts|assets)$/,
+    /^plugins\/[^/]+\/skills\/[^/]+\/assets\/.+$/,
   ];
   return calls
     .filter((c) => c.op === "readdir")
@@ -277,10 +324,34 @@ test("the resource inventory distinguishes 'no such directory' from 'empty direc
   const author = plugins[0].skills.find((s) => s.name === "okf-author");
   assert.equal(author.resources.scripts, null, "okf-author has no scripts/ — expected null");
   assert.equal(author.resources.references, null, "okf-author has no skill-level references/ — expected null");
+  // RE-PINNED IN PHASE 4 UNDER EM RULING (Option A), as a consequence of the
+  // ruling and not to silence a red. It previously pinned
+  //   ["README.md:file", "example-bundle:directory"]
+  // — the depth-1 shape, one file and one DIRECTORY entry. The inventory now
+  // lists every asset file at every depth, named relative to `assets/`, and
+  // emits no bare directory rows, because every file inside one is listed
+  // individually and a directory row would be a second, coarser claim about
+  // the same bytes.
+  //
+  // The old message asserted the bundle held eleven markdown files. It holds
+  // eight, of nine files. That figure is DELETED rather than corrected: it was
+  // an unbound literal restating what the assertion below already derives, and
+  // Phase 3's ruling on such duplicates is deletion, not refresh.
   assert.deepEqual(
     author.resources.assets.map((a) => `${a.name}:${a.kind}`),
-    ["README.md:file", "example-bundle:directory"],
-    "assets/ must be inventoried at depth 1: one file and one DIRECTORY, never 11 pages",
+    [
+      "README.md:file",
+      "example-bundle/computations/revenue.md:file",
+      "example-bundle/index.md:file",
+      "example-bundle/log.md:file",
+      "example-bundle/metrics/revenue.md:file",
+      "example-bundle/references/attesters/revenue.py:file",
+      "example-bundle/references/skills/run-on-bq.md:file",
+      "example-bundle/tables/customers.md:file",
+      "example-bundle/tables/index.md:file",
+      "example-bundle/tables/orders.md:file",
+    ],
+    "assets/ is inventoried at every depth, by path relative to assets/, files only",
   );
 });
 
