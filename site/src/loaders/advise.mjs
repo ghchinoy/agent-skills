@@ -217,10 +217,15 @@ export function adviseDeadPointers(raw, skill) {
  * MUST KNOW. Of the 9 bundle files, exactly the 2 whose basenames do not
  * collide with unrelated prose elsewhere in okf-author/SKILL.md are flagged.
  * The other bundle basenames — index.md, log.md, revenue.md, customers.md,
- * orders.md — occur in that SKILL.md 8, 3, 1, 2 and 2 times respectively, and
- * every one of those occurrences is about the OKF FORMAT rather than about a
- * bundle file (e.g. "Reserved filenames (`index.md`, `log.md`) are not
- * concepts"). So the partition of the bundle into orphan and not-orphan here
+ * orders.md — occur in that SKILL.md 9, 3, 1, 2 and 2 times respectively.
+ * THOSE ARE OCCURRENCES, NOT LINES, and the distinction is not pedantic: the
+ * first figure read 8 until the review, because it had been measured
+ * line-oriented and SKILL.md line 77 carries `index.md` twice ("Root
+ * `index.md` is the only `index.md` permitted to carry frontmatter"). The
+ * other four agree under both units only because none of them happens to
+ * double up on a line, which makes them correct rather than checked. Every
+ * one of these occurrences is about the OKF FORMAT rather than about a bundle
+ * file (e.g. "Reserved filenames (`index.md`, `log.md`) are not concepts"). So the partition of the bundle into orphan and not-orphan here
  * is produced by ACCIDENTAL BASENAME COLLISION, not by documentation. That is
  * a property of this predicate, it is disclosed rather than tuned away, and
  * it is the reason the message above is scoped to this one file.
