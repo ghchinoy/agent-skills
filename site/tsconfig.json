@@ -70,7 +70,7 @@
   // because the figure counts errors in files that every phase edits.
   //
   // The Phase 3 round-2 review is what established the pattern rather than the
-  // instance. Its readings, quoted as that review's findings at that commit and
+  // instance. Its readings, quoted as that review's findings at 06d2a02 and
   // not as properties of this tree: 23 of 26 rows still matched, and the 3 that
   // diverged were exactly the 3 files edited after the census was taken, their
   // deltas summing to the change in the total with no residual. Attributing
@@ -86,15 +86,12 @@
   // day it stops being right. So the copy is gone and the command that produces
   // it stays.
   //
-  // WHAT IS NOT DELETED, AND WHY THE DIFFERENCE IS THE WHOLE POINT: the list of
-  // unchecked files above is BOUND. `tests/pins.test.mjs` R6 derives that set
-  // from the filesystem and fails if any unchecked source is missing from the
-  // disclosure below the NOT CHECKED heading, with a non-vacuity floor and a
-  // control proving the scoped search can fail. Phase 2 and Phase 3 each added
-  // files to that list and each got it right — because a test went red when
-  // they did not. The census sat in the same comment, written by the same hands
-  // in the same commits, and went stale every single time. Same block, same
-  // authors, same edits: the only variable is whether an assertion was watching.
+  // WHAT IS NOT DELETED: the list of unchecked files above is BOUND.
+  // `tests/pins.test.mjs` R6 derives that set from the filesystem and fails if
+  // any unchecked source is missing from the list block, with a non-vacuity
+  // floor and a control proving the scoped search can fail. That binding is
+  // measured by mutation, not asserted: deleting any one of the listed files
+  // from the list block turns R6 red.
   //
   // Standard 2 says a number is re-measured at the moment it is quoted, not
   // inherited. Four recurrences here say the stronger thing: a number nothing
