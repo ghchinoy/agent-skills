@@ -203,6 +203,105 @@ test("AC8: the forward population is EMPTY, which is why the gate runs backwards
   );
 });
 
+test("AC8 forward: every key a skill declares reaches its page", async () => {
+  // THE OTHER DIRECTION, and it catches the other failure. The gate below asks
+  // "is every rendered label traceable to a declared key" — that is INVENTION.
+  // This asks "does every declared key reach the reader" — that is SUPPRESSION.
+  // A build that dropped `license` from every page passes the backwards gate
+  // perfectly, because the labels it does render all trace.
+  //
+  // Scoped to the skill's OWN declarations against its OWN page, which is the
+  // EM's Option A stated as a test: a value renders on the page of the entity
+  // that declared it.
+  const skills = await declaredSkills();
+  const pages = await distContentPages();
+
+  // THE ONE EXEMPTION, ITEMISED AND COUNTED, AND ITS REASON IS A MEASUREMENT
+  // (pre-registration §6.5). `description` is declared by 23 of 23 skills and
+  // is the only declared key that is not a labelled row: Starlight renders it
+  // as the page's lead paragraph, which is where a reader meets a description.
+  // It is exempted from the ROW requirement and then held to a stronger one
+  // below — the full string must appear in the page text — so the exemption
+  // buys a change of location, not a licence to drop it.
+  const EXEMPT = ["description"];
+
+  const suppressed = [];
+  let checked = 0;
+  let exemptSeen = 0;
+  for (const s of skills) {
+    const page = pageAt(pages, s.route);
+    const main = mainOf(page.html);
+    const own = new Set(
+      fieldRows(main)
+        .filter((r) => r.source === "skill-frontmatter")
+        .map((r) => r.label.toLowerCase()),
+    );
+    const declaredKeys = [
+      ...Object.keys(s.declared).filter((k) => k !== "metadata"),
+      ...Object.keys(s.declared.metadata ?? {}).map((k) => `metadata.${k}`),
+    ];
+    for (const key of declaredKeys) {
+      const leaf = key.replace(/^metadata\./, "").toLowerCase();
+      if (EXEMPT.includes(leaf)) {
+        exemptSeen += 1;
+        // The stronger requirement the exemption is priced at.
+        const text = toText(main).replace(/\s+/g, " ");
+        const want = String(s.declared.description).replace(/\s+/g, " ").trim();
+        assert.ok(
+          text.includes(want),
+          `${s.route}: the declared description is exempt from the row requirement and ` +
+            `does not appear in the page text either`,
+        );
+        continue;
+      }
+      checked += 1;
+      if (!own.has(leaf)) suppressed.push(`${s.route}: declares ${key}, renders no such row`);
+    }
+  }
+  assert.deepEqual(suppressed, [], `declared keys that never reach a reader:\n${suppressed.join("\n")}`);
+
+  // DENOMINATORS. 23 skills; the exemption fires once per skill and no more,
+  // so it is 23 of 23 and cannot have quietly widened to cover a second key.
+  assert.equal(skills.length, 23, `swept ${skills.length} skills, not 23`);
+  assert.equal(
+    exemptSeen,
+    skills.length,
+    `the description exemption fired ${exemptSeen} times across ${skills.length} skills; ` +
+      `it is supposed to fire exactly once per skill`,
+  );
+  assert.ok(
+    checked > skills.length,
+    `only ${checked} non-exempt declared keys across ${skills.length} skills — the forward ` +
+      `sweep is too thin to mean anything`,
+  );
+});
+
+test("AC8 forward control: the suppression detector fires when a declared key is hidden", async () => {
+  // Without this, the empty `suppressed` array above is equally consistent with
+  // a detector that reads no rows. The plant is on the RENDERED side — a page's
+  // rows are taken away — because that is the failure being detected.
+  const skills = await declaredSkills();
+  const victim = skills.find((s) => typeof s.declared.license === "string");
+  assert.ok(victim, "no skill declares a license, so this control has nothing to hide");
+
+  const pages = await distContentPages();
+  const main = mainOf(pageAt(pages, victim.route).html);
+  const own = fieldRows(main).filter((r) => r.source === "skill-frontmatter");
+  assert.ok(
+    own.some((r) => r.label.toLowerCase() === "license"),
+    "the baseline reading already has no license row — the sweep above is vacuous",
+  );
+
+  // Same comparison, with the license row removed from what the page reports.
+  const hidden = new Set(
+    own.filter((r) => r.label.toLowerCase() !== "license").map((r) => r.label.toLowerCase()),
+  );
+  assert.ok(
+    !hidden.has("license"),
+    "removing the license row did not change the label set, so the comparison is not reading it",
+  );
+});
+
 test("AC8: the spec vocabulary this suite checks against is the one the loader enforces", async () => {
   // The six names are written out in _helpers.mjs rather than imported, so that
   // "every label is a spec field" cannot degrade into "every label is whatever
