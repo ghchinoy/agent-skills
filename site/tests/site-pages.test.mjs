@@ -496,6 +496,32 @@ const SPEC_SAMPLES = {
   // no keyword matcher reaches them however it is spelled. This is PARA-1 with
   // the docstring bug subtracted out — the residue that is genuinely a matcher
   // limit rather than a contract violation.
+  //
+  // ── UNIT AND DENOMINATOR, NAMED, BECAUSE BOTH SILENTLY RESIZE THIS SET ─────
+  //
+  // UNIT: SENTENCE. Lines are split further on `.`, `:` and `;`. This is not a
+  // detail. A specification line can carry a keyword-free normative clause AND
+  // an unrelated MUST NOT, and at LINE unit the line fires on the keyword, so
+  // the keyword-free clause IS CLEARED BY A NEIGHBOUR IT HAS NOTHING TO DO
+  // WITH. Measured on the live corpus rather than argued: Agent Plugins gives
+  // 4 residual clauses at line unit and 6 at sentence unit, and two of the six
+  // are cleared by a neighbour. One of the two is
+  //
+  //   "A change to either schema requires a new specification release."
+  //
+  // at spec/1.0.0.md:510, on a line that continues "…MUST NOT be reassigned…
+  // Existing plugins MAY continue targeting…". That sentence is the strongest
+  // evidence this project has that PARA-1 is live, and a line-unit sweep loses
+  // it. Agent Skills: 3 at both units, 0 cleared. THE COARSER UNIT IS ALWAYS
+  // THE MORE FLATTERING ONE FOR AN ABSENCE CLAIM, so an absence reported
+  // without its unit is not reported.
+  //
+  // DENOMINATOR: sentences matching a hand-written normative-FORCE list
+  // (requires, cannot, is ignored, takes precedence, never, only if, …). That
+  // list is mine, so this set is a LOWER BOUND on the residual class and not a
+  // measurement of it. A paraphrase phrased outside my force list is counted
+  // nowhere — including, by construction, in this comment. The class stays
+  // open and is carried as PARA-1 with a non-detector method.
   silent: [
     "`plugin.json` cannot override these locations or contain inline component configuration.",
     "A change to either schema requires a new specification release.",
