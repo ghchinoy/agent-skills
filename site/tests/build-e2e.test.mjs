@@ -556,6 +556,15 @@ async function perturbedHtml() {
   return out;
 }
 
+// WHAT THIS CONTROL'S POPULATION IS, AND WHAT IT IS NOT. Read this before citing
+// it. It is exhaustive over THE STRING EXPORTS OF site.config.mjs — one file. It
+// is NOT exhaustive over the risk that motivated it, which is repository
+// identity, and repository identity does not live in one file: plugin.json's
+// `repository` field is a second source of it, outside site/ entirely, and was
+// found by this very control rather than covered by it. A filter is a population
+// claim, so treating "the registry is exhaustive" as "repo identity is covered"
+// is a category error, and a false belief about a control is worse than no
+// control because no control is at least visible.
 test("E2E: the perturbation registry is exhaustive over site.config.mjs", async () => {
   // (d). Without this the control covers whichever constants someone thought of,
   // and a NEW site-wide constant — the most likely future addition to that file —
