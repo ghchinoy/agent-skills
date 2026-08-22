@@ -280,7 +280,7 @@ test("the resource inventory distinguishes 'no such directory' from 'empty direc
   assert.deepEqual(
     author.resources.assets.map((a) => `${a.name}:${a.kind}`),
     ["README.md:file", "example-bundle:directory"],
-    "assets/ must be inventoried at depth 1: one file and one DIRECTORY, never 11 pages",
+    "assets/ must be inventoried at depth 1: one file and one DIRECTORY, never a page per file inside the bundle",
   );
 });
 
