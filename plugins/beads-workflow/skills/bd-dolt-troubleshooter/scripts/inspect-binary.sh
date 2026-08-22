@@ -103,15 +103,19 @@ info "Diagnostics & Recommendations:"
 if [ "$COUNT" -gt 1 ]; then
   red "  [WARN] Multiple 'bd' binaries exist on your system."
   if [ -f "$HOME/go/bin/bd" ] && [ "$ACTIVE_BIN" != "$HOME/go/bin/bd" ]; then
-    yellow "  Upgrade Trap Detected:"
-    yellow "  Your active binary ($ACTIVE_BIN) takes precedence over ~/go/bin/bd in your PATH."
-    yellow "  When you execute 'go install github.com/steveyegge/beads/cmd/bd@main', the updated"
-    yellow "  binary lands in ~/go/bin/bd, leaving your active binary stale."
-    printf "\n"
-    bold "  To permanently fix this so 'go install' auto-updates your active binary:"
-    green "    ln -sf \"$HOME/go/bin/bd\" \"$ACTIVE_BIN\" && hash -r"
-    bold "  Or if ~/go/bin is already in your PATH, remove the shadowed copy:"
-    green "    rm \"$ACTIVE_BIN\" && hash -r"
+    if [ -L "$ACTIVE_BIN" ] && [ "$(realpath "$ACTIVE_BIN" 2>/dev/null || true)" = "$(realpath "$HOME/go/bin/bd" 2>/dev/null || true)" ]; then
+      green "  ✓ Active binary is symlinked to ~/go/bin/bd. 'go install' directly updates it."
+    else
+      yellow "  Upgrade Trap Detected:"
+      yellow "  Your active binary ($ACTIVE_BIN) takes precedence over ~/go/bin/bd in your PATH."
+      yellow "  When you execute 'go install github.com/steveyegge/beads/cmd/bd@main', the updated"
+      yellow "  binary lands in ~/go/bin/bd, leaving your active binary stale."
+      printf "\n"
+      bold "  To permanently fix this so 'go install' auto-updates your active binary:"
+      green "    ln -sf \"$HOME/go/bin/bd\" \"$ACTIVE_BIN\" && hash -r"
+      bold "  Or if ~/go/bin is already in your PATH, remove the shadowed copy:"
+      green "    rm \"$ACTIVE_BIN\" && hash -r"
+    fi
   fi
   printf "\n"
   yellow "  Multi-Agent Rule: When multiple machines or autonomous agents access the same Dolt"

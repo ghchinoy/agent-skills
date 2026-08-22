@@ -91,6 +91,10 @@ ALL_BINS="$(which -a bd 2>/dev/null | sort -u || echo "$COMPILED_BIN")"
 
 for bin in $ALL_BINS; do
     if [ "$bin" != "$COMPILED_BIN" ]; then
+        if [ "$(realpath "$bin" 2>/dev/null || true)" = "$(realpath "$COMPILED_BIN" 2>/dev/null || true)" ]; then
+            echo "    Symlink to primary binary: $bin (up-to-date)"
+            continue
+        fi
         echo "    Synchronizing shadowed binary: $bin <- $COMPILED_BIN"
         if [ -w "$bin" ] || [ -w "$(dirname "$bin")" ]; then
             cp -f "$COMPILED_BIN" "$bin"
