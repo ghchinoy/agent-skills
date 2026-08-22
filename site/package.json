@@ -7,8 +7,8 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "astro build",
-    "dev": "astro dev",
+    "build": "node scripts/prepare-assets.mjs && astro build",
+    "dev": "node scripts/prepare-assets.mjs && astro dev",
     "preview": "astro preview",
     "astro": "astro",
     "typecheck": "astro check",

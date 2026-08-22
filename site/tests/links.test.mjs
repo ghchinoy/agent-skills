@@ -25,6 +25,7 @@ import {
   dist,
   distContentPages,
   distHtmlFiles,
+  entitledSources,
   read,
   repoRoot,
 } from "./_helpers.mjs";
@@ -112,14 +113,29 @@ test("AC5 control: the detector fires on an unrewritten target", () => {
   assert.equal(raw(ok).length, 0, "the href detector fires on a legitimate code-span label");
 });
 
-test("0 broken links: every internal href in dist resolves to a built file", async () => {
+/**
+ * THE WIDE POPULATION — every `<a href>` on every HTML file in dist, chrome and
+ * sidebars and the 404 included.
+ *
+ * Measured once and memoised, so the tests below can each assert one figure
+ * without any of them depending on another having run first. An earlier draft
+ * of the Advisory 2 split had the comparison test read a value the crawl test
+ * left behind, which is a test-ordering dependency wearing a shared-measurement
+ * costume: it passes today and reports a confusing failure the day the runner
+ * reorders or one test is run alone.
+ */
+let wideCache = null;
+async function widePopulation() {
+  if (wideCache) return wideCache;
   const files = await distHtmlFiles();
   const broken = [];
+  let crawled = 0;
   for (const file of files) {
     const html = await read(file);
     const from = relative(dist, file).split("\\").join("/");
     for (const raw of hrefsIn(html)) {
       if (isExternal(raw)) continue;
+      crawled += 1;
       const href = toSitePath(raw);
       const [path] = href.split("#");
       if (isErrorDocCanonical(from, path, html)) continue;
@@ -135,7 +151,101 @@ test("0 broken links: every internal href in dist resolves to a built file", asy
       if (!resolvesInDist(path)) broken.push(`${from} -> ${href}`);
     }
   }
+  wideCache = { files, broken, crawled };
+  return wideCache;
+}
+
+test("0 broken links: every internal href in dist resolves to a built file", async () => {
+  // THE POPULATION THIS ZERO IS OVER, stated here rather than inferred.
+  //
+  // Report §AC6 published "0 broken of 255". The 255 is a real figure but it is
+  // a DIFFERENT population: internal `<a href>` inside `<main>` over the 58
+  // content pages. This crawl is much wider. Reporting the narrow denominator
+  // beside the wide numerator is a standard 5 defect even though it understates
+  // the work done (review, Advisory 7; self-reported as addendum finding (d)).
+  // Both numbers are still measured in this file, so neither can be quoted
+  // without the other.
+  const { files, broken, crawled } = await widePopulation();
   assert.deepEqual(broken, [], `broken internal links:\n${broken.join("\n")}`);
+  assert.equal(files.length, 59, `crawled ${files.length} HTML files, not 59`);
+  assert.ok(
+    crawled > 2000,
+    `only ${crawled} internal <a href> across ${files.length} files — this zero is over a ` +
+      `far smaller population than the crawl is supposed to reach`,
+  );
+});
+
+// ── THE NARROW POPULATION, SPLIT ACROSS TESTS SO NO FIGURE MASKS ANOTHER ─────
+//
+// Round 2, Advisory 2: all six AC6 figures used to share one `test()`. A
+// planted third in-page fragment turned the 257 count assertion red, and the
+// fragment-set `deepEqual` on the next line NEVER RAN. Detection was
+// unaffected, but the PRINTED SET is the informative assertion and it was
+// masked precisely whenever the count moved — which is the more fragile of the
+// two. Splitting costs one shared measurement, memoised below, and buys a
+// failure report that names every figure that actually moved.
+//
+// The decomposition itself: the published 255 and the reviewer's independently
+// reproduced 255 are both right, and both are one definition short. Internal
+// `<a href>` inside `<main>` over the 58 content pages is 257. Two of those are
+// PURE FRAGMENTS — in-page anchors that resolve to no file and that the wide
+// crawl skips at `path === ""`. 257 − 2 = 255. So the quoted denominator was
+// silently "links that resolve to a file", and the difference sat inside the
+// agreement of two instruments that never stated it.
+
+/** The `<main>`-scoped population, measured once and shared by the tests below. */
+let narrowCache = null;
+async function narrowPopulation() {
+  if (narrowCache) return narrowCache;
+  const pages = await distContentPages();
+  const internal = [];
+  for (const p of pages) {
+    for (const raw of hrefsIn(mainOf(p.html))) {
+      if (!isExternal(raw)) internal.push({ route: p.route, raw });
+    }
+  }
+  narrowCache = { pages, internal, fragments: internal.filter((x) => x.raw.startsWith("#")) };
+  return narrowCache;
+}
+
+test("AC6 narrow population: the in-page anchor SET, printed not counted", async () => {
+  // FIRST, and in its own test, because it is the assertion a reader learns
+  // from. Standard 27: a third anchor appearing changes a named list, not just
+  // a total.
+  const { fragments } = await narrowPopulation();
+  assert.deepEqual(
+    fragments.map((x) => `${x.route} ${x.raw}`),
+    [
+      "plugins/okf-authoring/okf-author #cli-is-opportunistic-never-required",
+      "plugins/okf-authoring/okf-validate #prefer-a-validator-fall-back-by-hand",
+    ],
+    "the in-page anchor set changed; the 257/255 decomposition is stale",
+  );
+});
+
+test("AC6 narrow population: the three load-bearing counts", async () => {
+  const { pages, internal, fragments } = await narrowPopulation();
+  const { crawled } = await widePopulation();
+  assert.equal(pages.length, 58, `${pages.length} content pages, not 58`);
+  assert.equal(internal.length, 257, `internal <a href> inside <main> is ${internal.length}, not 257`);
+  assert.equal(
+    internal.length - fragments.length,
+    255,
+    `file-resolving internal <a href> inside <main> is ${internal.length - fragments.length}, ` +
+      `not the 255 AC6 published. The three load-bearing figures are: ` +
+      `${crawled} (what the 0-broken-links zero is actually over), ` +
+      `${internal.length} (all internal links in <main>), and 255 (those of them that name a file).`,
+  );
+});
+
+test("AC6: the wide and narrow populations have not collapsed into one", async () => {
+  const { internal } = await narrowPopulation();
+  const { crawled } = await widePopulation();
+  assert.ok(
+    crawled > internal.length,
+    `the wide crawl (${crawled}) is not wider than the <main>-scoped count (${internal.length}), ` +
+      `so the two populations AC6 exists to distinguish have collapsed into one`,
+  );
 });
 
 test("0 broken links control: a fabricated href is caught by the same resolver", () => {
@@ -204,7 +314,14 @@ test("0 broken assets: the favicon every page references is actually shipped", a
     );
     referenced += 1;
   }
-  assert.equal(rendered, 6, "expected 5 content pages plus the 404 to be rendered");
+  // RE-POINTED IN PHASE 3: the literal 6 was "the 5 content pages plus the
+  // 404". The claim is unchanged — EVERY rendered document carries exactly one
+  // favicon reference and it resolves — but the population is now counted
+  // rather than typed, so a page added without a favicon cannot pass by being
+  // outside a hardcoded total.
+  const expected = (await distContentPages()).length + 1;
+  assert.equal(rendered, expected, `expected every content page plus the 404 to be rendered`);
+  assert.ok(rendered > 1, "only one document rendered — this check is nearly vacuous");
   assert.equal(referenced, rendered);
 });
 
@@ -275,50 +392,71 @@ test("off-site links point at the real repository, at a pinned ref", async () =>
   // place the site sends a reader off-site. They must be shaped correctly, and
   // must not be silently pointing at some other repo.
   const pages = await distContentPages();
-  const gh = new Set();
+  const gh = [];
   for (const p of pages) {
     for (const href of hrefsIn(mainOf(p.html))) {
-      if (href.startsWith("https://github.com/")) gh.add(href);
+      if (href.startsWith("https://github.com/")) gh.push({ route: p.route, href });
     }
   }
-  assert.ok(gh.size > 0, "no GitHub source links were rendered at all");
+  assert.ok(gh.length > 0, "no GitHub source links were rendered at all");
 
   // Every off-site link is either MINTED by the build (a source permalink,
-  // which must point at this repository at the pinned ref) or DECLARED in the
-  // repo (plugin.json's author.url and repository fields, which must appear
-  // byte-identically and must not be invented). Nothing else is allowed.
-  const manifest = JSON.parse(
-    await readFile(join(repoRoot, "plugins", PLUGIN, "plugin.json"), "utf8"),
-  );
-  const declaredUrls = new Set(
-    JSON.stringify(manifest)
-      .match(/https?:\/\/[^"\\]+/g)
-      ?.map((u) => u.replace(/\/$/, "")) ?? [],
-  );
-
-  for (const href of gh) {
-    if (/\/(blob|tree)\//.test(href)) {
-      assert.ok(
-        href.startsWith("https://github.com/ghchinoy/agent-skills/"),
-        `minted source link points at an unexpected repository: ${href}`,
-      );
+  // which must point at this repository at the pinned ref) or PRESENT IN THE
+  // PAGE'S OWN SOURCES (plugin.json's author.url and repository fields; a URL
+  // written in a lifted README or CONTRIBUTING section), in which case it must
+  // appear byte-identically and must not be invented. Nothing else is allowed.
+  //
+  // RE-POINTED IN PHASE 3, AND STRENGTHENED. The declared set used to be built
+  // from ONE plugin's manifest and applied to every page, which at fan-out
+  // would have let any plugin's URL excuse a link on any other plugin's page.
+  // It is now resolved PER PAGE against `entitledSources()`, so a URL is
+  // allowed only where its own source says it. That is what surfaced the new
+  // case: https://github.com/vercel-labs/skills is on /about/install/ because
+  // the README's install section links it, and on no other page.
+  let minted = 0;
+  let sourced = 0;
+  // A MINTED link is one this build constructed: it points into THIS
+  // repository, at a blob or tree. Phase 3 had to add the repository test to
+  // that definition, because a blob URL is not by itself a sign the build made
+  // it — plugins/agent-plugin-authoring's SKILL.md body links
+  // github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md, which
+  // is an author's citation of another project's file. It goes down the
+  // source-attribution branch, where it is checked against the document that
+  // wrote it. A genuinely misminted link — ours, wrong ref — still fails the
+  // ref assertion, and a minted link at an unexpected repository now fails the
+  // attribution branch instead, because no source of that page would contain
+  // it.
+  const OURS = "https://github.com/ghchinoy/agent-skills/";
+  for (const { route, href } of gh) {
+    if (href.startsWith(OURS) && /\/(blob|tree)\//.test(href)) {
       assert.match(
         href,
         /\/(blob|tree)\/main\//,
         `GitHub link is not a blob/tree at the pinned ref: ${href}`,
       );
+      minted += 1;
       continue;
     }
+    const bare = href.replace(/\/$/, "");
+    const sources = await entitledSources(route);
     assert.ok(
-      declaredUrls.has(href.replace(/\/$/, "")),
-      `off-site link ${href} is neither a minted source permalink nor a URL declared in plugin.json`,
+      sources.some((s) => s.includes(bare)),
+      `off-site link ${href} on /${route}/ is neither a minted source permalink nor a URL ` +
+        `written in any source that page renders`,
     );
+    sourced += 1;
   }
+  // Both branches must have run, or one of them is untested.
+  assert.ok(minted > 0, "no minted permalink was rendered — that branch is vacuous");
+  assert.ok(sourced > 0, "no source-declared off-site link was rendered — that branch is vacuous");
   // The example-bundle DIRECTORY link is a /tree/ URL, not /blob/ — an I5
   // detail that is wrong in a way nothing else would catch.
-  const bundle = [...gh].find((h) => h.includes("example-bundle"));
+  const bundle = gh.find(({ href }) => href.includes("example-bundle"));
   assert.ok(bundle, "the assets/example-bundle/ link was not rendered");
-  assert.match(bundle, /\/tree\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/);
+  assert.match(
+    bundle.href,
+    /\/tree\/main\/plugins\/okf-authoring\/skills\/okf-author\/assets\/example-bundle\/?$/,
+  );
 });
 
 // ── helpers ─────────────────────────────────────────────────────────────────

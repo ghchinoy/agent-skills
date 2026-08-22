@@ -1,0 +1,103 @@
+---
+// SiteIndex.astro — the plugin list on `/` and the skill list on `/skills/`.
+//
+// WHY THESE LISTS ARE A COMPONENT AND NOT GENERATED MARKDOWN.
+//
+// Same reason MarkdownContent.astro gives for EntryMeta, one step further on. A
+// declared `description` is a YAML string, not markdown, and this catalog's
+// descriptions are full of backticks (`artist.json`, `.windowResizability`),
+// asterisks and underscores. Splice one into a generated markdown string and
+// the renderer reinterprets it: the reader sees styled text where the author
+// wrote punctuation, and on a bad day sees nothing at all where an unclosed
+// span swallowed the rest of the line. Here the string reaches the DOM as a
+// text node, so what renders is what was declared, byte for byte.
+//
+// Every string below is declared or derived, and nothing is composed:
+//   title        the skill page's title (its own H1, or its `name` — see the
+//                loader) — declared
+//   name         the Agent Skills `name`, which is what `npx skills add`
+//                takes — declared
+//   description  the skill's own `description` — declared
+//   plugin       the plugin that ships it, linked — derived, and labelled
+//   counts       `.length` of what the build enumerated — derived, and labelled
+
+interface Props {
+  entry: any;
+}
+const { entry } = Astro.props;
+const lists = entry?.data?._page?.lists;
+const plugins = lists?.plugins;
+const skills = lists?.skills;
+---
+
+{
+  plugins && (
+    <ol class="site-index" data-site-index="plugins">
+      {plugins.map((p: any) => (
+        <li data-index-entry>
+          <a href={p.href} data-entry-title>
+            {p.displayName ?? p.name}
+          </a>
+          <code class="slug" data-entry-name>{p.name}</code>
+          <span class="counts">
+            {/* Derived, and said to be: these are tallies of what the build
+                enumerated, not anything a manifest declares. */}
+            {p.skillCount} {p.skillCount === 1 ? "skill" : "skills"}
+            {p.referenceCount > 0 && (
+              <>
+                {" · "}
+                {p.referenceCount} {p.referenceCount === 1 ? "reference" : "references"}
+              </>
+            )}
+          </span>
+          <span class="entry-desc" data-entry-description>{p.description}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+{
+  skills && (
+    <ol class="site-index" data-site-index="skills">
+      {skills.map((s: any) => (
+        <li data-index-entry>
+          <a href={s.href} data-entry-title>
+            {s.title}
+          </a>
+          <code class="slug" data-entry-name>{s.name}</code>
+          <span class="counts">
+            from <a href={s.pluginHref}>{s.pluginDisplayName ?? s.plugin}</a>
+          </span>
+          <span class="entry-desc" data-entry-description>{s.description}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+<style>
+  .site-index {
+    padding-inline-start: 1.4rem;
+    margin-block: 1rem 2rem;
+  }
+  .site-index li {
+    margin-block: 0.9rem;
+  }
+  .site-index .slug {
+    margin-inline-start: 0.5rem;
+    font-size: var(--sl-text-xs);
+  }
+  .site-index .counts {
+    margin-inline-start: 0.5rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .site-index .entry-desc {
+    display: block;
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+    margin-block-start: 0.15rem;
+  }
+</style>

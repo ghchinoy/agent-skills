@@ -19,18 +19,11 @@ export const REPO_URL = "https://github.com/ghchinoy/agent-skills";
 /** The ref those blob/tree links point at. */
 export const REPO_REF = "main";
 
-/**
- * Phase 1 scope: the ONE plugin this slice renders (proposal §13 Phase 1).
- *
- * `okf-authoring` was chosen as the hardest plugin in the repository, not the
- * easiest: it is the only one with a plugin-level `references/` directory and
- * links that escape the skill root (D3); it carries the
- * `assets/example-bundle/` glob trap of 11 markdown files (I5); its two skill
- * descriptions are the longest in the repo at 755 and 790 characters (I9);
- * both its skills declare a sequence-valued `metadata.sources` (D1); and its
- * `SKILL.md` puts H1 headings inside fenced code blocks (I7).
- *
- * Deleting this constant renders all ten declared plugins — the loader has no
- * other phase-specific behaviour.
- */
-export const PHASE_1_PLUGINS = ["okf-authoring"];
+// Phase 1 shipped one plugin behind a `PHASE_1_PLUGINS` constant, whose comment
+// promised that "deleting this constant renders all ten declared plugins — the
+// loader has no other phase-specific behaviour". Phase 3 deleted it, and the
+// promise held: the loader's `plugins` scope option is now simply not passed,
+// so `enumerate()` returns every plugin `marketplace.json` declares. The option
+// itself is kept — it narrows WHICH declared plugins are built and never
+// changes HOW they are discovered — because tests use it to build a scoped
+// fixture, and because the next repo to adopt this loader may want it.

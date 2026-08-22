@@ -16,6 +16,7 @@
 //   references/<f>.{swift,sql,...}  -> GitHub blob URL      (not routed)
 //   scripts/<f>                     -> GitHub blob URL      (not routed)
 //   assets/<f>            (link)    -> GitHub blob URL
+//   assets/<f>            (image)   -> /<base>/skill-assets/<p>/<s>/<f>
 //   assets/<dir>/         (link)    -> GitHub tree URL
 //   sibling <f>.md inside a ref     -> sibling reference page URL
 //   http(s):, mailto:, tel:, #frag  -> untouched
@@ -35,18 +36,22 @@
 
 /**
  * @typedef {object} LinkContext
- * @property {"skill"|"reference"} kind
+ * @property {"skill"|"reference"|"site"} kind
  * @property {string} base            Astro `base`, e.g. "/agent-skills"
  * @property {string} blobBase        e.g. "https://github.com/o/r/blob/main"
  * @property {string} treeBase        e.g. "https://github.com/o/r/tree/main"
  * @property {string} plugin          plugin slug
- * @property {string} [skill]         skill slug (kind === "skill")
+ * @property {string} [skill]         skill slug. Set for a SKILL.md body, and
+ *   for a SKILL-LEVEL reference body; absent for a plugin-level reference
+ *   body, which is what distinguishes the two reference scopes.
  * @property {string} pluginRepoPath  e.g. "plugins/okf-authoring"
  * @property {Set<string>} routedPluginRefs   plugin-level reference slugs
  * @property {Set<string>} routedSkillRefs    this skill's routed reference slugs
  * @property {Set<string>} routedSkills       sibling skill slugs in this plugin
  * @property {object|null} resources          depth-1 inventory for this skill
  * @property {string} sourceRepoPath          for error and advisory messages
+ * @property {Set<string>} [routedPages]     every route this build emits, as
+ *   base-prefixed paths with a trailing slash. Required for `kind: "site"`.
  * @property {(a: object) => void} note       advisory sink
  */
 
@@ -83,8 +88,24 @@ export function resolveTarget(target, at, ctx) {
   if (target === "" ) throw fail(target, ctx, line, "empty target.");
   if (EXTERNAL.test(target)) return target;
   if (target.startsWith("#")) return target; // in-page anchor
-  // Site-absolute. Not passed through — see the header note.
+  // Site-absolute. Not passed through — see the header note. The ONE
+  // exception is a site page's own base-prefixed route, which this build wrote
+  // itself from the base constant and which is checked against the routes the
+  // build is emitting.
   if (target.startsWith("/")) {
+    if (ctx.kind === "site") {
+      const [routePath, routeAnchor] = splitAnchor(target);
+      if (ctx.routedPages.has(routePath)) return `${routePath}${routeAnchor}`;
+      throw fail(
+        target,
+        ctx,
+        line,
+        `this site emits no page at "${routePath}". A site page's internal ` +
+          `links are checked against the routes the build produced, so a link ` +
+          `to a page that does not exist stops the build instead of shipping ` +
+          `a 404 for a reader to find. Known routes: ${ctx.routedPages.size}.`,
+      );
+    }
     throw fail(
       target,
       ctx,
@@ -99,8 +120,47 @@ export function resolveTarget(target, at, ctx) {
   const [rawPath, anchor] = splitAnchor(target);
   const path = rawPath.replace(/^\.\//, "");
 
+  if (ctx.kind === "site") return resolveFromSitePage(path, anchor, target, at, ctx);
   if (ctx.kind === "reference") return resolveFromReference(path, anchor, target, at, ctx);
   return resolveFromSkill(path, anchor, target, at, ctx);
+}
+
+/**
+ * A site page — the landing page, /skills/, and the three /about/ pages.
+ *
+ * These bodies are part site-authored and part LIFTED from `README.md` and
+ * `CONTRIBUTING.md`, and the two halves need opposite treatment:
+ *
+ *  - The site-authored half writes internal links as `<base>/…`, already
+ *    base-prefixed by this build from the one constant that holds the base. So
+ *    a site-absolute target is legal here and ONLY here, and it is checked
+ *    against the set of routes the build is actually emitting — an internal
+ *    link to a page that does not exist is a build error, not a 404 for a
+ *    reader to find.
+ *  - The lifted half is somebody else's markdown, written to be read inside a
+ *    git checkout. A relative target in it (`LICENSE`, `docs/x.md`) means a
+ *    path in the repository, and there is no rule here for turning one into a
+ *    URL, so it stops the build. That is Phase 1's posture for the image
+ *    branch repeated: a rule nothing exercises is a rule nothing has proven,
+ *    and today every link in every lifted region is an absolute http(s) URL —
+ *    measured, 5 of 5. Writing a speculative blob-URL rule instead would ship
+ *    an unproven path and hide the day the README starts linking sideways.
+ */
+function resolveFromSitePage(path, anchor, target, at, ctx) {
+  const { line } = at;
+  // Site-absolute never reaches here: resolveTarget throws on a leading "/"
+  // before the split. So the base-prefixed case is handled there, not here —
+  // see the `ctx.routedPages` branch.
+  throw fail(
+    target,
+    ctx,
+    line,
+    `a site page body may contain only absolute http(s) links, in-page ` +
+      `anchors, and this site's own routes written as "${ctx.base}/…". ` +
+      `"${target}" is a repository-relative path, and there is no rule for ` +
+      `turning one into a URL on a page that is not itself inside the ` +
+      `repository tree.`,
+  );
 }
 
 function resolveFromSkill(path, anchor, target, at, ctx) {
@@ -206,20 +266,31 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
       throw fail(target, ctx, line, `${skillRepoDir}/assets/ has no entry named "${first}".`);
     }
     if (isImage) {
-      // §6.5 routes an IMAGE asset through public/skill-assets/, which needs
-      // the prepare-assets copy step. Phase 1's scope (okf-authoring) contains
-      // no image links, so that step is ABSENT rather than stubbed — a copy
-      // path nothing exercises is a path nothing has proven. This throws
-      // loudly if the assumption ever stops holding.
-      throw fail(
-        target,
-        ctx,
-        line,
-        `image assets require the prepare-assets copy step described in ` +
-          `proposal §6.5, which is out of Phase 1 scope (no SKILL.md in ` +
-          `okf-authoring embeds an image). Implement it before rendering a ` +
-          `plugin that does.`,
-      );
+      // §6.5 routes an IMAGE asset through public/skill-assets/, because an
+      // <img src> must resolve to something the browser can fetch and a GitHub
+      // blob URL is an HTML page, not an image. Phase 1 left this branch as a
+      // hard error rather than a stub, on the grounds that a copy path nothing
+      // exercises is a path nothing has proven. Phase 3 renders
+      // beads-workflow, whose bd-dolt-troubleshooter/SKILL.md embeds
+      // assets/process-flow.webp, so the branch is now exercised and the copy
+      // step exists: site/scripts/prepare-assets.mjs, which runs before
+      // `astro build` and populates public/skill-assets/<p>/<s>/.
+      //
+      // The two sides are kept in step by construction, not by discipline: the
+      // script decides WHAT to copy by running this same `rewriteLinks` parser
+      // over the same post-H1-strip body and collecting exactly the targets
+      // that reach exactly this branch. tests/assets.test.mjs then checks the
+      // rendered <img src> values against the files actually in dist/.
+      if (entry.kind === "directory" && rest === first) {
+        throw fail(
+          target,
+          ctx,
+          line,
+          `an image link cannot point at a DIRECTORY ` +
+            `(${skillRepoDir}/assets/${first}).`,
+        );
+      }
+      return `${base}/skill-assets/${plugin}/${skill}/${rest}${anchor}`;
     }
     const isDir = rest.endsWith("/") || (entry.kind === "directory" && rest === first);
     const cleanRest = rest.replace(/\/$/, "");
@@ -237,15 +308,25 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
 
 function resolveFromReference(path, anchor, target, at, ctx) {
   const { line } = at;
-  const { base, plugin } = ctx;
+  const { base, plugin, skill } = ctx;
+
+  // A reference body is resolved in ITS OWN scope. `ctx.skill` is what says
+  // which: set for a skill-level reference
+  // (plugins/<p>/skills/<s>/references/<f>.md), absent for a plugin-level one
+  // (plugins/<p>/references/<f>.md). The two directories are different
+  // directories, so a bare sibling basename means a different file in each,
+  // and there is no fallback from one to the other — resolving a skill-level
+  // link against the plugin-level set would silently publish a link to a
+  // different document that happens to share a filename.
+  const scoped = skill === undefined
+    ? { routed: ctx.routedPluginRefs, prefix: `${base}/plugins/${plugin}/references` }
+    : { routed: ctx.routedSkillRefs, prefix: `${base}/plugins/${plugin}/${skill}/references` };
 
   // Sibling reference files link to each other by bare basename.
   const m = /^([^/]+)\.md$/i.exec(path);
   if (m) {
     const slug = m[1];
-    if (ctx.routedPluginRefs.has(slug)) {
-      return `${base}/plugins/${plugin}/references/${slug}/${anchor}`;
-    }
+    if (scoped.routed.has(slug)) return `${scoped.prefix}/${slug}/${anchor}`;
     throw fail(target, ctx, line, `no sibling reference page named "${slug}".`);
   }
 
@@ -253,6 +334,6 @@ function resolveFromReference(path, anchor, target, at, ctx) {
     target,
     ctx,
     line,
-    `no §6.5 rule matches this form from a plugin-level reference body.`,
+    `no §6.5 rule matches this form from a reference body.`,
   );
 }

@@ -14,13 +14,17 @@ import { parse as parseYaml } from "yaml";
 
 import {
   BASE,
-  EXPECTED_ROUTES,
   PLUGIN,
+  entitledSources,
+  sourceRoutes,
   decodeEntities,
+  dist,
   distContentPages,
   elementsWithAttr,
+  rel,
   repoRoot,
   toText,
+  walk,
 } from "./_helpers.mjs";
 
 const PLUGIN_DIR = join(repoRoot, "plugins", PLUGIN);
@@ -49,48 +53,127 @@ function mainOf(html) {
 
 // ── AC2 ─────────────────────────────────────────────────────────────────────
 
-test("AC2: dist contains exactly 5 content pages — 1 plugin, 2 skills, 2 references", async () => {
+// RE-POINTED IN PHASE 3, NOT WEAKENED. This was "dist contains exactly 5
+// content pages", against a route list hand-written in _helpers.mjs. The
+// expectation is now DERIVED from marketplace.json and the plugin trees by
+// `sourceRoutes()`, which re-implements §7.1 discovery rather than importing
+// the loader's. Same shape of claim — set equality plus an exact count — over
+// the whole catalog instead of a tenth of it.
+test("AC2: dist contains exactly the pages the SOURCE TREE declares, and no others", async () => {
   const pages = await distContentPages();
+  const { routes } = await sourceRoutes();
   assert.deepEqual(
     pages.map((p) => p.route).sort(),
-    [...EXPECTED_ROUTES].sort(),
-    "the built route set is not the five pages the slice declares",
+    [...routes].sort(),
+    "the built route set is not the set the source tree declares",
   );
-  assert.equal(pages.length, 5);
-
-  // And the five are what they claim to be, not five copies of one thing.
-  const kinds = pages.map((p) => p.route.replace(`plugins/${PLUGIN}`, "") || "(plugin)");
-  assert.deepEqual(kinds.sort(), [
-    "(plugin)",
-    "/okf-author",
-    "/okf-validate",
-    "/references/okf-v0.2-spec-summary",
-    "/references/trust-vocabulary",
-  ]);
+  // Set equality above does not catch a duplicate; this does.
+  assert.equal(pages.length, routes.length, "dist has duplicate routes");
 });
 
-test("AC2: the expected route set matches what the SOURCE TREE independently declares", async () => {
-  // Recomputed here from marketplace.json and the directory listing, so the
-  // route list in _helpers.mjs is itself under test rather than taken on faith.
-  const market = JSON.parse(
-    await readFile(join(repoRoot, ".claude-plugin", "marketplace.json"), "utf8"),
+test("AC2: the route set decomposes into the populations that produced it", async () => {
+  // Set equality proves the two lists match. It does not prove either is the
+  // right SHAPE: a derivation that found no references at all would agree with
+  // a build that rendered none. So each population is counted separately here,
+  // named, and required to be non-empty.
+  const { plugins, skills, references, routes } = await sourceRoutes();
+  const pages = await distContentPages();
+
+  const site = pages.filter((p) => p.route === "" || !p.route.startsWith("plugins/"));
+  const pluginPages = pages.filter((p) => /^plugins\/[^/]+$/.test(p.route));
+  const skillPages = pages.filter((p) => /^plugins\/[^/]+\/[^/]+$/.test(p.route));
+  const refPages = pages.filter((p) => /\/references\/[^/]+$/.test(p.route));
+
+  assert.equal(site.length, 5, "site pages: 1 landing + 1 skills index + 3 about");
+  assert.equal(pluginPages.length, plugins.length);
+  assert.equal(skillPages.length, skills.length, "skill pages");
+  assert.equal(refPages.length, references.length);
+
+  // Non-vacuity: every population is populated.
+  for (const [what, n] of Object.entries({
+    plugins: plugins.length,
+    skills: skills.length,
+    references: references.length,
+  })) {
+    assert.ok(n > 0, `the ${what} population is empty — this test proves nothing`);
+  }
+
+  // The arithmetic, written out: the parts sum to the whole with nothing left.
+  assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
+});
+
+test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 3", async () => {
+  // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
+  // one: it is a set equality against a derivation, so it stays green if the
+  // catalog grows and stays green if the derivation and the build shrink
+  // together. This is the literal, and the two live side by side on purpose —
+  // the derived one says the build agrees with the source, this one says the
+  // source is the catalog the phase was scoped against.
+  //
+  // WHEN THIS FAILS AND THE BUILD IS FINE: a plugin, skill or reference was
+  // added or removed upstream. Re-measure, change the numbers here, and say so
+  // in the commit. Do not relax it into an inequality — the whole reason it is
+  // written out is that "at least 58" would have passed on the Phase 1 slice
+  // plus any nine pages of noise.
+  const pages = await distContentPages();
+  const bucket = {
+    landing: pages.filter((p) => p.route === ""),
+    plugins: pages.filter((p) => /^plugins\/[^/]+$/.test(p.route)),
+    skills: pages.filter((p) => /^plugins\/[^/]+\/[^/]+$/.test(p.route)),
+    references: pages.filter((p) => /\/references\/[^/]+$/.test(p.route)),
+    skillsIndex: pages.filter((p) => p.route === "skills"),
+    about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
+  };
+  const expected = { landing: 1, plugins: 10, skills: 23, references: 20, skillsIndex: 1, about: 3 };
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
+    expected,
+    "the page composition moved",
   );
-  const entry = market.plugins.find((p) => p.name === PLUGIN);
-  assert.ok(entry, `${PLUGIN} is not listed in marketplace.json`);
 
-  const skillDirs = (await readdir(join(PLUGIN_DIR, "skills"), { withFileTypes: true }))
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
-  const refFiles = (await readdir(join(PLUGIN_DIR, "references"), { withFileTypes: true }))
-    .filter((d) => d.isFile() && d.name.endsWith(".md"))
-    .map((d) => d.name.replace(/\.md$/, ""));
+  // The buckets PARTITION the artifact: every page landed in exactly one, so
+  // the six numbers above cannot sum to 58 by double-counting or by leaving a
+  // page uncounted. A `references` route is also matched by nothing else here
+  // because the skill pattern is anchored to two segments — but that is an
+  // argument, and this is the measurement of it.
+  const counted = new Map();
+  for (const [name, ps] of Object.entries(bucket)) {
+    for (const p of ps) {
+      const prev = counted.get(p.route);
+      assert.equal(prev, undefined, `${p.route} counted as both ${prev} and ${name}`);
+      counted.set(p.route, name);
+    }
+  }
+  const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
+  assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
+  assert.equal(pages.length, 58, `dist holds ${pages.length} content pages, not 58`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 58);
+});
 
-  const expected = [
-    `plugins/${PLUGIN}`,
-    ...skillDirs.map((s) => `plugins/${PLUGIN}/${s}`),
-    ...refFiles.map((r) => `plugins/${PLUGIN}/references/${r}`),
-  ].sort();
-  assert.deepEqual(expected, [...EXPECTED_ROUTES].sort());
+test("AC1 control: the 58 is content pages, and dist holds one more file than that", async () => {
+  // The disclosure that goes with the number. `find dist -name '*.html'`
+  // returns 59, and Astro's own build log says "59 page(s) built": the extra
+  // is 404.html, which Starlight emits and which is not a content page. AC 1's
+  // 1 + 10 + 23 + 20 + 1 + 3 does not include it, so the counter this suite
+  // uses must exclude it — and a counter that excluded a REAL page by the same
+  // mechanism would look identical from the inside. Hence: the 404 is asserted
+  // to exist, asserted to be the ONLY difference, and asserted to be absent
+  // from the counted set.
+  const pages = await distContentPages();
+  // `rel` defaults to repoRoot; these paths are named relative to dist.
+  const html = (await walk(dist)).filter((f) => f.endsWith(".html")).map((f) => rel(f, dist));
+  assert.ok(
+    html.includes("404.html"),
+    "dist has no 404.html — Starlight stopped emitting it, so this control is stale",
+  );
+  const routes = new Set(pages.map((p) => p.route));
+  assert.ok(!routes.has("404"), "the 404 page is being counted as a content page");
+  assert.equal(
+    html.length - pages.length,
+    1,
+    `dist holds ${html.length} html files and ${pages.length} content pages; the only ` +
+      `difference should be 404.html. Extra: ${html.filter((f) => f !== "404.html" && !pages.some((p) => rel(join(dist, p.route, "index.html"), dist) === f)).join(", ")}`,
+  );
 });
 
 // ── AC3 ─────────────────────────────────────────────────────────────────────
@@ -104,49 +187,58 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
     [],
   );
 
-  // (b) The count is exactly 5. There are 8 markdown files under
-  // assets/example-bundle/ plus assets/README.md; a `**/*.md` glob would have
-  // produced 14 pages here, so the count alone is a real discriminator.
-  assert.equal(pages.length, 5);
+  // (b) The count is exactly what the source tree declares. There are 8
+  // markdown files under okf-author's assets/example-bundle/ plus
+  // assets/README.md, and none of them is a route; a `**/*.md` glob would have
+  // produced nine more pages than this, so the count alone is a real
+  // discriminator. RE-POINTED: the constant 5 became the derived total, and
+  // the trap it detects is unchanged.
+  const { routes } = await sourceRoutes();
+  assert.equal(pages.length, routes.length);
   const bundleMd = await walkMd(join(PLUGIN_DIR, "skills", "okf-author", "assets"));
   assert.ok(bundleMd.length >= 8, "the glob trap is gone from the repo — retune this test");
+  assert.ok(
+    !routes.some((r) => /assets|example-bundle/.test(r)),
+    "the derived route set itself contains a bundle path",
+  );
 
-  // (c) okf_version: computed, not assumed. Which ROUTED sources quote it is
-  // read out of the source files right here; the proposal's "two bodies" is a
-  // known erratum (three routed sources quote it, not two — see the report).
-  const routed = {
-    [`plugins/${PLUGIN}/okf-author`]: SKILL_MD("okf-author"),
-    [`plugins/${PLUGIN}/okf-validate`]: SKILL_MD("okf-validate"),
-    [`plugins/${PLUGIN}/references/okf-v0.2-spec-summary`]: REF_MD("okf-v0.2-spec-summary.md"),
-    [`plugins/${PLUGIN}/references/trust-vocabulary`]: REF_MD("trust-vocabulary.md"),
-  };
+  // (c) okf_version: computed, not assumed, and now over ALL 58 pages rather
+  // than the five of the Phase-1 slice. `entitledSources()` models, in this
+  // file, what each ROUTE is allowed to quote — the SKILL.md behind a skill
+  // page, the manifest and the skill descriptions behind a plugin page, the
+  // lifted repo document behind an about page — and a page renders the token
+  // legitimately only if one of its own sources contains it. 53 of the 58
+  // pages have no entitlement at all, so this is a real two-sided comparison
+  // and not a permission slip.
   const legitimate = [];
-  for (const [route, file] of Object.entries(routed)) {
-    if ((await readFile(file, "utf8")).includes("okf_version")) legitimate.push(route);
+  for (const p of pages) {
+    const sources = await entitledSources(p.route);
+    if (sources.some((s) => s.includes("okf_version"))) legitimate.push(p.route);
   }
-  // The plugin page carries its skills' descriptions verbatim, so it inherits
-  // the token from them. Derived here from the frontmatter rather than
-  // hardcoded, so the entitlement is earned by the data, not asserted.
-  const inherited = [];
-  for (const skill of ["okf-author", "okf-validate"]) {
-    const { data } = await source(SKILL_MD(skill));
-    if (data.description.includes("okf_version")) inherited.push(skill);
-  }
-  if (inherited.length > 0) legitimate.push(`plugins/${PLUGIN}`);
+  legitimate.sort();
 
+  // The entitled set is small, and named, so a change to it is visible in a
+  // diff rather than absorbed silently. The proposal's "two bodies" is a known
+  // erratum: three routed okf-authoring sources quote it, not two.
   assert.deepEqual(
-    legitimate.sort(),
+    legitimate,
     [
-      `plugins/${PLUGIN}`,
-      `plugins/${PLUGIN}/okf-author`,
-      `plugins/${PLUGIN}/okf-validate`,
-      `plugins/${PLUGIN}/references/okf-v0.2-spec-summary`,
+      "plugins/okf-authoring",
+      "plugins/okf-authoring/okf-author",
+      "plugins/okf-authoring/okf-validate",
+      "plugins/okf-authoring/references/okf-v0.2-spec-summary",
+      "skills",
     ],
     "the set of pages entitled to the okf_version token changed",
   );
-  // trust-vocabulary quotes it nowhere, so the check below has a page that
+  // trust-vocabulary quotes it nowhere, so the comparison below has pages that
   // MUST NOT contain the token — the assertion is not "every page is allowed".
   assert.ok(!legitimate.includes(`plugins/${PLUGIN}/references/trust-vocabulary`));
+  assert.equal(
+    pages.length - legitimate.length,
+    53,
+    "the number of pages forbidden the token — the real denominator of this check",
+  );
 
   const rendered = pages
     .filter((p) => decodeEntities(mainOf(p.html)).includes("okf_version"))
@@ -154,7 +246,7 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
     .sort();
   assert.deepEqual(
     rendered,
-    legitimate.sort(),
+    legitimate,
     "okf_version appears on a page whose source does not quote it — bundle content leaked in",
   );
 });

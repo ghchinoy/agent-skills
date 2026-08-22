@@ -329,7 +329,29 @@ test("R6: tsconfig.json documents exactly which files the type check covers", as
   // satisfied `raw.includes()`, leaving it in fact unchecked and the test
   // green. Adding a file to this list is the moment that hole matters most, so
   // it is closed here rather than deferred.
-  const disclosed = raw.slice(raw.indexOf("NOT CHECKED"));
+  //
+  // (c) PHASE 3 ROUND-2 REVIEW: the FYI-1 repair scoped the START and left the
+  // END at EOF, so `disclosed` ran to 93% of the file and this assertion in
+  // fact bound "the name appears somewhere below the heading" — which any later
+  // prose paragraph satisfies. Three of the nine real unchecked sources were
+  // deletable from the list block with this test still green, and they were
+  // exactly the three that shipped an explanatory paragraph in the same commit:
+  // check-live-links.mjs, prepare-assets.mjs and site-pages.mjs. Same shape as
+  // FYI-1, at the other end of the same slice, found by predicting a RED and
+  // measuring a GREEN.
+  const start = raw.indexOf("NOT CHECKED");
+  const end = raw.indexOf("That is most of the loader", start);
+  // The end marker's ABSENCE must fail loudly. `indexOf` returns -1 when it is
+  // gone, and `slice(start, -1)` would silently widen the scope back to almost
+  // the whole file — restoring the exact leak this repair closes, with no test
+  // going red. The guard is the difference between a scope that is bounded and
+  // one that is bounded until somebody rewords a sentence.
+  assert.ok(
+    end > start,
+    "the marker ending the NOT CHECKED list block is gone from tsconfig.json, so the " +
+      "disclosure scope would silently widen back to end-of-file",
+  );
+  const disclosed = raw.slice(start, end);
   const dirs = ["src", "scripts"];
   const sources = [];
   for (const d of dirs) {

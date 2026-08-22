@@ -10,12 +10,21 @@
 // avoided.
 //
 // EntryMeta renders ABOVE the body. `<Default>` then renders the SKILL.md body
-// itself, verbatim apart from the two transformations in the loader.
+// itself, verbatim apart from the two transformations in the loader. SiteIndex
+// renders BELOW it, and only on the two site pages that carry a list — the
+// landing page's plugins and `/skills/`'s skills — because those lists are the
+// end of their page rather than a header for it.
+//
+// Each of the three renders nothing at all when its data is absent, so this
+// file needs no branch: a skill page has no `_page.lists` and a site page has
+// no `_skill`.
 import Default from "@astrojs/starlight/components/MarkdownContent.astro";
 import EntryMeta from "./EntryMeta.astro";
+import SiteIndex from "./SiteIndex.astro";
 
 const { entry } = Astro.locals.starlightRoute;
 ---
 
 <EntryMeta entry={entry} />
 <Default><slot /></Default>
+<SiteIndex entry={entry} />

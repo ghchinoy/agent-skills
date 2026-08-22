@@ -38,7 +38,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EXPECTED_ROUTES, BASE, dist, read, siteRoot, walk } from "./_helpers.mjs";
+import { BASE, dist, distContentPages, read, siteRoot, walk } from "./_helpers.mjs";
 import { liveUrlForFile } from "../scripts/check-live-links.mjs";
 
 /**
@@ -131,7 +131,14 @@ export async function searchProblems(distDir, declaredOn, expectedPages) {
 
 test("the built search index matches what astro.config.mjs declares", async () => {
   const config = await read(join(siteRoot, "astro.config.mjs"));
-  const problems = await searchProblems(dist, searchDeclaredOn(config), EXPECTED_ROUTES.length);
+  // RE-POINTED IN PHASE 3: the expected page count was `EXPECTED_ROUTES.length`,
+  // a hand-written list of the five Phase-1 routes. It is now the number of
+  // content pages the build actually produced — which is the right denominator
+  // for this check either way, because the claim is "search covers every page
+  // the site ships", not "search covers five pages".
+  const expected = (await distContentPages()).length;
+  assert.ok(expected > 0, "no content pages were built, so this check is vacuous");
+  const problems = await searchProblems(dist, searchDeclaredOn(config), expected);
   assert.deepEqual(problems, [], `the search declaration is not honoured:\n${problems.join("\n")}`);
 });
 

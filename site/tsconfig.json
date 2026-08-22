@@ -13,9 +13,11 @@
   //                src/loaders/links.mjs
   //                src/loaders/markdown.mjs
   //                src/loaders/frontmatter.mjs
+  //                src/loaders/site-pages.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
   //                scripts/check-live-links.mjs
+  //                scripts/prepare-assets.mjs
   //                tests/*.mjs
   //
   // That is most of the loader. Verified, not assumed: a `@type {number}`
@@ -36,28 +38,64 @@
   // out and unit-tested in tests/live-links.test.mjs precisely because the type
   // checker is not watching it.
   //
-  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces 399 errors across
-  // 27 files, which are overwhelmingly missing annotations and implicit `any`
-  // under `strict` rather than latent bugs. Fixing them is real work and out of
-  // scope for Phase 2. Logged as a PHASE 5 CANDIDATE with that count so the
-  // phase can size it.
+  // PHASE 3 added two more, and both are load-bearing:
   //
-  // RE-MEASURED IN FIX ROUND 2, AND THE OLD NUMBER WAS THE FINDING. This said
-  // "204 errors (26 enumerate.mjs, 21 links.mjs, 14 markdown.mjs, 6
-  // frontmatter.mjs, 5 sidebar.mjs, the rest in tests/ and .astro)" — a Phase 1
-  // measurement quoted unchanged by a Phase 2 commit that edited the lines
-  // directly above it to ADD a file to the unchecked list. The five per-file
-  // loader figures are all still exactly right; every one of the 195 new errors
-  // is in code Phase 2 wrote. Today, by the same run:
+  //   src/loaders/site-pages.mjs   builds the five pages ABOUT the catalog,
+  //                                including the verbatim README lifts
+  //   scripts/prepare-assets.mjs   selects and copies the image assets that
+  //                                SKILL.md bodies embed, before every build
   //
-  //   scripts/check-live-links.mjs 62   tests/live-check-e2e   51
-  //   tests/workflows 39   tests/enumeration 37   src/loaders/enumerate.mjs 26
-  //   src/loaders/links.mjs 21   src/loaders/markdown.mjs 14
-  //   src/loaders/frontmatter.mjs 6   src/sidebar.mjs 5   (rest in tests/)
+  // Neither is checked, and both are consumed by src/loaders/skills.ts, which
+  // IS — so a shape mismatch at that boundary surfaces there. That is the only
+  // type coverage they have. Their behaviour is covered by
+  // tests/site-pages.test.mjs and tests/assets.test.mjs instead, for the same
+  // reason the live-link checker's is.
   //
-  // The lesson is not the arithmetic, it is that a sizing figure sitting three
-  // lines below an edit is exactly the figure nobody re-runs. Standard 2: a
-  // number is re-measured at the moment it is quoted, not inherited.
+  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
+  // overwhelmingly missing annotations and implicit `any` under `strict` rather
+  // than latent bugs. Fixing them is real work and out of scope. Logged as a
+  // PHASE 5 CANDIDATE, to be sized by running the command below at the moment
+  // the phase is scoped.
+  //
+  //   HOW TO SIZE IT (the measurement this comment used to record):
+  //   flip `checkJs` to true, run `npx astro check`, restore the file. Confirm
+  //   with `cmp` that the flip landed and the restore was byte-identical, and
+  //   that `git status --porcelain` is empty before and after.
+  //
+  // NO ERROR COUNT IS RECORDED HERE, DELIBERATELY, AND THAT IS THE FIX FOR A
+  // DEFECT THIS COMMENT COMMITTED FOUR TIMES. A per-file census used to sit at
+  // this spot. It was re-measured in Phase 2, re-measured twice in Phase 3, and
+  // went stale again in the very commit whose purpose was to correct it — each
+  // value correct on the day it was written and wrong by the next commit,
+  // because the figure counts errors in files that every phase edits.
+  //
+  // The Phase 3 round-2 review is what established the pattern rather than the
+  // instance. Its readings, quoted as that review's findings at 06d2a02 and
+  // not as properties of this tree: 23 of 26 rows still matched, and the 3 that
+  // diverged were exactly the 3 files edited after the census was taken, their
+  // deltas summing to the change in the total with no residual. Attributing
+  // them that way is what keeps them from becoming the next stale figure — a
+  // reading indexed to a moment cannot go out of date; a reading presented as a
+  // current fact can.
+  //
+  // A number that decays by construction is not documentation of a fact, it is
+  // a copy of a measurement, and the copy is what goes false. Note also which
+  // of these was the more dangerous: the total was TRUE when written, every
+  // time. A false figure is catchable by anyone who reads it against the tree.
+  // A true-but-unbound one fails silently — right today, nothing goes red the
+  // day it stops being right. So the copy is gone and the command that produces
+  // it stays.
+  //
+  // WHAT IS NOT DELETED: the list of unchecked files above is BOUND.
+  // `tests/pins.test.mjs` R6 derives that set from the filesystem and fails if
+  // any unchecked source is missing from the list block, with a non-vacuity
+  // floor and a control proving the scoped search can fail. That binding is
+  // measured by mutation, not asserted: deleting any one of the listed files
+  // from the list block turns R6 red.
+  //
+  // Standard 2 says a number is re-measured at the moment it is quoted, not
+  // inherited. Four recurrences here say the stronger thing: a number nothing
+  // re-measures should not be written down beside a command that produces it.
   //
   // If you turn it on, do it as its own change with its own review. Do not
   // widen it as a side effect of something else, and do not restate the
