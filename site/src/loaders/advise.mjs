@@ -167,6 +167,17 @@ export function adviseDeadPointers(raw, skill) {
 /**
  * I4 — a resource file its own SKILL.md never mentions.
  *
+ * THE EMITTED NOUN IS "undescribed", NOT "orphan", AND THE INTERNAL NAMES ARE
+ * LEFT ALONE. An orphan is a thing with no parent, and that word invites
+ * deleting the file. This condition does not establish that: the review found
+ * assets/example-bundle/references/skills/run-on-bq.md flagged here while
+ * index.md links it with a title and a purpose, so a reader who acted on the
+ * old noun would have deleted a file with a live inbound reference. The
+ * remedy the message should provoke is to DESCRIBE the file, which is correct
+ * for all nine — including run-on-bq.md, whose own SKILL.md genuinely does
+ * not. `adviseOrphans` and the I4 code keep their names because renaming them
+ * widens the diff without reaching a reader.
+ *
  * THE PREDICATE, AND WHY IT IS THIS ONE. Proposal §3.7 states the population
  * in its own words: "Orphan resources. Four files their `SKILL.md` never
  * mentions". Applied literally to every resource file this repo ships, that
@@ -236,10 +247,11 @@ export function adviseOrphans(raw, skill) {
         file: `${skill.repoDir}/${group}/${entry.name}`,
         line: null,
         message:
-          `orphan resource: ${skill.repoPath} never mentions this file by ` +
-          `name, so this page carries no description for it. It is listed ` +
-          `on the skill page by its real filename. THIS CHECKS THE OWNING ` +
-          `SKILL.md ONLY — another file in the repository may describe it.`,
+          `undescribed resource: ${skill.repoPath} never mentions this file ` +
+          `by name, so this page carries no description for it. It is ` +
+          `listed on the skill page by its real filename. THIS CHECKS THE ` +
+          `OWNING SKILL.md ONLY — another file in the repository may ` +
+          `describe it.`,
       });
     }
   }
