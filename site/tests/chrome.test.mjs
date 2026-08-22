@@ -28,6 +28,8 @@ import { parse as parseYaml } from "yaml";
 import {
   BASE,
   distContentPages,
+  mainOf,
+  pageAt,
   read,
   repoRoot,
   siteRoot,
@@ -499,6 +501,73 @@ test("R4 control: the assertion is exact, and the superseded title is gone from 
   // …nor in the config that produces it.
   const config = await read(join(siteRoot, "astro.config.mjs"));
   assert.match(config, /title:\s*"Agent Skills Catalog"/, "astro.config.mjs does not set the fixed title");
+});
+
+// ── AC4: exactly one H1 per page ────────────────────────────────────────────
+//
+// The criterion names one skill — "grill-with-beads renders exactly one H1
+// (I2)" — and the reason that skill is the named one is a property of its
+// source rather than of the site: its body opens with no H1 at all. Every
+// other skill's body starts with a heading that the loader strips before
+// Starlight adds the page title back, so on those pages "one H1" is the
+// arithmetic of a strip and an insert. On a body with nothing to strip, the
+// same code has to produce the same result by a different route, and that is
+// where a second H1 or none at all would come from.
+//
+// So the test is the CLASS — every page, exactly one — with the named instance
+// checked as an instance and its distinguishing property asserted rather than
+// assumed. A gate written only for the named skill would pass while any of the
+// other 57 pages rendered two.
+
+test("AC4: every page renders exactly one H1, and the pages with no source H1 are among them", async () => {
+  const pages = await distContentPages();
+  const wrong = [];
+  for (const p of pages) {
+    const n = (mainOf(p.html).match(/<h1\b/gi) ?? []).length;
+    if (n !== 1) wrong.push(`${p.route}: ${n}`);
+  }
+  assert.deepEqual(wrong, [], `pages not rendering exactly one H1:\n${wrong.join("\n")}`);
+  assert.equal(pages.length, 58, `swept ${pages.length} pages, not 58`);
+
+  // The instance the criterion names, reached by DERIVING it: the skills whose
+  // body has no leading H1 for the loader to strip. That set is what makes I2
+  // a distinct case, and naming it by property rather than by name means a
+  // second such skill is covered the day it lands.
+  const { skills } = await sourceRoutes();
+  const noSourceH1 = [];
+  for (const s of skills) {
+    const raw = await readFile(s.skillMd, "utf8");
+    const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
+    if (!/^\s*#\s+\S/.test(body)) noSourceH1.push(s.route);
+  }
+  assert.ok(
+    noSourceH1.length > 0,
+    "every skill body now opens with an H1, so I2's case has no instances and this " +
+      "test's second half is vacuous — say so rather than deleting it",
+  );
+  for (const route of noSourceH1) {
+    const html = mainOf(pageAt(pages, route).html);
+    const h1s = [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)];
+    assert.equal(h1s.length, 1, `${route}: ${h1s.length} H1s on a body with no source H1`);
+    assert.notEqual(toText(h1s[0][1]).trim(), "", `${route}: the single H1 is empty`);
+  }
+});
+
+test("AC4 control: the H1 counter can count, and can see a second one", async () => {
+  // POSITIVE. "Exactly one everywhere" is also what a counter that always
+  // returns 1 reports, and what a counter that finds nothing reports if the
+  // comparison is written the other way round.
+  const count = (html) => (mainOf(html).match(/<h1\b/gi) ?? []).length;
+  assert.equal(count("<main><h1>a</h1><h1>b</h1></main>"), 2, "the counter cannot see two H1s");
+  assert.equal(count("<main><p>none</p></main>"), 0, "the counter cannot see zero H1s");
+  assert.equal(count('<main><h1 id="x" class="y">a</h1></main>'), 1, "attributes defeat the counter");
+  // NEGATIVE: an H2 and an element whose name merely starts with h1 are not H1s.
+  assert.equal(count("<main><h2>a</h2></main>"), 0);
+  assert.equal(count("<main><h11>a</h11></main>"), 0, "the word boundary is not holding");
+  // And on a real page, so the scope is right: the counter must be looking
+  // inside <main> rather than at the whole document.
+  const page = (await distContentPages())[0];
+  assert.equal(count(page.html), 1, `${page.route} does not have the one H1 the sweep found`);
 });
 
 // ── helpers ─────────────────────────────────────────────────────────────────

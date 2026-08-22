@@ -67,21 +67,31 @@
   // this edit adds two files to the list above, so the figure below it is
   // exactly the figure that would otherwise be inherited. Measured by flipping
   // `checkJs` to true, running `npx astro check`, and restoring the file —
-  // `git status` clean before and after. 501 errors, 0 warnings, 8 hints,
-  // across 22 files:
+  // `cmp` confirming the flip landed and the restore was byte-identical, and
+  // `git status` producing the same output before and after.
   //
-  //   scripts/check-live-links.mjs 62   tests/workflows 51
-  //   tests/live-check-e2e 51   tests/enumeration 37   src/loaders/links.mjs 31
-  //   tests/build-e2e 30   src/loaders/enumerate.mjs 27   tests/pins 26
-  //   src/loaders/site-pages.mjs 25   tests/chrome 22   tests/_helpers 22
-  //   tests/content 20   tests/links 17   tests/search-declaration 15
-  //   tests/link-rules 14   src/loaders/markdown.mjs 14   tests/live-links 12
-  //   tests/no-fabrication 11   tests/markdown 7   src/sidebar.mjs 6
-  //   src/loaders/frontmatter.mjs 6   scripts/prepare-assets.mjs 3
+  // AND THEN RE-MEASURED ONCE MORE, because the first Phase 3 measurement was
+  // taken mid-phase and four test files were added after it: the figure was
+  // 501 across 22 files and is now 532 across 26. That is the same failure the
+  // paragraph below warns about, caught inside a single phase. The number
+  // quoted here is the one measured last, against the tree being committed:
+  // 532 errors, 0 warnings, 8 hints, across 26 files.
   //
-  // The two files Phase 3 added account for 28 of the 102 new errors; the rest
-  // are in tests Phase 3 widened. src/loaders/skills.ts stays at 0 because it
-  // is checked today.
+  //   scripts/check-live-links.mjs 62   tests/workflows 50
+  //   tests/live-check-e2e 50   tests/enumeration 37   tests/_helpers 33
+  //   tests/build-e2e 29   src/loaders/links.mjs 27
+  //   src/loaders/enumerate.mjs 27   tests/pins 26
+  //   src/loaders/site-pages.mjs 25   tests/chrome 23   tests/links 17
+  //   tests/search-declaration 14   tests/link-rules 14
+  //   src/loaders/markdown.mjs 14   tests/content 13   tests/live-links 12
+  //   tests/assets 12   tests/no-fabrication 10   tests/fields 8
+  //   tests/markdown 7   src/sidebar.mjs 6   src/loaders/frontmatter.mjs 6
+  //   tests/site-pages 6   scripts/prepare-assets.mjs 3   tests/versions 1
+  //
+  // The two SOURCE files Phase 3 added account for 28 errors; the four test
+  // files it added account for 27; the remainder of the rise from Phase 2's
+  // 399 is in tests Phase 3 widened. src/loaders/skills.ts stays at 0 because
+  // it is checked today.
   //
   // The lesson is not the arithmetic, it is that a sizing figure sitting three
   // lines below an edit is exactly the figure nobody re-runs. Standard 2: a

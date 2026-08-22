@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { plantOrThrow, repoRoot, siteRoot, walk } from "./_helpers.mjs";
+import { fieldRows, mainOf, plantOrThrow, repoRoot, siteRoot, walk } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -532,11 +532,44 @@ test("E2E control: the advisory-count assertion is aimed at a string the build e
 });
 
 test("E2E: neither planted unknown key is rendered on the page (report AND ignore)", async () => {
+  // STRENGTHENED IN PHASE 3, because AC 8's claim is about LABELS and this
+  // assertion was about a VALUE. `!page.includes("planted")` is satisfied by a
+  // renderer that emits the label `category` with an empty value, or that
+  // renders the key and drops the string — and those are exactly the failures
+  // "report and ignore" is supposed to exclude. The value check is kept (a
+  // rendered value is also a failure) and a label check is added above it.
+  //
+  // This is the END-TO-END half of the AC 8 gate. fields.test.mjs asserts the
+  // property over the 58 pages of the real catalog, where the population of
+  // non-spec keys is empty; here a key that does not exist in the source is
+  // pushed through a real `astro build` and the same property is asserted on
+  // the page it produces. Neither is sufficient alone: the first is an absence
+  // over an empty population, the second is one instance.
   const { root } = await cases.advisories;
   const page = await readFile(
     join(root, "site", "dist", "plugins", "okf-authoring", "okf-author", "index.html"),
     "utf8",
   );
+  const rows = fieldRows(mainOf(page));
+
+  // NON-VACUITY FIRST. An empty row set would satisfy every assertion below,
+  // and a build that rendered no metadata at all is a plausible way to get one.
+  assert.ok(rows.length > 0, "the planted-key build rendered no field rows at all");
+  const labels = rows.map((r) => r.label.toLowerCase());
+  assert.ok(
+    labels.includes("name") && labels.includes("license"),
+    `the page is missing its ordinary rows, so the absence below proves nothing: ${labels.join(", ")}`,
+  );
+
+  // `category` was planted in SKILL.md frontmatter; `tags` in plugin.json.
+  // Both are outside their respective closed vocabularies, and neither may
+  // reach a reader as a field label.
+  for (const planted of ["category", "tags"]) {
+    assert.ok(
+      !labels.includes(planted),
+      `the planted unknown key "${planted}" was rendered as a field label`,
+    );
+  }
   assert.ok(!page.includes("planted"), "an unknown key's value was rendered");
 });
 

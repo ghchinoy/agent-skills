@@ -29,6 +29,7 @@ import {
   decodeEntities,
   distContentPages,
   elementsWithAttr,
+  fieldRows,
   rel,
   repoRoot,
   siteRoot,
@@ -84,26 +85,8 @@ const pageFor = (pages, route) => {
   return p;
 };
 
-/** The rendered field rows of a page: label -> the <dd> HTML. */
-function fieldRows(html) {
-  const rows = [];
-  for (const dt of elementsWithAttr(html, "data-field-label")) {
-    rows.push({
-      // The provenance note ("from plugin.json", "derived") is a sibling span
-      // inside the <dt>; it is attribution, not part of the field name. Matched
-      // loosely on the class because Astro appends a scoped hash to it.
-      label: toText(dt.inner.replace(/<span[^>]*\bclass="[^"]*\bsrc\b[^"]*"[^>]*>[\s\S]*?<\/span>/g, "")),
-      source: (dt.open.match(/data-field-source="([^"]+)"/) ?? [])[1] ?? null,
-      // The whole visible label INCLUDING the provenance note, which is what a
-      // reader actually sees and therefore what the attribution checks assert.
-      note: toText(dt.inner),
-      open: dt.open,
-    });
-  }
-  // Pair each label with the <dd> that follows it.
-  const dds = [...html.matchAll(/<dd\b[^>]*>([\s\S]*?)<\/dd>/g)].map((m) => m[1]);
-  return rows.map((r, i) => ({ ...r, dd: dds[i] ?? "" }));
-}
+// `fieldRows` used to live here. It is in _helpers.mjs as of Phase 3, because
+// four suites now scan labels and they must all scan them the same way.
 
 // ── AC8 ─────────────────────────────────────────────────────────────────────
 
@@ -283,17 +266,57 @@ test("AC9 scope: the word Author DOES appear in prose, and that is correct", asy
   );
 });
 
-test("no taxonomy this repo does not have: no Tags or Category label anywhere", async () => {
+/** Phase 3 AC7's three names, plus the neighbouring inventions. */
+const INVENTED_TAXONOMY = /^(tags?|category|categories|difficulty|rating|popularity)$/i;
+
+test("AC7: no page renders Tags, Category or Categories as a metadata label", async () => {
+  // ACROSS THE WHOLE SITE, and the denominator is stated because an absence
+  // claim is only as wide as the population it swept. Phase 1 ran this over 5
+  // pages; it now runs over every content page the build produced.
   const pages = await distContentPages();
   const bad = [];
+  let scanned = 0;
   for (const p of pages) {
     for (const r of fieldRows(p.html)) {
-      if (/^(tags?|category|categories|difficulty|rating|popularity)$/i.test(r.label.trim())) {
-        bad.push(`${p.route}: ${r.label}`);
-      }
+      scanned += 1;
+      if (INVENTED_TAXONOMY.test(r.label.trim())) bad.push(`${p.route}: ${r.label}`);
     }
   }
   assert.deepEqual(bad, [], `invented taxonomy rendered:\n${bad.join("\n")}`);
+  // NON-VACUITY. "No offending label on 58 pages" and "no label found on 58
+  // pages" produce the same empty array, and only one of them is the claim.
+  assert.ok(
+    scanned > pages.length,
+    `only ${scanned} field labels found across ${pages.length} pages — fewer than ` +
+      `one per page, so this sweep is not reading the rows it claims to check`,
+  );
+});
+
+test("AC7 control: the taxonomy detector fires on each of the three names", async () => {
+  // POSITIVE control, per name rather than per detector: a regexp that lost one
+  // alternative would still fire on the other two and look alive.
+  for (const name of ["Tags", "Category", "Categories"]) {
+    const planted = `<dl><div class="field-row">
+      <dt data-field-label data-field-source="derived">${name} <span class="src">derived</span></dt>
+      <dd>workflow</dd>
+    </div></dl>`;
+    const rows = fieldRows(planted);
+    assert.equal(rows.length, 1, `the extractor found no row in markup that has one (${name})`);
+    assert.ok(
+      INVENTED_TAXONOMY.test(rows[0].label.trim()),
+      `the detector does not fire on a "${name}" label`,
+    );
+  }
+  // NEGATIVE: it must not fire on the real labels this catalog does render, or
+  // it is a detector for the letter T. `keywords` is the closest legitimate
+  // neighbour — Agent Plugins §5.4 calls them "search and discovery tags".
+  const pages = await distContentPages();
+  const real = new Set();
+  for (const p of pages) for (const r of fieldRows(p.html)) real.add(r.label.trim());
+  assert.ok(real.has("keywords"), "the catalog no longer renders keywords — retune this control");
+  for (const label of real) {
+    assert.ok(!INVENTED_TAXONOMY.test(label), `the detector fires on the real label "${label}"`);
+  }
 });
 
 // ── The round trip ──────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 export const here = dirname(fileURLToPath(import.meta.url));
 export const siteRoot = join(here, "..");
@@ -250,6 +251,106 @@ function readmeSection(markdown, heading) {
     }
   }
   return lines.slice(start + 1, end).join("\n");
+}
+
+/**
+ * The Agent Skills closed top-level vocabulary, WRITTEN OUT HERE.
+ *
+ * This is the one list in the suite that is deliberately hand-typed, because it
+ * is the specification and not a property of this code. Importing
+ * `ALLOWED_FIELDS` from the loader would make "every rendered label is a spec
+ * field" mean "every rendered label is whatever the loader currently allows",
+ * which is the check agreeing with the thing it checks. A test below asserts
+ * the loader's list equals this one, so the duplication is a comparison rather
+ * than a copy.
+ */
+export const SPEC_TOP_LEVEL_FIELDS = [
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "allowed-tools",
+];
+
+/**
+ * Every skill in the catalog with its frontmatter PARSED FROM SOURCE, plus its
+ * plugin's manifest — the population almost every Phase 3 class check runs
+ * over.
+ *
+ * Parsed here with `yaml`, from paths derived by `sourceRoutes()`. The loader
+ * is never asked, so "the page shows what the file declares" is a comparison
+ * between two independent readings of the file.
+ *
+ * @returns {Promise<{plugin: string, skill: string, route: string, skillMd: string,
+ *   raw: string, declared: any, manifest: any}[]>}
+ */
+export async function declaredSkills() {
+  const { skills } = await sourceRoutes();
+  const manifests = new Map();
+  const out = [];
+  for (const s of skills) {
+    if (!manifests.has(s.plugin)) {
+      manifests.set(
+        s.plugin,
+        JSON.parse(await readFile(join(repoRoot, "plugins", s.plugin, "plugin.json"), "utf8")),
+      );
+    }
+    const raw = await readFile(s.skillMd, "utf8");
+    const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+    if (!m) throw new Error(`${s.route}: SKILL.md has no frontmatter`);
+    out.push({ ...s, raw, declared: parseYaml(m[1]), manifest: manifests.get(s.plugin) });
+  }
+  if (out.length === 0) throw new Error("no skills were found — this population is empty");
+  return out;
+}
+
+/** The <main> element only — the masthead, sidebar and footer are Starlight's. */
+export function mainOf(html) {
+  const m = html.match(/<main\b[\s\S]*?<\/main>/i);
+  return m ? m[0] : html;
+}
+
+/** The page at `route`, or a failure naming the route rather than a TypeError. */
+export function pageAt(pages, route) {
+  const p = pages.find((x) => x.route === route);
+  if (!p) {
+    throw new Error(
+      `no page was built at "${route}" — the site has ${pages.length} content pages`,
+    );
+  }
+  return p;
+}
+
+/**
+ * The rendered field rows of a page: `{ label, source, note, open, dd }`.
+ *
+ * MOVED HERE IN PHASE 3 from no-fabrication.test.mjs, where it was private.
+ * Four suites now scan field labels across all 58 pages, and four copies of a
+ * label extractor is four chances for one of them to quietly stop finding
+ * anything and report an absence it never looked for. One extractor, and every
+ * suite that uses it also asserts it found a non-zero number of rows.
+ */
+export function fieldRows(html) {
+  const rows = [];
+  for (const dt of elementsWithAttr(html, "data-field-label")) {
+    rows.push({
+      // The provenance note ("from plugin.json", "derived") is a sibling span
+      // inside the <dt>; it is attribution, not part of the field name. Matched
+      // loosely on the class because Astro appends a scoped hash to it.
+      label: toText(
+        dt.inner.replace(/<span[^>]*\bclass="[^"]*\bsrc\b[^"]*"[^>]*>[\s\S]*?<\/span>/g, ""),
+      ),
+      source: (dt.open.match(/data-field-source="([^"]+)"/) ?? [])[1] ?? null,
+      // The whole visible label INCLUDING the provenance note, which is what a
+      // reader actually sees and therefore what the attribution checks assert.
+      note: toText(dt.inner),
+      open: dt.open,
+    });
+  }
+  // Pair each label with the <dd> that follows it.
+  const dds = [...html.matchAll(/<dd\b[^>]*>([\s\S]*?)<\/dd>/g)].map((m) => m[1]);
+  return rows.map((r, i) => ({ ...r, dd: dds[i] ?? "" }));
 }
 
 export async function walk(dir) {
