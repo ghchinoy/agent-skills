@@ -37,6 +37,25 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { REPO_URL } from "../site.config.mjs";
+import { loadSpecSource, pinSentence } from "./spec-source.mjs";
+
+/**
+ * `owner/repo`, derived from the one place repo identity is declared.
+ *
+ * The §2.1 disambiguation note names three repositories and one of them is
+ * THIS one. Typing it out is what the mirrored-constant rule forbids, and both
+ * halves of the suite proved the rule earns its keep here: writing the literal
+ * turned RED in `pins.test.mjs` (a static scan for second copies) and again in
+ * `build-e2e.test.mjs` (which rebuilds under a PERTURBED config and looks for
+ * survivors of the real value). Two instruments, two methods, same defect.
+ *
+ * The other two names in that note are deliberately literal: they are OTHER
+ * people's repositories, not this one, and there is no constant to derive them
+ * from. Naming them is the entire point of the note.
+ */
+const REPO_SLUG = new URL(REPO_URL).pathname.replace(/^\/+|\/+$/g, "");
+
 /**
  * Reads `file` from the repository root, failing with the path rather than an
  * ENOENT nobody can place.
@@ -132,6 +151,25 @@ export async function buildSitePages(opts) {
   const readme = await repoDoc(repoRoot, "README.md");
   const contributing = await repoDoc(repoRoot, "CONTRIBUTING.md");
 
+  // The pinned spec revisions (AC5). Read, never hardcoded: no version string
+  // for either standard appears anywhere in `src/`, and
+  // tests/spec-source.test.mjs grep-asserts that. A throw here is a build
+  // failure on purpose — see spec-source.mjs on why nothing falls back.
+  const specSource = await loadSpecSource();
+  const specById = new Map(specSource.specifications.map((s) => [s.id, s]));
+  const specOrThrow = (id) => {
+    const spec = specById.get(id);
+    if (spec === undefined) {
+      throw new Error(
+        `site-pages: specification-source.json pins no standard with id "${id}", ` +
+          `but a page renders its revision. The page cannot invent one.`,
+      );
+    }
+    return spec;
+  };
+  const agentPlugins = specOrThrow("agent-plugins");
+  const agentSkills = specOrThrow("agent-skills");
+
   const pluginList = plugins.map((p) => ({
     name: p.name,
     displayName: displayNames.get(p.name) ?? null,
@@ -212,14 +250,65 @@ export async function buildSitePages(opts) {
     body: [
       leadParagraphs(readme, "README.md"),
       "",
+      // Proposal §2.1, "A three-way naming collision", which AC2 names as the
+      // ONE addition permitted on this page beyond counts, names and README
+      // bytes. §2.1 asks for "a one-line 'not to be confused with' note on both
+      // landing pages, linking agentskills.io and agent-plugins.org."
+      //
+      // WHAT §2.1 ALSO PROPOSES AND THIS DOES NOT DO. The same section suggests
+      // the site title "Agent Skills Catalog (10 plugins, 23 skills, conformant
+      // with the Agent Plugins spec)". Those are two hand-typed integers, and
+      // AC1 forbids a catalog figure typed into source — they would be correct
+      // today, silently wrong at the next merge, and invisible to every count
+      // test because no count test reads a title. So this note takes the NAMING
+      // half of §2.1 and leaves the figures to the computed counts below.
+      "## Not to be confused with",
+      "",
+      "Three repositories sit one hyphen or one owner apart:",
+      "",
+      `- \`${REPO_SLUG}\` — this catalog. It is what these pages describe.`,
+      "- `ghchinoy/agentskills` — the same owner's Go CLI, a different project.",
+      "- `agentskills/agentskills` — the standard itself, published by a different",
+      "  organisation that happens to share the second repository's name.",
+      "",
+      "Both standards this catalog targets are published elsewhere, by other people:",
+      "[Agent Skills](https://agentskills.io) and [Agent Plugins](https://agent-plugins.org).",
+      "",
       "## What is in here",
       "",
       "Every number on this page is counted by the build that produced it, from",
       "`.claude-plugin/marketplace.json` and the plugin trees it names.",
       "",
       `- **${counts.plugins} plugins**, in the order the distribution index declares them.`,
-      `- **${counts.skills} skills** — a \`SKILL.md\` at \`plugins/<plugin>/skills/<skill>/\`,` +
-        " discovered without recursing below that directory, as Agent Plugins §7.1 requires.",
+      // PHASE 5, AC2, AND IT IS A PARA-1 CATCH RATHER THAN A NEEDLE ONE.
+      //
+      // This line used to end "…discovered without recursing below that
+      // directory, as Agent Plugins §7.1 requires." Every word of that was
+      // TRUE. It is still a defect twice over:
+      //
+      //   1. It is a claim outside AC2's list — AC2 permits counts, names,
+      //      README bytes and the §2.1 note, and a statement about what a
+      //      standard requires is none of those.
+      //   2. It is a PARAPHRASE OF A NORMATIVE REQUIREMENT. §7.1 says clients
+      //      "MUST NOT recursively search deeper descendants"; the sentence
+      //      above is that MUST, reworded. §12: "Restate normative spec text on
+      //      our pages — No. Link out." A paraphrase of a requirement is a
+      //      second and worse copy of it.
+      //
+      // WHY NO GATE CAUGHT IT, which is the part worth keeping. The suite's
+      // RFC-2119 detector is real, it works, and it was pointed at
+      // `/about/standards/` only — so on this page the search was never run.
+      // And it would not have fired anyway: the detector looks for MUST, SHALL,
+      // "is required to" and friends, and this sentence says "requires". A
+      // needle matcher cannot see a rephrasing, and no number of additional
+      // needles changes that. It was found by reading the page for the CLAIM
+      // instead of for the STRING, which is the only method that has ever
+      // worked on this class.
+      //
+      // The count and the path stay: those are data. The restatement goes, and
+      // the rule it restated is now reached by a link, which is where it lives.
+      `- **${counts.skills} skills**, each declared by a \`SKILL.md\` at` +
+        " `plugins/<plugin>/skills/<skill>/`.",
       `- **${counts.referencePages} reference documents**, rendered as pages of this site.`,
       `- **${counts.unroutedResources} further resource entries** — scripts, assets and` +
         " non-markdown references — listed by real filename and linked to GitHub rather than" +
@@ -322,6 +411,40 @@ export async function buildSitePages(opts) {
       "The two are separate standards with separate homes, and neither is published by",
       "this repository.",
       "",
+      // ── AC5. THE POINT IS THE READ. ──────────────────────────────────────────
+      // Every value below arrives from `site/specification-source.json` via
+      // src/loaders/spec-source.mjs. Nothing here is a literal, which is what
+      // makes a stale pin show up as a visibly stale PAGE rather than as an
+      // unread file — a JSON file nobody parses is documentation, not a pin.
+      //
+      // The absence sentence is DERIVED from `declaredAbsent`, not written out.
+      // If Agent Skills ever starts declaring a version and someone records it,
+      // the bullet gains a version clause and this paragraph loses the word, in
+      // the same build, with no prose to remember to update. A hand-written
+      // "no version is available" would go stale silently and read identically.
+      "## The revisions this page was built against",
+      "",
+      "This build reads these from `specification-source.json`; no page here carries a",
+      "version string of its own.",
+      "",
+      `- **${agentPlugins.name}** — ${pinSentence(agentPlugins)}.`,
+      `- **${agentSkills.name}** — ${pinSentence(agentSkills)}.`,
+      "",
+      ...[agentPlugins, agentSkills].flatMap((spec) => {
+        const fields = Object.keys(spec.declaredAbsent);
+        if (fields.length === 0) return [];
+        const list =
+          fields.length === 1
+            ? fields[0]
+            : `${fields.slice(0, -1).join(", ")} or ${fields[fields.length - 1]}`;
+        return [
+          `The ${spec.name} specification declares no ${list} of its own, so none is`,
+          "shown above. That absence was measured, not inherited: the predicate and the",
+          "positive control that shows the search could have found one sit beside the",
+          "omission in `specification-source.json`.",
+          "",
+        ];
+      }),
       "## This catalog is skills-only",
       "",
       "Agent Plugins fixes two locations inside a plugin root: `skills/` and `mcp.json`.",

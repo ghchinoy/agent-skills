@@ -1,0 +1,57 @@
+{
+  "what": "The exact revision of each standard this site was built against. Proposal §2: it converts 'which version of the spec does this page describe?' from a thing someone remembers into a thing the build reads. src/loaders/spec-source.mjs reads this file; nothing in src/ hardcodes a version string, and tests/spec-source.test.mjs asserts that.",
+  "measuredAt": "2026-08-22",
+  "specifications": [
+    {
+      "id": "agent-plugins",
+      "name": "Agent Plugins",
+      "home": "https://agent-plugins.org",
+      "repository": "https://github.com/agentplugins/agent-plugins-spec",
+      "version": "1.0.0",
+      "status": "published",
+      "commit": "ff8ab5e392cc87bd88d87c060815a87490e51003",
+      "commitDate": "2026-08-19T16:34:23Z",
+      "declaredAbsent": {},
+      "predicates": {
+        "version": "grep -n 'Spec Version' spec/1.0.0.md -> 3:**Spec Version: 1.0.0**",
+        "status": "grep -n 'Status:' spec/1.0.0.md -> 5:**Status: Published**",
+        "commit": "gh api /repos/agentplugins/agent-plugins-spec/commits/main --jq .sha -> ff8ab5e392cc87bd88d87c060815a87490e51003",
+        "commitDate": "gh api /repos/agentplugins/agent-plugins-spec/commits/main --jq .commit.committer.date -> 2026-08-19T16:34:23Z"
+      },
+      "supersedes": {
+        "commit": "bd383552095128f6effe895b9257cfd580a6d179",
+        "commitDate": "2026-08-06T15:26:00Z",
+        "where": "Quoted in design/starlight-site-proposal.md line 249, as an illustration of what agentplugins/agent-plugins-site pins in its own specification-source.json.",
+        "why": "Recorded rather than adopted. It is a real commit and it resolves, but it is 13 days behind the revision this site was actually built against, and nobody on this project consulted it. Copying it would have produced a provenance record naming a commit no measurement here ever touched -- a correct-looking sha attributed to the wrong source. The pin above is the one that was verified at measurement time.",
+        "predicate": "gh api /repos/agentplugins/agent-plugins-spec/commits/bd383552095128f6effe895b9257cfd580a6d179 --jq .sha,.commit.committer.date -> bd383552095128f6effe895b9257cfd580a6d179, 2026-08-06T15:26:00Z"
+      },
+      "note": "1.0.0 is the Published version and the one every plugin in this catalog targets in its own plugin.json $schema URL. spec/1.1.0.md also exists upstream and is a Working Draft; it is not pinned here because nothing in this catalog targets it. Both commit fields above are 40-hex object names, never branch names: a pin to a moving ref verifies forever and means something different each time."
+    },
+    {
+      "id": "agent-skills",
+      "name": "Agent Skills",
+      "home": "https://agentskills.io",
+      "repository": "https://github.com/agentskills/agentskills",
+      "commit": "69ef37e9424c0a7ea9dd2293b559e43ec8176379",
+      "commitDate": "2026-08-09T20:36:04Z",
+      "declaredAbsent": {
+        "version": {
+          "reason": "The Agent Skills specification declares no version of itself. There is no version upstream to pin, so this key is omitted rather than filled. Absent is not the same as unknown and neither is the same as a placeholder: proposal §12, 'Missing metadata shows as absent, not stubbed.'",
+          "predicate": "In agentskills/agentskills at commit 69ef37e9424c0a7ea9dd2293b559e43ec8176379: (1) grep -rni version docs/ returns only SVG XML declarations and prose about version control; (2) grep -rnoE '[0-9]+[.][0-9]+([.][0-9]+)?' docs/specification.mdx returns 1.0, 2.0, 3.14 and 1.0 at lines 50, 53, 139 and 159, every one of them inside an EXAMPLE skill frontmatter block, i.e. an example value of a skill author's own metadata.version field and not a version of the specification; (3) a wrap-insensitive window scan, tr '\\n' ' ' < docs/specification.mdx | grep -oiE '.{40}version.{40}', returns the same two example blocks, confirming (2) is not a line-wrap artifact.",
+          "positiveControl": "The identical needle, grep -rni version, run against agentplugins/agent-plugins-spec, returns 'Spec Version: 1.0.0' at spec/1.0.0.md:3. The selector finds something where something exists, so the zero above is an absence in the corpus and not a dead selector.",
+          "doNotUse": "skills-ref/pyproject.toml in the same repository declares version = 0.1.0. That is the version of the REFERENCE LIBRARY, which the specification itself describes as 'for demonstration purposes only. It is not meant to be used in production.' It is not the specification's version and must not be pinned here."
+        },
+        "status": {
+          "reason": "The Agent Skills specification declares no publication status of itself. Omitted for the same reason as version.",
+          "predicate": "grep -rni status docs/specification.mdx docs/home.mdx README.md in agentskills/agentskills at commit 69ef37e9424c0a7ea9dd2293b559e43ec8176379 returns zero lines.",
+          "positiveControl": "The identical needle run against agentplugins/agent-plugins-spec returns 'Status: Published' at spec/1.0.0.md:5."
+        }
+      },
+      "predicates": {
+        "commit": "gh api /repos/agentskills/agentskills/commits/main --jq .sha -> 69ef37e9424c0a7ea9dd2293b559e43ec8176379",
+        "commitDate": "gh api /repos/agentskills/agentskills/commits/main --jq .commit.committer.date -> 2026-08-09T20:36:04Z"
+      },
+      "note": "The Agent Skills format was originally developed by Anthropic, released as an open standard, and has been adopted by a growing number of agent products. That is the standard's own wording, from its README, and it is quoted rather than paraphrased on /about/standards/."
+    }
+  ]
+}

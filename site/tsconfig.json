@@ -15,6 +15,7 @@
   //                src/loaders/markdown.mjs
   //                src/loaders/frontmatter.mjs
   //                src/loaders/site-pages.mjs
+  //                src/loaders/spec-source.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
   //                scripts/check-blob-links.mjs
@@ -72,6 +73,21 @@
   // that `blobTargets()` may return `url: null` for a row with no href; the
   // script reports that as a failure rather than filtering it, and the test
   // asserts the null case is empty.
+  //
+  // PHASE 5 added one:
+  //
+  //   src/loaders/spec-source.mjs   reads and validates
+  //                                 site/specification-source.json (AC5)
+  //
+  // Its exposure is narrower than the others and worth naming precisely. It is
+  // the only module here whose input is a hand-edited JSON file rather than
+  // repository structure, so it has NO compile-time shape guarantee at all —
+  // `strict` would not have helped even with checkJs on, because the file is
+  // parsed at runtime and `JSON.parse` returns `any` either way. That is why
+  // every field it depends on is validated explicitly and fatally in the module
+  // itself rather than annotated, and why tests/spec-source.test.mjs drives
+  // `validateSpecSource()` with MUTATED objects: for this file, mutation
+  // testing is not a supplement to type checking, it is the substitute for it.
   //
   // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
   // overwhelmingly missing annotations and implicit `any` under `strict` rather
