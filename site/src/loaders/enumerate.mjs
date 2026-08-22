@@ -11,7 +11,7 @@
 // That sentence is implemented literally below: ONE readdir of
 // `<plugin>/skills/`, and for each entry that `isDirectory()`, ONE stat of
 // `<plugin>/skills/<name>/SKILL.md`. There is no recursion anywhere in this
-// file, so the 11 markdown files under
+// file, so the markdown files under
 // `okf-author/assets/example-bundle/` — including its own `references/skills/`
 // tree — are unreachable BY CONSTRUCTION rather than by an exclude list.
 //
@@ -19,7 +19,7 @@
 // strictly depth-1: it lists the immediate children of `references/`,
 // `scripts/` and `assets/` by real filename and never opens or descends into
 // them. `assets/example-bundle` is therefore inventoried as one DIRECTORY
-// entry, never as 11 pages.
+// entry, never as one page per file inside it.
 //
 // `fs` is injected (`{ readFile, readdir, stat }`). Production passes
 // `nodeFs`; `tests/enumeration.test.mjs` passes a recorder and asserts on the
