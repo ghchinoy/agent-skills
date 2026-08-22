@@ -18,10 +18,13 @@ import {
   entitledSources,
   sourceRoutes,
   decodeEntities,
+  dist,
   distContentPages,
   elementsWithAttr,
+  rel,
   repoRoot,
   toText,
+  walk,
 } from "./_helpers.mjs";
 
 const PLUGIN_DIR = join(repoRoot, "plugins", PLUGIN);
@@ -97,6 +100,80 @@ test("AC2: the route set decomposes into the populations that produced it", asyn
 
   // The arithmetic, written out: the parts sum to the whole with nothing left.
   assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
+});
+
+test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 3", async () => {
+  // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
+  // one: it is a set equality against a derivation, so it stays green if the
+  // catalog grows and stays green if the derivation and the build shrink
+  // together. This is the literal, and the two live side by side on purpose —
+  // the derived one says the build agrees with the source, this one says the
+  // source is the catalog the phase was scoped against.
+  //
+  // WHEN THIS FAILS AND THE BUILD IS FINE: a plugin, skill or reference was
+  // added or removed upstream. Re-measure, change the numbers here, and say so
+  // in the commit. Do not relax it into an inequality — the whole reason it is
+  // written out is that "at least 58" would have passed on the Phase 1 slice
+  // plus any nine pages of noise.
+  const pages = await distContentPages();
+  const bucket = {
+    landing: pages.filter((p) => p.route === ""),
+    plugins: pages.filter((p) => /^plugins\/[^/]+$/.test(p.route)),
+    skills: pages.filter((p) => /^plugins\/[^/]+\/[^/]+$/.test(p.route)),
+    references: pages.filter((p) => /\/references\/[^/]+$/.test(p.route)),
+    skillsIndex: pages.filter((p) => p.route === "skills"),
+    about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
+  };
+  const expected = { landing: 1, plugins: 10, skills: 23, references: 20, skillsIndex: 1, about: 3 };
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
+    expected,
+    "the page composition moved",
+  );
+
+  // The buckets PARTITION the artifact: every page landed in exactly one, so
+  // the six numbers above cannot sum to 58 by double-counting or by leaving a
+  // page uncounted. A `references` route is also matched by nothing else here
+  // because the skill pattern is anchored to two segments — but that is an
+  // argument, and this is the measurement of it.
+  const counted = new Map();
+  for (const [name, ps] of Object.entries(bucket)) {
+    for (const p of ps) {
+      const prev = counted.get(p.route);
+      assert.equal(prev, undefined, `${p.route} counted as both ${prev} and ${name}`);
+      counted.set(p.route, name);
+    }
+  }
+  const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
+  assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
+  assert.equal(pages.length, 58, `dist holds ${pages.length} content pages, not 58`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 58);
+});
+
+test("AC1 control: the 58 is content pages, and dist holds one more file than that", async () => {
+  // The disclosure that goes with the number. `find dist -name '*.html'`
+  // returns 59, and Astro's own build log says "59 page(s) built": the extra
+  // is 404.html, which Starlight emits and which is not a content page. AC 1's
+  // 1 + 10 + 23 + 20 + 1 + 3 does not include it, so the counter this suite
+  // uses must exclude it — and a counter that excluded a REAL page by the same
+  // mechanism would look identical from the inside. Hence: the 404 is asserted
+  // to exist, asserted to be the ONLY difference, and asserted to be absent
+  // from the counted set.
+  const pages = await distContentPages();
+  // `rel` defaults to repoRoot; these paths are named relative to dist.
+  const html = (await walk(dist)).filter((f) => f.endsWith(".html")).map((f) => rel(f, dist));
+  assert.ok(
+    html.includes("404.html"),
+    "dist has no 404.html — Starlight stopped emitting it, so this control is stale",
+  );
+  const routes = new Set(pages.map((p) => p.route));
+  assert.ok(!routes.has("404"), "the 404 page is being counted as a content page");
+  assert.equal(
+    html.length - pages.length,
+    1,
+    `dist holds ${html.length} html files and ${pages.length} content pages; the only ` +
+      `difference should be 404.html. Extra: ${html.filter((f) => f !== "404.html" && !pages.some((p) => rel(join(dist, p.route, "index.html"), dist) === f)).join(", ")}`,
+  );
 });
 
 // ── AC3 ─────────────────────────────────────────────────────────────────────
