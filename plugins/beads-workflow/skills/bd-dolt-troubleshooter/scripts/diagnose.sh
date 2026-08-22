@@ -171,18 +171,18 @@ info "3. PRIMARY: Dolt vs JSONL agreement (the real symptom)"
 if command -v python3 >/dev/null 2>&1 && [ -f .beads/issues.jsonl ]; then
   SAMPLE=$(python3 -c "
 import json
-ids=[json.loads(l)['id'] for l in open('.beads/issues.jsonl') if l.strip()]
+ids=[json.loads(l, strict=False)['id'] for l in open('.beads/issues.jsonl') if l.strip()]
 print(' '.join(ids[:5]))
 " 2>/dev/null || true)
   MISMATCH=0
   for id in $SAMPLE; do
     DOLT_RAW=$(bd show "$id" --json 2>&1 || true)
-    DOLT=$(echo "$DOLT_RAW" | python3 -c "import json,sys;d=json.load(sys.stdin);i=d[0] if isinstance(d,list) else d;print(i['status'])" 2>/dev/null || echo "?")
+    DOLT=$(echo "$DOLT_RAW" | python3 -c "import json,sys;d=json.loads(sys.stdin.read(), strict=False);i=d[0] if isinstance(d,list) else d;print(i['status'])" 2>/dev/null || echo "?")
     JSONL=$(python3 -c "
 import json
 for l in open('.beads/issues.jsonl'):
     if l.strip():
-        i=json.loads(l)
+        i=json.loads(l, strict=False)
         if i['id']=='$id': print(i['status'])
 " 2>/dev/null || echo "?")
     if [ "$DOLT" = "$JSONL" ]; then
@@ -207,11 +207,10 @@ fi
 info "4. PRIMARY: write-persistence probe (definitive)"
 if [ "$PROBE" -eq 1 ]; then
   LOG_BEFORE=$( [ -f .beads/dolt-server.log ] && wc -c < .beads/dolt-server.log || echo 0 )
-  OUT=$(bd create "TEMP diagnose probe" --type task --priority 4 2>/dev/null || true)
-  PID=$(echo "$OUT" | grep -o 'bd-[a-z0-9]*\|[a-z0-9]*-[a-z0-9]*' | head -1)
-  # Fallback: parse prefixed id from JSON
+  OUT=$(bd create "TEMP diagnose probe" --type task --priority 4 --json 2>/dev/null || true)
+  PID=$(echo "$OUT" | python3 -c "import json,sys;d=json.loads(sys.stdin.read(), strict=False);print(d.get('id',''))" 2>/dev/null || true)
   if [ -z "$PID" ]; then
-    PID=$(echo "$OUT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('id',''))" 2>/dev/null || true)
+    PID=$(echo "$OUT" | grep -oE '[a-zA-Z0-9_.-]+-[a-zA-Z0-9]+' | tail -1 || true)
   fi
   sleep 1
   bd export -o .beads/issues.jsonl >/dev/null 2>&1 || true
@@ -223,7 +222,7 @@ if [ "$PROBE" -eq 1 ]; then
   fi
   LOG_AFTER=$( [ -f .beads/dolt-server.log ] && wc -c < .beads/dolt-server.log || echo 0 )
   NEWERR=$(tail -c +$((LOG_BEFORE+1)) .beads/dolt-server.log 2>/dev/null | grep -c "table file not found\|auto-backup failed" || true)
-  if [ "${NEWERR:-0}" -gt 0 ]; then
+  if [ "${NEWERR:-0}" -gt 0 ] 2>/dev/null; then
     red "    $NEWERR new backup error(s) emitted during the write — backup target is broken."
     ISSUES=$((ISSUES+1))
   fi
@@ -236,7 +235,7 @@ fi
 info "5. INFORMATIONAL: recent backup errors in log (heuristic)"
 if [ -f .beads/dolt-server.log ]; then
   TOTAL=$(grep -c "table file not found\|auto-backup failed\|sync backup" .beads/dolt-server.log 2>/dev/null || true)
-  if [ "${TOTAL:-0}" -gt 0 ]; then
+  if [ "${TOTAL:-0}" -gt 0 ] 2>/dev/null; then
     yellow "    $TOTAL historical backup-error line(s) in the log."
     yellow "    NOTE: historical lines persist after a fix; trust checks 2-4 above, not this count."
   else
@@ -247,7 +246,9 @@ fi
 echo
 if [ "$ISSUES" -eq 0 ]; then
   green "No problems detected by primary checks."
-  [ "$PROBE" -eq 0 ] && yellow "(Run with --probe for the definitive write-persistence test.)"
+  if [ "$PROBE" -eq 0 ]; then
+    yellow "(Run with --probe for the definitive write-persistence test.)"
+  fi
 else
   red "Detected $ISSUES problem area(s). See SKILL.md for fixes:"
   red "  - Automated multi-issue repair: scripts/repair.sh"
