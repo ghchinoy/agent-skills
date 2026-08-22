@@ -91,51 +91,31 @@ const pageFor = (pages, route) => {
 
 // ── AC8 ─────────────────────────────────────────────────────────────────────
 
-test("AC8: metadata.sources renders as a list of the exact declared strings", async () => {
+test("AC8: sources moved to SKILL.md body and render verbatim in main markdown", async () => {
   const pages = await distContentPages();
+  const EXPECTED_SOURCE =
+    "Open Knowledge Format (OKF) SPEC.md v0.2 — GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md";
   for (const skill of SKILLS) {
     const declared = await declaredOf(skill);
-    const sources = declared.metadata.sources;
-    assert.ok(Array.isArray(sources), `${skill}: metadata.sources is not a sequence any more`);
+    assert.equal(declared.metadata?.sources, undefined, `${skill}: metadata.sources still in frontmatter`);
 
     const html = pageFor(pages, `plugins/${PLUGIN}/${skill}`).html;
     const rows = fieldRows(html);
     const row = rows.find((r) => r.label === "sources");
-    assert.ok(row, `${skill}: no "sources" row was rendered`);
+    assert.equal(row, undefined, `${skill}: unexpected "sources" metadata row was rendered`);
 
-    // A real list element, one <li> per declared item, each byte-identical.
-    const lists = elementsWithAttr(row.dd, "data-value-list");
-    assert.equal(lists.length, 1, `${skill}: sources is not rendered as a value list`);
-    const items = [...lists[0].inner.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) =>
-      decodeEntities(m[1].replace(/<[^>]+>/g, "")).trim(),
-    );
-    assert.deepEqual(items, sources, `${skill}: rendered items are not the declared strings`);
-
-    // …including the em dash, at codepoint level.
-    assert.deepEqual(
-      [...items[0]].map((c) => c.codePointAt(0)),
-      [...sources[0]].map((c) => c.codePointAt(0)),
-    );
+    // Renders verbatim in the markdown body under Sources
+    const main = mainOf(html);
+    assert.ok(toText(main).includes(EXPECTED_SOURCE), `${skill}: body missing source citation`);
   }
 });
 
-test("AC8: sources is NOT stringified — the array's toString forms appear nowhere", async () => {
+test("AC8: absent metadata.sources emits no field row", async () => {
   const pages = await distContentPages();
   for (const skill of SKILLS) {
-    const declared = await declaredOf(skill);
-    const sources = declared.metadata.sources;
-    const text = decodeEntities(pageFor(pages, `plugins/${PLUGIN}/${skill}`).html);
-
-    // The ways a sequence gets flattened by accident. Array.prototype.toString
-    // is only a DISTINGUISHABLE form when there is more than one item —
-    // String(["a"]) === "a" — so applying it to a one-item sequence would fail
-    // on correct output. The structural check in the previous test is what
-    // covers the single-item case, and it is the stronger of the two.
-    const wrong = [JSON.stringify(sources), "[object Object]"];
-    if (sources.length > 1) wrong.push(String(sources));
-    for (const w of wrong) {
-      assert.ok(!text.includes(w), `${skill}: sources was rendered as ${w.slice(0, 40)}…`);
-    }
+    const html = pageFor(pages, `plugins/${PLUGIN}/${skill}`).html;
+    const rows = fieldRows(html);
+    assert.ok(!rows.some((r) => r.label === "sources"), `${skill}: sources rendered as metadata field`);
   }
 });
 
@@ -150,33 +130,24 @@ test("AC8 control: the stringify detector fires on a stringified sequence", asyn
   assert.ok(jsonified.includes(JSON.stringify(sample)), "the JSON detector cannot fire");
 });
 
-test("AC8: the build log carries the D1 advisory naming BOTH skills", async () => {
-  // Built into a throwaway outDir so this cannot race the other suites, which
-  // read the real dist/.
-  const out = await mkdtemp(join(tmpdir(), "skills-d1-"));
-  try {
-    const { stdout, stderr } = await run(
-      process.execPath,
-      ["./node_modules/astro/bin/astro.mjs", "build", "--outDir", out],
-      { cwd: siteRoot, maxBuffer: 32 * 1024 * 1024 },
-    );
-    const log = `${stdout}\n${stderr}`;
-    for (const skill of SKILLS) {
-      const line = log
-        .split("\n")
-        .find((l) => l.includes("[D1]") && l.includes(`skills/${skill}/SKILL.md`));
-      assert.ok(line, `no D1 advisory in the build log for ${skill}`);
-      assert.match(line, /metadata\.sources/);
-      // The advisory says what the site DID about it, not just that it noticed.
-      assert.match(line, /NOT stringified/);
-      // And it points at a line, so a reader can go and look.
-      assert.match(line, /SKILL\.md:\d+/);
-    }
-    // Advisories are reported, not repaired: the build still succeeds.
-    assert.match(log, /Complete!/);
-  } finally {
-    await rm(out, { recursive: true, force: true });
-  }
+test("AC8 control: D1 advisory fires on planted frontmatter sequence", async () => {
+  const { analyzeDeclared } = await import("../src/loaders/frontmatter.mjs");
+  const plantedData = {
+    name: "okf-author",
+    description: "test description",
+    metadata: {
+      sources: ["planted source entry"],
+    },
+  };
+  const { advisories } = analyzeDeclared(plantedData, {
+    file: "plugins/okf-authoring/skills/okf-author/SKILL.md",
+    fmText: "name: okf-author\ndescription: test\nmetadata:\n  sources:\n    - planted source entry\n",
+    fmFirstLine: 2,
+    expectedName: "okf-author",
+  });
+  const d1 = advisories.find((a) => a.code === "D1");
+  assert.ok(d1, "analyzeDeclared did not emit D1 for planted sequence");
+  assert.match(d1.message, /NOT stringified/);
 });
 
 // ── AC9 ─────────────────────────────────────────────────────────────────────
@@ -235,7 +206,7 @@ test("AC9 control: the extractor really does find the labels the real pages carr
   assert.ok(rows.length >= 4, `only ${rows.length} field rows found — extractor is not working`);
   const labels = rows.map((r) => r.label);
   assert.ok(labels.includes("name"), `expected a name row; got ${JSON.stringify(labels)}`);
-  assert.ok(labels.includes("sources"), `expected a sources row; got ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes("version"), `expected a version row; got ${JSON.stringify(labels)}`);
 });
 
 test("AC9 scope: the word Author DOES appear in prose, and that is correct", async () => {
@@ -975,7 +946,7 @@ test("REQUIRED 1: no page renders a typographic character the source never decla
   );
 
   const pages = await distContentPages();
-  assert.equal(pages.length, 58, `swept ${pages.length} pages, not 58`);
+  assert.equal(pages.length, 59, `swept ${pages.length} pages, not 59`);
 
   const found = [];
   let renderedTransformable = 0;

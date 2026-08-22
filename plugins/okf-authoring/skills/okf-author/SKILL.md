@@ -4,8 +4,6 @@ description: Author a conformant Open Knowledge Format (OKF) v0.2 knowledge bund
 license: Apache-2.0
 metadata:
   version: "1.0.0"
-  sources:
-    - Open Knowledge Format (OKF) SPEC.md v0.2 — GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md
 ---
 
 # Author an OKF v0.2 bundle
@@ -14,6 +12,8 @@ This skill produces a **conformant OKF v0.2 knowledge bundle** — a directory o
 markdown files with YAML frontmatter — either by hand or from a description the
 user gives you. The whole format is deliberately tiny: *if you can `cat` a file,
 you can read OKF; if you can `git clone` a repo, you can ship it.*
+
+*Note: This skill references shared plugin documentation (`../../references/`) and is designed to be installed as part of the `okf-authoring` plugin.*
 
 **Tool-agnostic by design.** Everything here works with **zero OKF binaries
 installed** — you are writing markdown and YAML. Where a CLI happens to be
@@ -204,3 +204,7 @@ files) into OKF at scale. For that, there is a named, purpose-built handoff:
   bundle or concept, and for any **zero-binary environment**: `okf-author` has no
   binary dependency and this handoff introduces none. If binder is not installed
   and you only need to write one bundle, author it by hand — that is the default.
+
+## Sources
+
+- Open Knowledge Format (OKF) SPEC.md v0.2 — GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md

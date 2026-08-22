@@ -102,7 +102,7 @@ test("AC2: the route set decomposes into the populations that produced it", asyn
   assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
 });
 
-test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 3", async () => {
+test("AC1: dist holds exactly 59 content pages, composed 1 + 10 + 23 + 21 + 1 + 3", async () => {
   // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
   // one: it is a set equality against a derivation, so it stays green if the
   // catalog grows and stays green if the derivation and the build shrink
@@ -124,7 +124,7 @@ test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 
     skillsIndex: pages.filter((p) => p.route === "skills"),
     about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
   };
-  const expected = { landing: 1, plugins: 10, skills: 23, references: 20, skillsIndex: 1, about: 3 };
+  const expected = { landing: 1, plugins: 10, skills: 23, references: 21, skillsIndex: 1, about: 3 };
   assert.deepEqual(
     Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
     expected,
@@ -132,7 +132,7 @@ test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 
   );
 
   // The buckets PARTITION the artifact: every page landed in exactly one, so
-  // the six numbers above cannot sum to 58 by double-counting or by leaving a
+  // the six numbers above cannot sum to 59 by double-counting or by leaving a
   // page uncounted. A `references` route is also matched by nothing else here
   // because the skill pattern is anchored to two segments — but that is an
   // argument, and this is the measurement of it.
@@ -146,8 +146,8 @@ test("AC1: dist holds exactly 58 content pages, composed 1 + 10 + 23 + 20 + 1 + 
   }
   const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
   assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
-  assert.equal(pages.length, 58, `dist holds ${pages.length} content pages, not 58`);
-  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 58);
+  assert.equal(pages.length, 59, `dist holds ${pages.length} content pages, not 59`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 59);
 });
 
 test("AC1 control: the 58 is content pages, and dist holds one more file than that", async () => {
@@ -236,7 +236,7 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
   assert.ok(!legitimate.includes(`plugins/${PLUGIN}/references/trust-vocabulary`));
   assert.equal(
     pages.length - legitimate.length,
-    53,
+    54,
     "the number of pages forbidden the token — the real denominator of this check",
   );
 
@@ -473,13 +473,13 @@ test("AC11: '# Concepts' (line 71) and '# Schema' (line 97) render as code, not 
   }
 });
 
-test("AC11 control: the real H1 at line 11 IS treated as a heading", async () => {
+test("AC11 control: the real H1 IS treated as a heading", async () => {
   // The positive half. If everything were treated as code the test above would
   // pass while the page was wrong; this pins the other side. The leading H1 is
   // lifted into the page title rather than left in the body (proposal §6.4),
   // so it must appear as the page's H1 and NOT inside a <pre>.
   const { raw } = await source(SKILL_MD("okf-author"));
-  const h1 = raw.split("\n")[10];
+  const h1 = raw.split("\n").find((l) => l.startsWith("# "));
   assert.equal(h1, "# Author an OKF v0.2 bundle");
   const title = h1.replace(/^#\s+/, "");
 

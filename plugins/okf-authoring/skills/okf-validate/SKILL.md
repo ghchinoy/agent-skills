@@ -4,8 +4,6 @@ description: Validate an Open Knowledge Format (OKF) v0.2 knowledge bundle for �
 license: Apache-2.0
 metadata:
   version: "1.0.0"
-  sources:
-    - Open Knowledge Format (OKF) SPEC.md v0.2 — GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md
 ---
 
 # Validate an OKF v0.2 bundle
@@ -15,6 +13,8 @@ well-formedness of its optional trust vocabulary, and produces an **advisory
 report**. It never "fails" a bundle for optional, unknown, or broken content —
 OKF is deliberately permissive, and a validator that rejects such things is
 wrong, not strict.
+
+*Note: This skill references shared plugin documentation (`../../references/`) and is designed to be installed as part of the `okf-authoring` plugin.*
 
 **Tool-agnostic by design.** The full check runs **by hand with zero OKF binaries
 installed**. If a validator is installed you MAY shell out to it first, but the
@@ -163,3 +163,7 @@ purpose-built skill:
   `verified`, no invented `sources`, no stored tier). **Stay in this skill
   (Layer A)** for validating an individual bundle and for any **zero-binary
   environment** — this handoff adds no binary dependency.
+
+## Sources
+
+- Open Knowledge Format (OKF) SPEC.md v0.2 — GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md
