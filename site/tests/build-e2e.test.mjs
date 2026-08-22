@@ -497,7 +497,23 @@ test("E2E: advisory gates proven only at unit level actually fire in a real buil
   // skews the fan-out surfaced. The claim is the relational one below, which
   // holds at any baseline; this line exists so that a baseline change is
   // something a human looks at rather than something a diff absorbs.
-  assert.equal(baseline, 30, `the unplanted baseline moved: ${baseline}`);
+  //
+  // RE-POINTED IN PHASE 4: 30 -> 42, and the move is accounted for exactly
+  // rather than observed and copied. Phase 4 added three advisory conditions
+  // that Phase 3 did not emit at all, and the repo satisfies them 12 times:
+  //
+  //   D2   1   bd-dolt-troubleshooter/SKILL.md, 670 lines
+  //   D4   2   macos-hig-reviewer/SKILL.md:42 and :48
+  //   I4   9   resource files their own SKILL.md never names
+  //   --------
+  //        12  and 30 + 12 = 42, with no residual
+  //
+  // A residual would have meant something ELSE moved in the same commit, which
+  // is the whole reason this line is a human's decision and not a diff's. The
+  // per-code breakdown is asserted independently in tests/advisories.test.mjs
+  // against a set derived from the repo, so the three figures above are a
+  // reader's arithmetic and not a second source of truth.
+  assert.equal(baseline, 42, `the unplanted baseline moved: ${baseline}`);
   assert.equal(
     planted,
     baseline + 2,

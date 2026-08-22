@@ -29,6 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Loader, LoaderContext } from "astro/loaders";
 import { z } from "astro/zod";
 
+import { adviseDeadPointers, adviseLength, adviseOrphans } from "./advise.mjs";
 import { enumerate, nodeFs, toPosix } from "./enumerate.mjs";
 import { analyzeDeclared, frontmatterKeyLine, splitFrontmatter } from "./frontmatter.mjs";
 import { firstH1, rewriteLinks, stripLeadingH1 } from "./markdown.mjs";
@@ -361,7 +362,18 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             expectedName: skill.name,
           });
 
-          const notes: any[] = [...fmNotes];
+          // ── D2, D4, I4 ──────────────────────────────────────────────────
+          // Findings that compare this file against its own directory. All
+          // three read `raw` — the bytes before the frontmatter split and the
+          // H1 strip — so the lines they report are source lines and need no
+          // offset correction. See advise.mjs for each condition and for why
+          // none of them hardcodes a skill name or an expected count.
+          const notes: any[] = [
+            ...fmNotes,
+            ...adviseLength(raw, skill.repoPath),
+            ...adviseDeadPointers(raw, skill),
+            ...adviseOrphans(raw, skill),
+          ];
 
           // ── I3, VERSION SKEW ────────────────────────────────────────────
           //
@@ -490,7 +502,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             description: declared.description,
             href: `${base}/${id}/`,
           });
-          // Everything in the depth-1 inventory that this site does NOT route:
+          // Everything in the resource inventory that this site does NOT route:
           // scripts, assets, and non-markdown references. Counted here, at the
           // one place that also decides what IS routed, so the two can never
           // give different answers about the same file.

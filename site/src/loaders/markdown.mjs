@@ -142,6 +142,61 @@ function codeSpansIn(line) {
   return out;
 }
 
+/**
+ * Every inline code span OUTSIDE a fenced block, with the 1-based SOURCE line
+ * it sits on and its content minus the delimiting backticks.
+ *
+ * `protectedRanges()` deliberately conflates the two kinds of code — it exists
+ * to answer "may the rewriter touch this byte", and for that question a fence
+ * and a span are the same answer. D4 asks a different question: which SPANS
+ * did the author write as prose pointers at their own resources. A fenced
+ * block is a transcript of something else (a shell session, a YAML sample)
+ * and its contents are not this skill's claims about its own directory, so
+ * fenced content is excluded rather than merely unrewritten.
+ *
+ * Reuses the same fence tracker as `protectedRanges()` for the reason the
+ * header gives: two scanners meant two chances to get fences wrong, and both
+ * copies were in fact wrong.
+ *
+ * @param {string} text
+ * @returns {{text: string, line: number}[]} in source order
+ */
+export function inlineCodeSpans(text) {
+  const out = [];
+  const lines = text.split("\n");
+  let fence = null;
+
+  lines.forEach((line, i) => {
+    if (fence) {
+      if (closesFence(line, fence)) fence = null;
+      return;
+    }
+    const open = opensFence(line);
+    if (open) {
+      fence = open;
+      return;
+    }
+    for (const [s, e] of codeSpansIn(line)) {
+      // Strip the delimiters. The run length is symmetric by construction in
+      // `codeSpansIn` — it closes on a run of EXACTLY the opening length.
+      let n = 0;
+      while (line[s + n] === "`") n += 1;
+      let content = line.slice(s + n, e - n);
+      // CommonMark: if the content both begins and ends with a space and is
+      // not all spaces, one space is stripped from each end. That rule is what
+      // lets an author write `` ` `code` ` `` at all, and it is a markdown
+      // fact rather than a caller's preference, so it is applied here. Without
+      // it a padded span would not match a caller's pattern and would be
+      // skipped in silence.
+      if (/^ .* $/.test(content) && content.trim() !== "") {
+        content = content.slice(1, -1);
+      }
+      out.push({ text: content, line: i + 1 });
+    }
+  });
+  return out;
+}
+
 /** True when `pos` falls inside any protected range. */
 export function isProtected(ranges, pos) {
   for (const [s, e] of ranges) {

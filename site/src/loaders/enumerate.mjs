@@ -139,8 +139,11 @@ function advisory(code, file, line, message) {
 // check`. Keep them in step with the objects constructed below.
 
 /**
- * One entry of a depth-1 directory listing. `kind` is the real filesystem
- * kind; no description is invented for it.
+ * One entry of a resource listing. `name` is relative to the group's root
+ * directory, so it carries a slash for anything `listTree()` found below the
+ * top level. `kind` is the real filesystem kind; no description is invented
+ * for it. `listTree()` emits files only, so `"directory"` reaches this type
+ * from `listDir()` alone.
  * @typedef {{name: string, kind: "file"|"directory"}} ResourceEntry
  */
 
@@ -182,8 +185,8 @@ function advisory(code, file, line, message) {
  */
 
 /**
- * Discovers plugins, skills, plugin-level references and the depth-1 resource
- * inventory.
+ * Discovers plugins, skills, plugin-level references and the per-skill
+ * resource inventory. See the module header for which groups recurse.
  *
  * @param {object} opts
  * @param {string} opts.repoRoot   absolute path to the repository root

@@ -9,6 +9,7 @@
   //                src/**/*.astro              (component script blocks)
   //
   //   NOT CHECKED — type errors in these are invisible to `astro check`:
+  //                src/loaders/advise.mjs
   //                src/loaders/enumerate.mjs
   //                src/loaders/links.mjs
   //                src/loaders/markdown.mjs
@@ -50,6 +51,13 @@
   // type coverage they have. Their behaviour is covered by
   // tests/site-pages.test.mjs and tests/assets.test.mjs instead, for the same
   // reason the live-link checker's is.
+  //
+  // PHASE 4 added one: src/loaders/advise.mjs, which derives the D2, D4 and I4
+  // advisories. Same situation and same mitigation — skills.ts imports it and
+  // is checked, so the boundary shape is covered there, and its conditions are
+  // covered by tests/advisories.test.mjs. Worth naming the specific exposure:
+  // it reads `skill.resources[group]`, whose `null`-means-absent convention is
+  // the kind of thing a type checker would enforce here and does not.
   //
   // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
   // overwhelmingly missing annotations and implicit `any` under `strict` rather
