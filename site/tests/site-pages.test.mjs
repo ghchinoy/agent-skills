@@ -260,14 +260,71 @@ test("AC9: the page says where its bytes came from", async () => {
  * a pointer from a paraphrase. What it can do is make the paraphrase expensive,
  * because a page cannot restate two specifications and stay short.
  *
- * PRICED: the page measures 1527 characters today. The ceiling is 2200 — under
- * 1.5x, so it is a bound somebody would hit rather than a formality, and the
- * test below asserts that relationship rather than trusting this comment. If
- * this page needs more room, the question to answer first is whether the
- * material belongs on it at all: the specifications are published elsewhere by
- * other people, and this page is a pointer to them.
+ * PRICED, AND RE-PRICED. The figure that used to sit here said 1527 characters.
+ * That was true in Phase 3 at 596b038 and this phase falsified it: AC5 added the
+ * provenance block — two commit pins, a version, a status, and the measured
+ * absence — and the page grew to 2113. The measurement beside the assertion did
+ * not move with it, because the comment sat in a context region of the diff and
+ * nothing in the suite could tell that a sentence had gone stale.
+ *
+ * Wrong by 586 characters, and wrong in the direction that matters: it told a
+ * future author they had 673 characters of room when they had 87.
+ *
+ * CURRENT, re-derived at d7d9861 on Node v22.19.0 from a deleted-and-rebuilt
+ * dist, using this suite's own mainOf plus toText rather than by eye:
+ *
+ *   page 2113 · ceiling 2200 · HEADROOM 87 CHARACTERS · ratio 1.041
+ *
+ * THE CEILING IS NOT BEING RAISED, AND THE 87 IS DELIBERATE. Raising it was
+ * available and would have sounded reasonable — the number was calibrated
+ * against a page that predates AC5, and AC5 mandates content on exactly this
+ * page. That is a true premise, and it is the kind that licenses a suppression.
+ * The ceiling's own instruction is to ask first whether the material belongs
+ * here. That question was asked once already this phase, at 2279 characters, and
+ * it found 168 characters of genuine duplication between the intro and the
+ * absence paragraph. The duplication came out and the number was never touched.
+ *
+ * So the tightness is now load-bearing rather than incidental: at 87 characters
+ * the next addition to this page has to answer the belongs-here question before
+ * it can land, which is the entire job of a proxy that cannot tell a pointer
+ * from a paraphrase.
+ *
+ * WHAT THIS BOUND CAN NO LONGER ABSORB, STATED SO IT IS NOT DISCOVERED LATE: a
+ * legitimate provenance addition. A third specification, or a commit date beside
+ * each pin, does not fit in 87 characters. That growth would not be paraphrase —
+ * it is the opposite, it is exactly the sourcing this project asks for
+ * everywhere — and it would trip a bound calibrated against restatement. If that
+ * is what a future edit is doing, the honest move is to re-price this ceiling on
+ * a stated principle and say so here, not to add slack quietly.
+ *
+ * A NOTE ON THE 2111 IN reports/phase5-corrections.md: that entry records this
+ * page at 2111 and the headroom at 89. It is not reproducible. Rebuilt from a
+ * clean dist at all eight commits on this branch, the page measures 2113 at
+ * every one of them, including the first. The 2111 was measured mid-edit and
+ * never re-measured after the last change landed — the same defect as the 1527,
+ * two characters instead of 586, in the very entry congratulating me for not
+ * moving this number. Corrected by append, since that file is append-only.
  */
 const STANDARDS_CEILING = 2200;
+
+/**
+ * The priced figure above, as a value the suite can check.
+ *
+ * THIS IS THE ACTUAL REPAIR, AND THE PROSE ABOVE IS NOT. A comment cannot fail.
+ * The 1527 was wrong for an entire phase while every assertion around it stayed
+ * green, because nothing bound the declaration to the artifact it described —
+ * the D-9a shape, a declaration contradicting the thing it declares, which this
+ * phase already named as its sharpest finding and then reproduced twelve lines
+ * above the assertion.
+ *
+ * Binding it means an edit to the page that does not re-price this constant
+ * fails, naming both numbers. That is deliberately exact rather than a
+ * tolerance: any tolerance re-admits the same defect at a smaller scale, and
+ * silent drift of forty characters against eighty-seven of headroom is not a
+ * rounding error. Editing this page is a one-number follow-up with the new value
+ * printed in the failure message.
+ */
+const STANDARDS_MEASURED = 2113;
 
 test("AC10: /about/standards/ links both standards, at their own homes", async () => {
   const page = pageAt(await distContentPages(), "about/standards");
@@ -337,6 +394,20 @@ test("AC10: the standards page restates no normative text — proxy, not proof",
     STANDARDS_CEILING < text.length * 1.5,
     `the ceiling (${STANDARDS_CEILING}) is more than 1.5x the page (${text.length}); ` +
       `it has stopped being a constraint and should be retightened, not inherited`,
+  );
+  // THE PRICED FIGURE IS BOUND TO THE ARTIFACT, because the priced figure is
+  // what went stale. This is the assertion the 1527 needed and did not have:
+  // the comment above claimed a length for a whole phase while every check
+  // around it passed. A declaration nothing can falsify is not a declaration,
+  // it is a decoration.
+  assert.equal(
+    text.length,
+    STANDARDS_MEASURED,
+    `/about/standards/ measures ${text.length} characters; STANDARDS_MEASURED says ` +
+      `${STANDARDS_MEASURED}. If you changed this page on purpose, re-price it: set ` +
+      `STANDARDS_MEASURED to ${text.length} and update the headroom in the note above ` +
+      `(ceiling ${STANDARDS_CEILING}, headroom would be ${STANDARDS_CEILING - text.length}). ` +
+      `Do not raise the ceiling to make room without answering the belongs-here question first.`,
   );
 
   // Half two: RFC 2119 requirement language. A pointer page does not need it;
