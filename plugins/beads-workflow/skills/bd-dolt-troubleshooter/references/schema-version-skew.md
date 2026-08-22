@@ -330,3 +330,44 @@ confusing symptom of the skew warning persisting after an "upgrade."
 should compare *commit*, not just semantic version — `go version -m` on every
 active binary — since two binaries can report the same `bd --version` string
 while being schema-incompatible dev builds from different points on `main`.
+
+---
+
+## Schema Version Skew — Accidental Release Downgrade (e.g. v1.2.0/v1.2.1 -> v1.2.2 Cursor Rollback)
+
+**Symptom:** Upstream published an accidental or untested release (e.g. `v1.2.0`/`v1.2.1`) that advanced database schemas forward (e.g. from `v53` up to `v65`). When upgrading to a stabilized release that returns to a tested branch (e.g. `v1.2.2` returning to `v1.1.2` speaking schema `v53`), `bd` commands abort:
+```
+schema version mismatch: database is at v65, binary knows up to v53 (12 migrations ahead)
+  This database was migrated by the accidental, untested v1.2.0/v1.2.1 release.
+```
+
+**Root cause:** Because the intermediate schema additions were strictly additive (no dropped or renamed tables/columns), no destructive data migration is needed. Rolling the migration ledger cursor back in Dolt aligns the metadata with the supported binary.
+
+**Recovery Runbook (~2 minutes):**
+
+1. **Stop servers and snapshot:**
+   ```bash
+   bd dolt stop
+   cp -a .beads .beads.backup-pre-recovery-$(date +%s)
+   ```
+
+2. **Revive chunk journal (if corrupted by crashes):**
+   If `dolt-server.log` reports `corrupted journal` or `invalid journal record length`:
+   ```bash
+   cd .beads/dolt/<database>   # or .beads/embeddeddolt/<database>
+   dolt fsck --revive-journal-with-data-loss
+   dolt fsck                   # verify: "No problems found."
+   ```
+
+3. **Roll back the schema cursor to v53:**
+   ```bash
+   cd .beads/dolt/<database>   # or .beads/embeddeddolt/<database>
+   dolt sql -q "DELETE FROM schema_migrations WHERE version > 53; CALL DOLT_ADD('schema_migrations'); CALL DOLT_COMMIT('-m', 'recovery: roll schema cursor back to v53 (accidental v1.2.1)', '--author', 'bd recovery <recovery@beads.invalid>');"
+   ```
+
+4. **Verify and export:**
+   ```bash
+   bd list
+   # Re-export JSONL, ensuring agent memories are preserved:
+   bd export --include-memories -o .beads/issues.jsonl
+   ```
