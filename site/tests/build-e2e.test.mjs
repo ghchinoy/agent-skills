@@ -29,13 +29,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, cp, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { fieldRows, mainOf, plantOrThrow, repoRoot, siteRoot, walk } from "./_helpers.mjs";
+import { fieldRows, mainOf, plantOrThrow, repoRoot, siteRoot, sourceRoutes, walk } from "./_helpers.mjs";
 
 const run = promisify(execFile);
 
@@ -464,6 +464,49 @@ const cases = {
   // perturbation needs neither. If any page hardcodes the version, the real
   // value survives a rebuild that no longer contains it, and that is a fact
   // about rendered bytes rather than about a regex.
+  // ── PHASE 5, AC1. THE INSTRUMENT THAT ACTUALLY SETTLES "COMPUTED AT BUILD" ──
+  //
+  // AC1 asks that the counts be "computed at build time — proven by comparing
+  // rendered HTML against a fresh parse of marketplace.json", and separately
+  // that no integer be hand-typed, "grep-asserted".
+  //
+  // The comparison against a fresh parse already exists (§11 in
+  // site-pages.test.mjs) and it is worth having. But note what it CANNOT
+  // distinguish: a count computed from the catalog, and a count hand-typed by
+  // someone who typed the correct number. Both match a fresh parse. Today.
+  //
+  // The grep cannot settle it either, for a different reason given at its own
+  // site in site-pages.test.mjs.
+  //
+  // This can. It adds a REAL SKILL to the catalog in the copied tree — a new
+  // directory with a valid SKILL.md, which is precisely what a contributor
+  // does — rebuilds, and requires every affected count to MOVE. A hand-typed
+  // integer anywhere at all, in any file, in any language, in a component this
+  // test has never heard of, survives that and turns it red. No population
+  // list, no exemptions, no needles.
+  catalogGrown: buildWith(async (root) => {
+    const dir = join(root, "plugins/okf-authoring/skills/planted-probe-skill");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "SKILL.md"),
+      [
+        "---",
+        "name: planted-probe-skill",
+        "description: A skill planted by the AC1 build-time-counting control. It exists" +
+          " only inside a temporary copy of the repository, for the duration of one build," +
+          " to prove that the catalog counts on the landing page move when the catalog" +
+          " moves. Use when verifying that the counts are computed rather than typed.",
+        "license: Apache-2.0",
+        "---",
+        "",
+        "# Planted probe skill",
+        "",
+        "This file is created by tests/build-e2e.test.mjs in a temp directory.",
+        "",
+      ].join("\n"),
+    );
+  }),
+
   specVersionPerturbed: buildWith(async (root) => {
     const p = join(root, "site/specification-source.json");
     const raw = await readFile(p, "utf8");
@@ -812,6 +855,40 @@ test("E2E: EVERY site constant is shown to reach rendered HTML (dist sensitivity
     [],
     "a site constant does NOT reach the rendered output, so an unchanged dist digest proves " +
       `nothing about it:\n  ${misses.join("\n  ")}`,
+  );
+});
+
+test("AC1: the landing-page counts MOVE when the catalog moves", async () => {
+  // The load-bearing AC1 assertion. Everything else about AC1 is a proxy.
+  const { ok, root, output } = await cases.catalogGrown;
+  assert.equal(ok, true, `the build with a planted skill did not complete:\n${output}`);
+
+  const { plugins, skills } = await sourceRoutes(); // the REAL tree, unplanted
+  const html = await readFile(join(root, "site/dist/index.html"), "utf8");
+  const text = mainOf(html).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  // The skill count must have gone UP BY EXACTLY ONE. Not merely "changed":
+  // an off-by-something would still be a build-time computation, but of the
+  // wrong thing, and this is the assertion that separates those.
+  assert.ok(
+    text.includes(`${skills.length + 1} skills`),
+    `the landing page does not report ${skills.length + 1} skills after one was added ` +
+      `(it reported the unplanted count ${skills.length}, or something else entirely). ` +
+      "The skills figure is not computed from the catalog at build time.",
+  );
+  assert.ok(
+    !text.includes(`${skills.length} skills`),
+    `the landing page still reports the OLD skill count (${skills.length}) after a skill ` +
+      "was added. Some copy of that integer is hand-typed and did not follow the catalog.",
+  );
+
+  // The plugin count must NOT have moved: the skill was added to an EXISTING
+  // plugin. A test where every number moves together cannot tell a real count
+  // from a shared variable, so this is the discriminating half.
+  assert.ok(
+    text.includes(`${plugins.length} plugins`),
+    `the plugin count changed (expected ${plugins.length}) when only a SKILL was added — ` +
+      "the two figures are not independently derived",
   );
 });
 

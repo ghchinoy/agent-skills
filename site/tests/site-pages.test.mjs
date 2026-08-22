@@ -346,21 +346,415 @@ test("AC10: the standards page restates no normative text — proxy, not proof",
   );
 });
 
-test("AC10 control: the normative-language detector fires, and does not fire on the page's own prose", async () => {
-  // POSITIVE, one sample per keyword, so a detector that lost an alternative
-  // cannot hide behind the others.
-  for (const sample of [
-    "A conforming client MUST ignore unknown fields.",
-    "Implementations SHALL NOT rewrite the identifier.",
-    "The name should be lowercase and the version must be semver.",
-    "A plugin is required to declare a manifest.",
-    "Clients MAY cache the index.",
-  ]) {
+// ── THE DETECTOR'S LOSS PROFILE, MEASURED AGAINST THE REAL SPECIFICATIONS ────
+//
+// READ THIS BEFORE TRUSTING A SILENCE FROM `normativeHits()`.
+//
+// The control below used to draw its positive samples from sentences someone
+// wrote by READING THE REGEXES. Every one of them fired, and that green light
+// meant less than it looked like: A POSITIVE CONTROL DERIVED FROM THE
+// IMPLEMENTATION SHARES THE IMPLEMENTATION'S BLIND SPOT BY CONSTRUCTION. It
+// could prove the patterns compile and fire. It could not prove the needle set
+// covers the class, because it was built from the needle set — so for the thing
+// it appeared to certify, IT COULD NOT FAIL. Same shape as C11: a check that
+// passes by construction reports success either way.
+//
+// So the samples now come from the corpus the pages are actually at risk of
+// paraphrasing: the two specifications, at the commits pinned in
+// `specification-source.json`. That is a control that CAN go red. It did.
+//
+// ── WHAT THE MEASUREMENT FOUND, AND IT IS WORSE THAN ONE MISSED WORD ─────────
+//
+// Probed by running the four patterns over every keyword-bearing sentence in
+// both specs:
+//
+//   agentplugins/agent-plugins-spec @ff8ab5e3  spec/1.0.0.md
+//     119 sentences carry an RFC-2119 keyword;  11 are SILENT.
+//   agentskills/agentskills @69ef37e9  docs/specification.mdx
+//      15 sentences carry an RFC-2119 keyword;  13 are SILENT.
+//
+// THAT ASYMMETRY IS THE FINDING. It is not a quirk of sampling. Agent Plugins
+// writes RFC-2119 keywords in UPPERCASE, which is the convention the detector
+// was built around. Agent Skills writes its constraints in ordinary sentence
+// case — "Must not start or end with a hyphen", "Should describe both what the
+// skill does and when to use it", "May only contain unicode lowercase
+// alphanumeric characters". The detector is effectively blind TO THE ENTIRE
+// NORMATIVE STYLE OF ONE OF THE TWO SPECIFICATIONS THIS SITE DESCRIBES, and
+// nothing said so, because the old samples were all in the other one's style.
+//
+// The silent classes, derived by probing rather than by reading:
+//
+//   1. TITLE CASE. "Must not …", "Should include …", "May only contain …".
+//      Pattern 1 is uppercase-only; pattern 2 has no `i` flag. THESE ARE NOT
+//      PARAPHRASES — they are literal RFC-2119 keywords, and they are how the
+//      Agent Skills specification states every one of its constraints.
+//   2. `should` + any verb outside the closed list {be,have,use,declare,
+//      render,contain}. "should include", "should describe", "should ship".
+//   3. `may`, `required`, `recommended`, `optional` in any non-uppercase form.
+//      "Clients may not recurse deeper" is a literal MAY and is silent.
+//   4. Contractions: "mustn't", "shouldn't" — no whitespace to match on.
+//   5. Clause-final "…they must." — pattern 2 needs a following word.
+//   6. Genuine paraphrase: "requires", "has to", "needs to", "is forbidden",
+//      "is not permitted", "never". UNBOUNDED, and no needle set closes it.
+//
+// CLASSES 1–5 ARE BOUNDED AND CLOSEABLE. Class 6 is not, and adding words to
+// chase it manufactures a green light that reads like coverage — the class
+// stays open and the next paraphrase uses the next verb. That refusal is
+// deliberate and is recorded rather than left as a silence.
+//
+// THE DETECTOR IS THEREFORE A PROXY AND THE TEST NAME SAYS SO. Its silence on
+// the site's own pages is evidence, not proof. The only instrument that has
+// ever caught an instance of class 6 here is a person reading a page for the
+// CLAIM rather than for the STRING, which is how the one live defect in this
+// phase was found — and it was found on a page this detector was not even
+// pointed at.
+
+/**
+ * LEVEL 1 CONTROL (E-4 ladder): built from the detector's DECLARED INTENT.
+ *
+ * Every string here is an RFC-2119 keyword in a case the docstring above says
+ * it covers, in a grammatical sentence. NOT ONE OF THEM WAS WRITTEN BY READING
+ * THE REGEXES. If this list goes red, the function is not doing what it says it
+ * does, and the answer is to fix the function or amend the declaration — never
+ * to trim this list, which is the move that produced the original defect.
+ *
+ * WOULD A DEFECT IN THE THING THIS GUARDS MAKE IT FAIL? Yes, and it did: on
+ * first run 16 of these 30 were silent, which is how the defect was found.
+ */
+const DECLARED_FORMS = (() => {
+  const frames = {
+    MUST: (k) => `The plugin manifest ${k} carry a name field.`,
+    "MUST NOT": (k) => `A skill name ${k} start with a hyphen.`,
+    SHALL: (k) => `The client ${k} resolve the path relative to the plugin root.`,
+    "SHALL NOT": (k) => `The client ${k} recurse below that directory.`,
+    SHOULD: (k) => `Authors ${k} include a description under 200 characters.`,
+    "SHOULD NOT": (k) => `Authors ${k} rely on the ordering of the entries.`,
+    REQUIRED: (k) => `The name field is ${k} in every manifest.`,
+    RECOMMENDED: (k) => `Semantic versioning is ${k} for published plugins.`,
+    MAY: (k) => `A plugin ${k} declare additional resource directories.`,
+    OPTIONAL: (k) => `The homepage field is ${k}.`,
+  };
+  // The three cases the docstring contemplates: the specification's own
+  // convention, the lowercase it says a paraphrase drops to, and the Title case
+  // that decapitalisation actually produces at the start of a sentence.
+  const cases = [(k) => k, (k) => k.toLowerCase(), (k) => k[0] + k.slice(1).toLowerCase()];
+  return Object.entries(frames).flatMap(([k, f]) => cases.map((c) => f(c(k))));
+})();
+
+test("AC10 control (LEVEL 1): the detector does what its own docstring says it does", () => {
+  const silent = DECLARED_FORMS.filter((s) => normativeHits(s).length === 0);
+  assert.deepEqual(
+    silent,
+    [],
+    `${silent.length} of ${DECLARED_FORMS.length} forms the docstring DECLARES COVERED are ` +
+      "invisible to it. A declaration and an implementation are contradicting each other:\n  " +
+      silent.join("\n  "),
+  );
+  // Non-vacuity: an empty generator would pass the assertion above in silence.
+  assert.equal(DECLARED_FORMS.length, 30, "the declared-forms generator stopped generating");
+});
+
+/**
+ * LEVEL 2 CONTROL (E-4 ladder): real sentences from the two specifications, at
+ * the pinned commits — the corpus the detector is at risk against.
+ *
+ * `caught` and `silent` are a measured PARTITION, not a wish. Both halves are
+ * asserted, so this fixture fails in two directions: if the detector regresses
+ * and stops catching what it catches, and if someone improves it without
+ * moving a sentence out of `silent`. A loss profile nobody re-measures is the
+ * stale figure this project keeps rediscovering.
+ */
+const SPEC_SAMPLES = {
+  caught: [
+    // agentplugins/agent-plugins-spec @ff8ab5e3, spec/1.0.0.md
+    "A plugin MUST include a manifest at `plugin.json` in the plugin root.",
+    "If `plugin.json` does not resolve within the plugin root, the client MUST reject the plugin.",
+    "Clients and plugin packages claiming conformance to Agent Plugins v1 MUST implement or follow" +
+      " the requirements in this document.",
+    "A client is not required to support every component type.",
+    "The optional `extensions` field contains client-specific manifest data keyed by extension" +
+      " namespace. See §8 for processing rules.",
+    // agentskills/agentskills @69ef37e9, docs/specification.mdx. EVERY ONE OF
+    // THESE SIX WAS IN `silent` UNTIL THE DOCSTRING WAS HONOURED. They were
+    // never paraphrase — they are literal RFC-2119 keywords in Title case, and
+    // the declaration always claimed them. Recording the move rather than
+    // quietly deleting the old list: the profile said "invisible" about text
+    // the function's own contract said it could see.
+    "Must not start or end with a hyphen (`-`)",
+    "Must not contain consecutive hyphens (`--`)",
+    "Must match the parent directory name",
+    "May only contain unicode lowercase alphanumeric characters (`a-z`, `0-9`) and hyphens (`-`)",
+    "Should describe both what the skill does and when to use it",
+    "Should include specific keywords that help agents identify relevant tasks",
+  ],
+  // WHAT IS ACTUALLY STILL INVISIBLE, and it is a different class from before.
+  // These carry normative force and contain NO RFC-2119 keyword in any case, so
+  // no keyword matcher reaches them however it is spelled. This is PARA-1 with
+  // the docstring bug subtracted out — the residue that is genuinely a matcher
+  // limit rather than a contract violation.
+  silent: [
+    "`plugin.json` cannot override these locations or contain inline component configuration.",
+    "A change to either schema requires a new specification release.",
+    "Client experiments cannot claim arbitrary top-level fields; they are contained under" +
+      " reverse-domain keys in `extensions`.",
+    "This gives plugin authors and clients one portable format version to understand, prevents" +
+      " mixed-version packages, and lets `$schema` select the complete validation and" +
+      " interpretation contract — including requirements that JSON Schema cannot express.",
+    "Requires git, docker, jq, and access to the internet", // agentskills @69ef37e9
+    // Not from a specification: the one live instance found in this phase, on
+    // this site's own landing page, by a person reading for the CLAIM. Kept
+    // because it is the only member of this class anyone has actually shipped.
+    "a SKILL.md at plugins/<plugin>/skills/<skill>/, discovered without recursing below that" +
+      " directory, as Agent Plugins §7.1 requires.",
+  ],
+};
+
+test("AC10 control: the detector's REAL loss profile, measured against the specifications", () => {
+  // Half one: it is alive. Drawn from the corpus, not from the regexes.
+  for (const sample of SPEC_SAMPLES.caught) {
     assert.ok(
       normativeHits(sample).length > 0,
-      `the detector does not fire on requirement language: ${sample}`,
+      `the detector has REGRESSED — it no longer fires on real specification text: ${sample}`,
     );
   }
+
+  // Half two: the recorded blindness is still exactly this blindness. If one of
+  // these starts being caught, that is good news and this list is wrong; update
+  // it deliberately rather than letting the profile rot.
+  const nowCaught = SPEC_SAMPLES.silent.filter((s) => normativeHits(s).length > 0);
+  assert.deepEqual(
+    nowCaught,
+    [],
+    "the recorded loss profile is out of date: the detector now catches text this " +
+      "file documents as invisible. Move these into `caught` and re-measure the " +
+      "profile, so the next reader is told the truth about what a silence means:\n  " +
+      nowCaught.join("\n  "),
+  );
+
+  // NON-VACUITY. Without this, emptying either list makes the whole control
+  // pass — the gate-that-cannot-fail, one level up from the gate itself.
+  assert.ok(SPEC_SAMPLES.caught.length >= 3, "the positive half has been emptied");
+  assert.ok(SPEC_SAMPLES.silent.length >= 6, "the loss profile has been emptied");
+});
+
+// ── THE POPULATION FIX ──────────────────────────────────────────────────────
+//
+// The detector above was pointed at `/about/standards/` and nowhere else, so on
+// the other four site pages THE SEARCH WAS NEVER RUN. An absence produced by
+// not looking is byte-identical to an absence produced by looking, and this
+// suite had the second kind of absence on one page and the first kind on four.
+// That cost a real defect: a paraphrase of Agent Plugins §7.1 shipped into the
+// LANDING page draft, where nothing was watching.
+//
+// Widening a POPULATION and widening a NEEDLE are opposite acts. Widening the
+// needle to chase a paraphrase manufactures coverage over an unbounded class.
+// Running an existing search where it was never run REMOVES A FILTER. Only the
+// first is refused above; this is the second.
+//
+// ── WHY THIS IS NOT SIMPLY "SCAN ALL 59 PAGES" ──────────────────────────────
+//
+// It was measured before it was designed. The raw detector fires on 29 of the
+// 59 rendered pages — and every one of those is a plugin or skill page whose
+// text is LIFTED from a `SKILL.md` in this repository. A skill author writing
+// "MUST" in their own skill is their content, rendered faithfully. It is not
+// this site restating a specification, and failing on it would be a false
+// positive that the next person silences by narrowing the scan back down.
+//
+// So the population is the five SITE-AUTHORED pages, and within them each hit
+// is attributed INDIVIDUALLY: a hit is allowed only if the text around it
+// appears verbatim in a source this repository declares — `README.md`,
+// `CONTRIBUTING.md`, or a `SKILL.md`. Per hit, never per page. A page-level
+// allowance would let genuinely new normative prose ride along on a page that
+// happens to contain one legitimate lift, which is exactly how these
+// exemptions rot.
+//
+// The two hits this currently attributes are real and worth naming: a skill's
+// own `description` on `/skills/` ("…should be fully automated…") and a
+// verbatim `CONTRIBUTING.md` line on `/about/contributing/` ("…must be
+// executable…"). SUPPRESSING EITHER WOULD BE THE ANTI-FABRICATION RULE RUN
+// BACKWARDS — hiding declared data to keep a test quiet is the same violation
+// as inventing data.
+
+/** Normalises rendered text and source markdown onto common ground. */
+function flattenProse(s) {
+  return s
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/[`*_#>|[\]()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Every prose source this repository DECLARES, as one normalised corpus. */
+async function declaredProse() {
+  const parts = [
+    await readFile(join(repoRoot, "README.md"), "utf8"),
+    await readFile(join(repoRoot, "CONTRIBUTING.md"), "utf8"),
+  ];
+  const { skills } = await sourceRoutes();
+  for (const s of skills) parts.push(await readFile(s.skillMd, "utf8"));
+  // Non-vacuity: an empty corpus would attribute nothing and the scan would
+  // report every legitimate lift as a defect — loud, but for the wrong reason.
+  const corpus = flattenProse(parts.join("\n"));
+  assert.ok(corpus.length > 50000, `the declared-source corpus is only ${corpus.length} chars`);
+  return corpus;
+}
+
+/** Block-level text of a rendered page, so a match cannot span two paragraphs. */
+function proseBlocks(html) {
+  const blocks = [];
+  const re = /<(p|li|td|th|h[1-6]|dd|dt|figcaption|blockquote)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m;
+  while ((m = re.exec(mainOf(html))) !== null) {
+    const text = decodeEntities(m[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+    if (text) blocks.push(text);
+  }
+  return blocks;
+}
+
+/**
+ * Normative hits on a page that are NOT attributable to a declared source.
+ *
+ * The window is trimmed from BOTH ends, a word at a time, before giving up,
+ * because a rendered list item concatenates site chrome with a declared value
+ * on either side: "Automation Readiness Evaluator … from Automation Governance"
+ * precedes the skill's own description, and "plugin keywords: readme, …"
+ * follows it. A declared description is therefore an INFIX of the rendered
+ * block, and a window anchored to either edge crosses a boundary into chrome
+ * that appears in no source file.
+ *
+ * The 40-character floor is what stops this degenerating into a machine that
+ * attributes everything: a window that has been trimmed down to a few common
+ * words would match some source file by coincidence. Both directions of the
+ * control below exist because an attributor that never fails is not an
+ * attributor, it is a suppressor.
+ */
+function unattributedNormative(blocks, corpus) {
+  const W = 70;
+  const MIN = 40;
+  const wordStarts = (s, from, to) => {
+    const out = [from];
+    for (let i = from; i < to; i++) if (s[i] === " ") out.push(i + 1);
+    return out;
+  };
+  const out = [];
+  for (const block of blocks) {
+    for (const re of NORMATIVE_PATTERNS) {
+      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+      let m;
+      while ((m = g.exec(block)) !== null) {
+        const end = m.index + m[0].length;
+        const lefts = wordStarts(block, Math.max(0, m.index - W), m.index);
+        const rights = wordStarts(block, end, Math.min(block.length, end + W)).reverse();
+        let attributed = false;
+        for (const left of lefts) {
+          for (const right of rights) {
+            const window = flattenProse(block.slice(left, right));
+            if (window.length >= MIN && corpus.includes(window)) {
+              attributed = true;
+              break;
+            }
+          }
+          if (attributed) break;
+        }
+        if (!attributed) {
+          out.push(`${m[0]} :: ${block.slice(Math.max(0, m.index - 60), Math.min(block.length, end + W))}`);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+test("AC3/AC10: NO site-authored normative language on ANY of the five site pages", async () => {
+  const corpus = await declaredProse();
+  const pages = await distContentPages();
+  const offenders = [];
+  let blocksScanned = 0;
+
+  for (const route of SITE_ROUTES) {
+    const blocks = proseBlocks(pageAt(pages, route).html);
+    blocksScanned += blocks.length;
+    for (const hit of unattributedNormative(blocks, corpus)) {
+      offenders.push(`${route || "(landing)"}: ${hit}`);
+    }
+  }
+
+  // The scan reports its own denominator. A scan that found no blocks would
+  // report clean, and "clean" and "never ran" are the same bytes.
+  assert.ok(
+    blocksScanned >= 150,
+    `the scan examined only ${blocksScanned} prose blocks across ${SITE_ROUTES.length} pages`,
+  );
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "a site page states a requirement in its own words. The specifications are " +
+      "published elsewhere by other people; link out instead. Note this is a " +
+      "PROXY — read the loss profile above before concluding the pages are clean:\n  " +
+      offenders.join("\n  "),
+  );
+});
+
+test("AC3/AC10 control: the site-authored scan can fail, and attribution can fail with it", async () => {
+  const corpus = await declaredProse();
+
+  // (a) Genuinely new normative prose, attributable to nothing, must be caught.
+  assert.equal(
+    unattributedNormative(["A conforming client MUST ignore unknown manifest fields."], corpus).length,
+    1,
+    "the scan does not flag invented normative prose — it would pass over a real defect",
+  );
+
+  // (b) Real declared text must be attributed, or every legitimate lift becomes
+  // a false positive and the next person deletes the scan.
+  assert.deepEqual(
+    unattributedNormative(["Any helper scripts in scripts/ must be executable (chmod +x)."], corpus),
+    [],
+    "the scan flags a verbatim CONTRIBUTING.md line. Attribution is broken, and a " +
+      "broken attribution is how a real gate gets removed for being noisy.",
+  );
+
+  // (c) THE DIRECTION THAT MATTERS MOST. Attribution must not be a blanket
+  // pass: normative prose that merely SITS NEAR declared text is still ours.
+  const smuggled =
+    "Any helper scripts in scripts/ must be executable (chmod +x). Clients MUST NOT " +
+    "recursively search deeper descendants of the skills directory.";
+  assert.ok(
+    unattributedNormative([smuggled], corpus).some((h) => h.includes("MUST")),
+    "normative prose adjacent to an attributed lift was itself attributed — the " +
+      "allowance is behaving as a page-level exemption rather than a per-hit one",
+  );
+
+  // (d) THE COST OF TRIMMING FROM BOTH ENDS, PRICED. Symmetric trimming shrinks
+  // the window until it matches, so the question is whether it will shrink far
+  // enough to match something that is merely SIMILAR to declared text. This is
+  // the CONTRIBUTING.md line from (b) with ONE WORD CHANGED next to the
+  // keyword. If attribution still swallows it, the trimming has stopped
+  // distinguishing a lift from a rewrite and the whole scan is a rubber stamp.
+  const rewritten = "Any helper scripts in scripts/ must be readable (chmod +x).";
+  assert.equal(
+    unattributedNormative([rewritten], corpus).length,
+    1,
+    "a one-word REWRITE of declared text was attributed to the declaration. " +
+      "Trimming has degenerated into a suppressor: it now shrinks the window " +
+      "until something matches, which is a green light manufactured by the " +
+      "attributor rather than earned by the page.",
+  );
+
+  // (e) And the floor that makes (d) work is real rather than nominal: a window
+  // trimmed below it must never attribute, however common its words.
+  assert.equal(
+    unattributedNormative(["It may be."], corpus).length,
+    1,
+    "a sub-threshold fragment was attributed — the 40-character floor is not holding",
+  );
+});
+
+test("AC10 control: the detector does not fire on the page's own legitimate prose", async () => {
   // NEGATIVE, and these are near misses drawn from the page's actual copy: it
   // uses the word "normative", describes what the build "found", and says what
   // the standards "fix". None of that is a restated requirement.
@@ -443,13 +837,45 @@ test("§11: every count on the landing page is the measured one", async () => {
  * forms are included because a paraphrase usually drops the capitals — that is
  * most of what makes it a paraphrase — and "should be", "must be" and "is
  * required to" are how it reads afterwards.
+ *
+ * ── THE PARAGRAPH ABOVE IS UNCHANGED, BECAUSE IT IS THE CONTRACT ─────────────
+ *
+ * It is left exactly as written, including the part that was false, because the
+ * finding is that THE IMPLEMENTATION DID NOT DO WHAT ITS OWN DOCSTRING SAID.
+ * Rewriting the declaration to match the code would have closed the gap from
+ * the wrong end and destroyed the evidence.
+ *
+ * It says "the lowercase forms are included". They were not. Four of the seven
+ * RFC-2119 keywords had NO lowercase pattern at all — `may`, `required`,
+ * `recommended`, `optional` — and two more were gated behind closed lists:
+ * `should` matched only in front of six hand-picked verbs, `required` only
+ * inside the exact phrase "is required to". Probed with one grammatical
+ * sentence per keyword in each case the docstring contemplates (uppercase, the
+ * lowercase it names, and the Title case a decapitalised keyword becomes at the
+ * start of a sentence): 16 of 30 DECLARED-COVERED forms were SILENT.
+ *
+ * The docstring's own three examples — "should be", "must be", "is required
+ * to" — all passed. They are the regexes restated in prose. THE EXAMPLES WERE
+ * DERIVED FROM THE IMPLEMENTATION AND THE GENERAL CLAIM ABOVE THEM WAS NOT,
+ * so any control written by reading this function agreed with it, and the
+ * agreement followed from shared construction rather than from evidence.
+ *
+ * THIS IS NOT A WIDENED NEEDLE. No word is matched here that the declaration
+ * did not already claim; the fix is case-insensitivity, which is what "the
+ * lowercase forms are included" means. A SYNONYM would be a widening:
+ * "requires", "needs to", "has to" are not RFC-2119 keywords in another case,
+ * they are different words. They stay OUT, deliberately, and the class they
+ * belong to is carried as PARA-1 rather than papered over with more words.
  */
+const NORMATIVE_PATTERNS = [
+  // One pattern, not four. The former `is required to` and
+  // `should (be|have|use|declare|render|contain)` entries are subsumed by it and
+  // are DELETED rather than left as dead alternations that read like extra
+  // coverage. A separate uppercase-only entry would double-report every
+  // uppercase hit, so case is read off the matched text instead.
+  /\b(must|shall|should|required|recommended|optional|may)\b/i,
+];
+
 function normativeHits(text) {
-  const patterns = [
-    /\b(MUST|SHALL|SHOULD|REQUIRED|RECOMMENDED|OPTIONAL|MAY)\b/,
-    /\b(must|shall)\s+(not\s+)?\w+/,
-    /\bis required to\b/i,
-    /\bshould\s+(not\s+)?(be|have|use|declare|render|contain)\b/i,
-  ];
-  return patterns.filter((re) => re.test(text)).map((re) => text.match(re)[0]);
+  return NORMATIVE_PATTERNS.filter((re) => re.test(text)).map((re) => text.match(re)[0]);
 }
