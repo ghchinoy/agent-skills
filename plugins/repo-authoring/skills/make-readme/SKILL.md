@@ -4,9 +4,6 @@ description: Create, assess, and improve README.md files for public GitHub proje
 license: Apache-2.0
 metadata:
   version: "1.0.0"
-  sources:
-    - Mark Allen, "How to Write a Great README for Your Public GitHub Project" (Everyday DevOps, 04 May 2025) — https://www.markcallen.com/how-to-write-a-great-readme-for-your-public-github-project/
-    - Richard Littauer, "Standard Readme" (MIT licensed spec) — https://github.com/RichardLitt/standard-readme
 ---
 
 # Make README
@@ -67,3 +64,8 @@ Figure out which mode the user wants. Default to modes 1–3 (Mark Allen-based).
 ## Guiding Principle
 
 Mark Allen's closing question is the standard to hold every README to: *"Would I know what to do if I saw this for the first time?"* A README is a pitch, a tutorial, and an invitation — not just documentation. Optimize for a stranger with zero context getting from "what is this" to "it's running on my machine" as fast as possible.
+
+## Sources
+
+- Mark Allen, "How to Write a Great README for Your Public GitHub Project" (Everyday DevOps, 04 May 2025) — https://www.markcallen.com/how-to-write-a-great-readme-for-your-public-github-project/
+- Richard Littauer, "Standard Readme" (MIT licensed spec) — https://github.com/RichardLitt/standard-readme

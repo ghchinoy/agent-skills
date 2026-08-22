@@ -5,10 +5,6 @@ license: Apache-2.0
 metadata:
   version: "1.1.0"
   trigger: Reviewing, auditing, or editing a technical post draft
-  sources:
-    - stop-slop skill (hardikpandya/stop-slop) — pattern rules
-    - Ruth Starkman, "Model Style Is So Cringe" (Substack, March 2026) — nuance on device vs lazy use
-    - docstats (ghchinoy/docstats) — two-axis acceptance gating and deterministic house-style linting
 ---
 
 # Technical Post Editorial
@@ -166,4 +162,12 @@ Below 35/50: revise.
 | "The obvious fix is X. We did something better." | State the approach directly. |
 | Italicizing a word for emphasis ("it mattered *more*") | Remove. Rewrite if emphasis is needed. |
 | "The lesson that cost us the most time" | Fine as a heading, but the paragraph should open with the lesson, not with the meta-commentary about it costing time. |
+
+---
+
+## Sources
+
+- stop-slop skill (hardikpandya/stop-slop) — pattern rules
+- Ruth Starkman, "Model Style Is So Cringe" (Substack, March 2026) — nuance on device vs lazy use
+- docstats (ghchinoy/docstats) — two-axis acceptance gating and deterministic house-style linting
 

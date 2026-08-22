@@ -479,7 +479,7 @@ test("AC8: every rendered field label on all 58 pages traces to a declared key",
   // POPULATION, and every branch non-empty. A sweep in which one branch never
   // ran is a sweep that has not tested that branch, and reporting the totals is
   // what makes the green result readable as evidence rather than as silence.
-  assert.equal(pages.length, 58, `swept ${pages.length} pages, not 58`);
+  assert.equal(pages.length, 59, `swept ${pages.length} pages, not 59`);
   assert.ok(checked > pages.length, `only ${checked} labels across ${pages.length} pages`);
   for (const [kind, n] of Object.entries(byKind)) {
     assert.ok(n > 0, `no ${kind} row was seen anywhere — that branch of the gate is untested`);

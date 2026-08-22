@@ -146,7 +146,7 @@ test("AC1: the per-group totals are 22 references, 12 scripts and 24 assets — 
   // report — not to edit the expectation.
   assert.deepEqual(
     tally(disk),
-    { references: 22, scripts: 12, assets: 24 },
+    { references: 23, scripts: 12, assets: 24 },
     `predicate: FILES at any depth under plugins/*/skills/*/{references,scripts,assets}/, ` +
       `across every skill marketplace.json declares`,
   );

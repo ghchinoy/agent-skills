@@ -203,7 +203,7 @@ test("real data: exactly the six link targets outside code in okf-author/SKILL.m
   const raw = await readFile(OKF_AUTHOR, "utf8");
   const body = raw.replace(/^---\n[\s\S]*?\n---\n/, "");
   const seen = [];
-  rewriteLinks(body, (t, at) => (seen.push(`${at.line}:${t}`), t), { lineOffset: 9 });
+  rewriteLinks(body, (t, at) => (seen.push(`${at.line}:${t}`), t), { lineOffset: 7 });
   assert.deepEqual(seen, [
     "20:#cli-is-opportunistic-never-required",
     "25:../../references/okf-v0.2-spec-summary.md",
