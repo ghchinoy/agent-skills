@@ -139,7 +139,7 @@ for k in data.keys():
 # Check 3: Metadata value types (must be string values; keys stay open)
 if 'metadata' in data:
     meta = data['metadata']
-    if meta is None or not isinstance(meta, dict) or isinstance(meta, list):
+    if meta is None or not isinstance(meta, dict):
         type_name = 'null' if meta is None else type(meta).__name__
         errors.append(f'metadata must be a YAML mapping, got {type_name}')
     else:
@@ -221,7 +221,9 @@ print(json.dumps({
 import json, sys
 data = json.load(sys.stdin)
 for e in data.get('errors', []):
-    print(e)
+    # Flatten any internal newlines so each error entry is exactly one line,
+    # keeping the err() call count aligned with the number of violations.
+    print(' '.join(e.splitlines()))
 ")
   else
     desc_len="$(echo "$read_res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('desc_len', 0))" 2>/dev/null || echo 0)"
