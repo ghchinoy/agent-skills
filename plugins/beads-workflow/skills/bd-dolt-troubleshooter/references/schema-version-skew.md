@@ -189,8 +189,8 @@ When `bd` hits schema skew, its terminal error prompt instructs you to run `CGO_
    ```
 2. Reinstall bd from source at that version, or run the automated restoration script:
    ```bash
-   # Automated rebuild against @main with CGO + ICU support and auto-sync PATH binaries:
-   scripts/restore-bd.sh
+   # Automated rebuild against @main with CGO + ICU support, disk check, and auto-sync PATH:
+   scripts/restore-bd.sh --migrate
 
    # Or inspect module revisions across multiple installed binaries:
    scripts/inspect-binary.sh

@@ -344,8 +344,8 @@ project `AGENTS.md`.
 - `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
 - `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes`, and exports clean JSONL
 - `scripts/repair-corrupt-backup.sh` — targeted repair for corrupt backup write-rollback loops
-- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@main` with full CGO/ICU support
-  and automatically synchronize shadowed PATH binaries across macOS and Linux
+- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@main` with full CGO/ICU support,
+  disk-space preflight checks, optional automated schema migration (`--migrate`), and automatic synchronization of shadowed PATH binaries across macOS and Linux
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`
 - `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,
