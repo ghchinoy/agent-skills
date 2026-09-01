@@ -1,4 +1,4 @@
-// fields.test.mjs — acceptance criteria 3 and 8, across all 69 pages.
+// fields.test.mjs — acceptance criteria 3 and 8, across all 72 pages.
 //
 // Both are ABSENCE claims, and they fail in the two ways an absence claim can.
 //
@@ -16,7 +16,7 @@
 //
 //   THE FORWARD FORM IS VACUOUS TODAY. Derive the population it quantifies
 //   over — top-level keys in this repository's SKILL.md files that are not one
-//   of the spec's six — and it is EMPTY. All 25 skills declare only `name`,
+//   of the spec's six — and it is EMPTY. All 26 skills declare only `name`,
 //   `description`, `license`, `compatibility` and `metadata`. A test that
 //   iterated that set and asserted each member is unrendered would iterate zero
 //   times, pass, and go on passing on the day somebody adds a seventh key.
@@ -24,7 +24,7 @@
 //   with the instance count at zero.
 //
 //   SO THE PRIMARY ASSERTION RUNS BACKWARDS: over every `data-field-label` the
-//   build actually rendered, on all 69 pages, each must trace to the spec's six,
+//   build actually rendered, on all 72 pages, each must trace to the spec's six,
 //   the closed `plugin.json` vocabulary, a `metadata.*` key its own SKILL.md
 //   declares, or a row explicitly marked derived. Nothing else may be on the
 //   page. That is a check over a population that is not empty — it is every
@@ -204,7 +204,7 @@ test("AC8: the forward population is EMPTY, which is why the gate runs backwards
 });
 
 // THE ONE EXEMPTION, ITEMISED AND COUNTED, AND ITS REASON IS A MEASUREMENT
-// (pre-registration §6.5). `description` is declared by 25 of 25 skills and is
+// (pre-registration §6.5). `description` is declared by 26 of 26 skills and is
 // the only declared key that is not a labelled row: Starlight renders it as the
 // page's lead paragraph, which is where a reader meets a description. It is
 // exempted from the ROW requirement and then held to a stronger one at the call
@@ -292,9 +292,9 @@ test("AC8 forward: every key a skill declares reaches its page", async () => {
   }
   assert.deepEqual(suppressed, [], `declared keys that never reach a reader:\n${suppressed.join("\n")}`);
 
-  // DENOMINATORS. 25 skills; the exemption fires once per skill and no more,
-  // so it is 25 of 25 and cannot have quietly widened to cover a second key.
-  assert.equal(skills.length, 25, `swept ${skills.length} skills, not 25`);
+  // DENOMINATORS. 26 skills; the exemption fires once per skill and no more,
+  // so it is 26 of 26 and cannot have quietly widened to cover a second key.
+  assert.equal(skills.length, 26, `swept ${skills.length} skills, not 26`);
   assert.equal(
     exemptSeen,
     skills.length,
@@ -468,7 +468,7 @@ function scanPages(pages, skills) {
   return { untraceable, checked, byKind };
 }
 
-test("AC8: every rendered field label on all 69 pages traces to a declared key", async () => {
+test("AC8: every rendered field label on all 72 pages traces to a declared key", async () => {
   // THE GATE. Runs over every label the build emitted, on every page it built.
   const skills = await declaredSkills();
   const pages = await distContentPages();
@@ -479,7 +479,7 @@ test("AC8: every rendered field label on all 69 pages traces to a declared key",
   // POPULATION, and every branch non-empty. A sweep in which one branch never
   // ran is a sweep that has not tested that branch, and reporting the totals is
   // what makes the green result readable as evidence rather than as silence.
-  assert.equal(pages.length, 69, `swept ${pages.length} pages, not 69`);
+  assert.equal(pages.length, 72, `swept ${pages.length} pages, not 72`);
   assert.ok(checked > pages.length, `only ${checked} labels across ${pages.length} pages`);
   for (const [kind, n] of Object.entries(byKind)) {
     assert.ok(n > 0, `no ${kind} row was seen anywhere — that branch of the gate is untested`);

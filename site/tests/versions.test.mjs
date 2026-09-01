@@ -69,7 +69,7 @@ async function versionPopulation() {
 test("AC5: the skew population is derived, non-empty, and larger than the one the spec named", async () => {
   const { skills, declaring, skews } = await versionPopulation();
   // Every figure with its population, because a bare "5" is not a measurement.
-  assert.equal(skills.length, 25, "the catalog no longer has 25 skills — re-derive, do not edit");
+  assert.equal(skills.length, 26, "the catalog no longer has 26 skills — re-derive, do not edit");
   assert.ok(
     declaring.length > 0 && declaring.length <= skills.length,
     `${declaring.length} of ${skills.length} skills declare metadata.version`,

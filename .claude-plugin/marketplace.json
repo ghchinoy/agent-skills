@@ -89,6 +89,14 @@
       ]
     },
     {
+      "name": "macos-performance",
+      "source": "./plugins/macos-performance",
+      "description": "macOS/SwiftUI application performance assessment: launch-time first-frame readiness, main-actor I/O, strict concurrency, and render budget",
+      "skills": [
+        "./plugins/macos-performance/skills/quick-bounce-assessor"
+      ]
+    },
+    {
       "name": "gcp-management",
       "source": "./plugins/gcp-management",
       "description": "Google Cloud Platform and Firebase project assessment, itemized BigQuery spend analysis, quota governance, and consolidation",

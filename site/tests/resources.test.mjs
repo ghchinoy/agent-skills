@@ -135,7 +135,7 @@ test("AC1: the rendered resource set equals the on-disk set, in both directions"
   assert.ok(onDisk.size > 50, `only ${onDisk.size} resources found on disk`);
 });
 
-test("AC1: the per-group totals are 23 references, 12 scripts and 24 assets — derived", async () => {
+test("AC1: the per-group totals are 31 references, 13 scripts and 24 assets — derived", async () => {
   const disk = await resourcesOnDisk();
   const shown = await resourcesRendered();
   const tally = (rows) =>
@@ -146,7 +146,7 @@ test("AC1: the per-group totals are 23 references, 12 scripts and 24 assets — 
   // report — not to edit the expectation.
   assert.deepEqual(
     tally(disk),
-    { references: 30, scripts: 12, assets: 24 },
+    { references: 31, scripts: 13, assets: 24 },
     `predicate: FILES at any depth under plugins/*/skills/*/{references,scripts,assets}/, ` +
       `across every skill marketplace.json declares`,
   );
@@ -396,15 +396,15 @@ test("AC4: every asset the repo ships that is NOT copied is still reachable, by 
 
 // ── AC5 ─────────────────────────────────────────────────────────────────────
 
-test("AC5: exactly the 12 scripts on disk are linked, at blob URLs, one per file", async () => {
+test("AC5: exactly the 13 scripts on disk are linked, at blob URLs, one per file", async () => {
   const disk = (await resourcesOnDisk()).filter((r) => r.group === "scripts");
   const shown = (await resourcesRendered()).filter((r) => r.group === "scripts");
 
-  assert.equal(disk.length, 12, `predicate: files under plugins/*/skills/*/scripts/`);
+  assert.equal(disk.length, 13, `predicate: files under plugins/*/skills/*/scripts/`);
   assert.equal(shown.length, disk.length);
 
   const urls = shown.map(hrefOf);
-  assert.equal(new Set(urls).size, 12, `the 12 rows produce ${new Set(urls).size} distinct URLs`);
+  assert.equal(new Set(urls).size, 13, `the 13 rows produce ${new Set(urls).size} distinct URLs`);
   for (const r of shown) {
     // A blob URL at a pinned ref, ending in the real filename. Each part is
     // asserted separately: a URL that is well-formed and points at the wrong
@@ -442,7 +442,7 @@ test("AC5: what the checker will REQUEST is the same set this suite just asserte
     shown.map(hrefOf).sort(),
     "the checker would request a different set of URLs than the site renders",
   );
-  assert.equal(willRequest.length, 12);
+  assert.equal(willRequest.length, 13);
   assert.deepEqual(willRequest.filter((t) => t.url === null), [], "a script row has no href");
 
   // The controls it will use are FABRICATED FROM a URL it is about to assert

@@ -11,7 +11,7 @@
 //      title, which is deliberately the body H1 (see src/sidebar.mjs for the
 //      full ruling and rationale).
 //   2. Group order, and skill order within a group, follow marketplace.json
-//      exactly. Phase 3 AC 2 fans this out to 25 skills across 11 plugins; the
+//      exactly. Phase 3 AC 2 fans this out to 26 skills across 12 plugins; the
 //      assertions below are written against N plugins, not against one.
 //
 // Everything expected here is parsed from marketplace.json and the SKILL.md
@@ -527,7 +527,7 @@ test("AC4: every page renders exactly one H1, and the pages with no source H1 ar
     if (n !== 1) wrong.push(`${p.route}: ${n}`);
   }
   assert.deepEqual(wrong, [], `pages not rendering exactly one H1:\n${wrong.join("\n")}`);
-  assert.equal(pages.length, 69, `swept ${pages.length} pages, not 69`);
+  assert.equal(pages.length, 72, `swept ${pages.length} pages, not 72`);
 
   // The instance the criterion names, reached by DERIVING it: the skills whose
   // body has no leading H1 for the loader to strip. That set is what makes I2

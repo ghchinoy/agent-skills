@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 11 thematic plugins under `plugins/`:
+The repository is organized into 12 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -67,6 +67,10 @@ The repository is organized into 11 thematic plugins under `plugins/`:
 ### 11. 🐹 Go Readability (`plugins/go-readability`)
 *Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns.*
 - **`go-readability`**: Write and review Go code to meet modern Go and Google readability standards. Covers style, naming, error handling, testing, documentation, package design, linting, mentor feedback, and CLI checklists. Includes 7 deep-dive reference guides and before/after review examples.
+
+### 12. 🏎️ macOS Performance (`plugins/macos-performance`)
+*macOS/SwiftUI application performance assessment for launch responsiveness and runtime smoothness.*
+- **`quick-bounce-assessor`**: Assesses first-frame ("quick bounce") readiness by finding synchronous main-actor I/O on the launch path, Swift strict-concurrency posture, view-model vs business-logic separation, and steady-state render budget (high-frequency `@Published` timers, per-body allocations). Produces a PASS/WARNING/FAIL report with `file:line` evidence and phased fixes. Includes a read-only heuristic scanner (`scripts/scan_launch_path.sh`) and an anti-pattern catalog (`references/PERF_CATALOG.md`).
 
 ---
 

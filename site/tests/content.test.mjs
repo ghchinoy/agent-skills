@@ -102,7 +102,7 @@ test("AC2: the route set decomposes into the populations that produced it", asyn
   assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
 });
 
-test("AC1: dist holds exactly 69 content pages, composed 1 + 11 + 25 + 28 + 1 + 3", async () => {
+test("AC1: dist holds exactly 72 content pages, composed 1 + 12 + 26 + 29 + 1 + 3", async () => {
   // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
   // one: it is a set equality against a derivation, so it stays green if the
   // catalog grows and stays green if the derivation and the build shrink
@@ -124,7 +124,7 @@ test("AC1: dist holds exactly 69 content pages, composed 1 + 11 + 25 + 28 + 1 + 
     skillsIndex: pages.filter((p) => p.route === "skills"),
     about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
   };
-  const expected = { landing: 1, plugins: 11, skills: 25, references: 28, skillsIndex: 1, about: 3 };
+  const expected = { landing: 1, plugins: 12, skills: 26, references: 29, skillsIndex: 1, about: 3 };
   assert.deepEqual(
     Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
     expected,
@@ -146,15 +146,15 @@ test("AC1: dist holds exactly 69 content pages, composed 1 + 11 + 25 + 28 + 1 + 
   }
   const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
   assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
-  assert.equal(pages.length, 69, `dist holds ${pages.length} content pages, not 69`);
-  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 69);
+  assert.equal(pages.length, 72, `dist holds ${pages.length} content pages, not 72`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 72);
 });
 
-test("AC1 control: the 69 is content pages, and dist holds one more file than that", async () => {
+test("AC1 control: the 72 is content pages, and dist holds one more file than that", async () => {
   // The disclosure that goes with the number. `find dist -name '*.html'`
-  // returns 70, and Astro's own build log says "70 page(s) built": the extra
+  // returns 73, and Astro's own build log says "73 page(s) built": the extra
   // is 404.html, which Starlight emits and which is not a content page. AC 1's
-  // 1 + 11 + 25 + 28 + 1 + 3 does not include it, so the counter this suite
+  // 1 + 12 + 26 + 29 + 1 + 3 does not include it, so the counter this suite
   // uses must exclude it — and a counter that excluded a REAL page by the same
   // mechanism would look identical from the inside. Hence: the 404 is asserted
   // to exist, asserted to be the ONLY difference, and asserted to be absent
@@ -202,12 +202,12 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
     "the derived route set itself contains a bundle path",
   );
 
-  // (c) okf_version: computed, not assumed, and now over ALL 69 pages rather
+  // (c) okf_version: computed, not assumed, and now over ALL 72 pages rather
   // than the five of the Phase-1 slice. `entitledSources()` models, in this
   // file, what each ROUTE is allowed to quote — the SKILL.md behind a skill
   // page, the manifest and the skill descriptions behind a plugin page, the
   // lifted repo document behind an about page — and a page renders the token
-  // legitimately only if one of its own sources contains it. 64 of the 69
+  // legitimately only if one of its own sources contains it. 67 of the 72
   // pages have no entitlement at all, so this is a real two-sided comparison
   // and not a permission slip.
   const legitimate = [];
@@ -236,7 +236,7 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
   assert.ok(!legitimate.includes(`plugins/${PLUGIN}/references/trust-vocabulary`));
   assert.equal(
     pages.length - legitimate.length,
-    64,
+    67,
     "the number of pages forbidden the token — the real denominator of this check",
   );
 

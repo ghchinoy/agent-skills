@@ -146,7 +146,7 @@ test("D2: the over-length population is derived, and is 0 now that all skills ar
   const measured = skills.map((s) => ({ route: s.route, lines: countLines(s.raw) }));
   const over = measured.filter((m) => m.lines > SKILL_MD_LINE_GUIDANCE);
 
-  // Moving detailed runbooks into references/ brings all 25 skills under the 500-line guidance.
+  // Moving detailed runbooks into references/ brings all 26 skills under the 500-line guidance.
   assert.equal(
     over.length,
     0,
@@ -188,7 +188,7 @@ test("D4: the dead-pointer population is derived from a class rule over every sk
   const skills = await skillsWithResources();
   const found = skills.flatMap((s) => adviseDeadPointers(s.raw, s).map((a) => `${a.file}:${a.line}`));
 
-  // All 25 skills are scanned for resource-shaped code spans pointing to missing files.
+  // All 26 skills are scanned for resource-shaped code spans pointing to missing files.
   // With macos-hig-reviewer updated to point to assets/swiftlint.yml, the catalog is clean.
   assert.equal(
     found.length,
@@ -357,9 +357,9 @@ test("I4: two mention-detectors with different loss profiles select the same set
     for (const group of RESOURCE_GROUPS) population += (s.resources[group] ?? []).length;
   }
   // NAMED, BECAUSE THE INTEGER IS A HOMONYM. 58 did duty for two unrelated
-  // populations in this suite: RESOURCE FILES here (originally 22 + 12 + 24, now 30 + 12 + 24)
-  // and CONTENT PAGES in content.test.mjs, in the test named "AC1: dist holds exactly 69
-  // content pages", composed 1 + 11 + 25 + 28 + 1 + 3. Different things counted,
+  // populations in this suite: RESOURCE FILES here (originally 22 + 12 + 24, now 31 + 13 + 24)
+  // and CONTENT PAGES in content.test.mjs, in the test named "AC1: dist holds exactly 72
+  // content pages", composed 1 + 12 + 26 + 29 + 1 + 3. Different things counted,
   // and nothing keeps them equal if either population moves.
   //
   // Both sites already state their composition, so a reader cannot conflate
@@ -370,12 +370,12 @@ test("I4: two mention-detectors with different loss profiles select the same set
   // Cross-referenced by TEST NAME rather than by line number, because a line
   // number is a pin on a moving file and would rot the way the 1527 in
   // site-pages.test.mjs rotted.
-  const RESOURCE_FILE_POPULATION = 66;
+  const RESOURCE_FILE_POPULATION = 68;
   assert.equal(
     population,
     RESOURCE_FILE_POPULATION,
-    `the resource FILE population is ${population}; AC1's 30 + 12 + 24 is ` +
-      `${RESOURCE_FILE_POPULATION}. This is not the 69 content pages in content.test.mjs.`,
+    `the resource FILE population is ${population}; AC1's 31 + 13 + 24 is ` +
+      `${RESOURCE_FILE_POPULATION}. This is not the 72 content pages in content.test.mjs.`,
   );
   assert.ok(loose.size > 0 && loose.size < population, "the detector accepted or rejected everything");
 });
