@@ -641,7 +641,7 @@ test("E2E: advisory gates proven only at unit level actually fire in a real buil
   // per-code breakdown is asserted independently in tests/advisories.test.mjs
   // against a set derived from the repo, so the three figures above are a
   // reader's arithmetic and not a second source of truth.
-  assert.equal(baseline, 35, `the unplanted baseline moved: ${baseline}`);
+  assert.equal(baseline, 36, `the unplanted baseline moved: ${baseline}`);
   assert.equal(
     planted,
     baseline + 2,

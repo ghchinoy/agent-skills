@@ -97,6 +97,14 @@
         "./plugins/gcp-management/skills/gcp-quota-governance",
         "./plugins/gcp-management/skills/gcp-project-consolidation"
       ]
+    },
+    {
+      "name": "go-readability",
+      "source": "./plugins/go-readability",
+      "description": "Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns",
+      "skills": [
+        "./plugins/go-readability/skills/go-readability"
+      ]
     }
   ]
 }

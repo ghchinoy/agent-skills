@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 10 thematic plugins under `plugins/`:
+The repository is organized into 11 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -62,6 +62,10 @@ The repository is organized into 10 thematic plugins under `plugins/`:
 - **`gcp-project-assessment`**: Audits and categorizes 60+ GCP/Firebase projects across billing links, active compute, 30-day Cloud Logging traffic, BigQuery billing export spend, and Firebase assets. Produces structured Markdown reports with Mermaid cost diagrams. Includes parallelized audit script (`scripts/audit_portfolio.py`) and SQL queries (`references/billing-export-queries.sql`).
 - **`gcp-quota-governance`**: Analyzes API spend velocity (e.g. Vertex AI frontier Claude & Gemini models) and establishes enforceable hard request/token quotas, Cloud Run scaling caps, and event-driven automated billing circuit breakers. Includes quota inspector script (`scripts/inspect_quotas.py`), capping reference guide, and circuit breaker architecture.
 - **`gcp-project-consolidation`**: Guides the identification, cleanup, and consolidation of duplicate environments, orphaned persistent disks on terminated VMs, unattached static IPs, deletion lien removals, and safe project retirement. Includes decommissioning checklists and orphaned resource playbooks.
+
+### 11. 🐹 Go Readability (`plugins/go-readability`)
+*Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns.*
+- **`go-readability`**: Write and review Go code to meet modern Go and Google readability standards. Covers style, naming, error handling, testing, documentation, package design, linting, mentor feedback, and CLI checklists. Includes 7 deep-dive reference guides and before/after review examples.
 
 ---
 

@@ -102,7 +102,7 @@ test("AC2: the route set decomposes into the populations that produced it", asyn
   assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
 });
 
-test("AC1: dist holds exactly 59 content pages, composed 1 + 10 + 23 + 21 + 1 + 3", async () => {
+test("AC1: dist holds exactly 69 content pages, composed 1 + 11 + 25 + 28 + 1 + 3", async () => {
   // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
   // one: it is a set equality against a derivation, so it stays green if the
   // catalog grows and stays green if the derivation and the build shrink
@@ -124,7 +124,7 @@ test("AC1: dist holds exactly 59 content pages, composed 1 + 10 + 23 + 21 + 1 + 
     skillsIndex: pages.filter((p) => p.route === "skills"),
     about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
   };
-  const expected = { landing: 1, plugins: 10, skills: 23, references: 21, skillsIndex: 1, about: 3 };
+  const expected = { landing: 1, plugins: 11, skills: 25, references: 28, skillsIndex: 1, about: 3 };
   assert.deepEqual(
     Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
     expected,
@@ -146,8 +146,8 @@ test("AC1: dist holds exactly 59 content pages, composed 1 + 10 + 23 + 21 + 1 + 
   }
   const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
   assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
-  assert.equal(pages.length, 59, `dist holds ${pages.length} content pages, not 59`);
-  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 59);
+  assert.equal(pages.length, 69, `dist holds ${pages.length} content pages, not 69`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 69);
 });
 
 test("AC1 control: the 58 is content pages, and dist holds one more file than that", async () => {
@@ -236,7 +236,7 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
   assert.ok(!legitimate.includes(`plugins/${PLUGIN}/references/trust-vocabulary`));
   assert.equal(
     pages.length - legitimate.length,
-    54,
+    64,
     "the number of pages forbidden the token — the real denominator of this check",
   );
 

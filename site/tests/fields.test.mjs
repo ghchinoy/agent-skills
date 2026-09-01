@@ -292,9 +292,9 @@ test("AC8 forward: every key a skill declares reaches its page", async () => {
   }
   assert.deepEqual(suppressed, [], `declared keys that never reach a reader:\n${suppressed.join("\n")}`);
 
-  // DENOMINATORS. 23 skills; the exemption fires once per skill and no more,
-  // so it is 23 of 23 and cannot have quietly widened to cover a second key.
-  assert.equal(skills.length, 23, `swept ${skills.length} skills, not 23`);
+  // DENOMINATORS. 25 skills; the exemption fires once per skill and no more,
+  // so it is 25 of 25 and cannot have quietly widened to cover a second key.
+  assert.equal(skills.length, 25, `swept ${skills.length} skills, not 25`);
   assert.equal(
     exemptSeen,
     skills.length,
@@ -479,7 +479,7 @@ test("AC8: every rendered field label on all 58 pages traces to a declared key",
   // POPULATION, and every branch non-empty. A sweep in which one branch never
   // ran is a sweep that has not tested that branch, and reporting the totals is
   // what makes the green result readable as evidence rather than as silence.
-  assert.equal(pages.length, 59, `swept ${pages.length} pages, not 59`);
+  assert.equal(pages.length, 69, `swept ${pages.length} pages, not 69`);
   assert.ok(checked > pages.length, `only ${checked} labels across ${pages.length} pages`);
   for (const [kind, n] of Object.entries(byKind)) {
     assert.ok(n > 0, `no ${kind} row was seen anywhere — that branch of the gate is untested`);

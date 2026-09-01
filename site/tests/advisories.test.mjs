@@ -371,12 +371,12 @@ test("I4: two mention-detectors with different loss profiles select the same set
   // Cross-referenced by TEST NAME rather than by line number, because a line
   // number is a pin on a moving file and would rot the way the 1527 in
   // site-pages.test.mjs rotted.
-  const RESOURCE_FILE_POPULATION = 59;
+  const RESOURCE_FILE_POPULATION = 66;
   assert.equal(
     population,
     RESOURCE_FILE_POPULATION,
-    `the resource FILE population is ${population}; AC1's 23 + 12 + 24 is ` +
-      `${RESOURCE_FILE_POPULATION}. This is not the 59 content pages in content.test.mjs.`,
+    `the resource FILE population is ${population}; AC1's 30 + 12 + 24 is ` +
+      `${RESOURCE_FILE_POPULATION}. This is not the 69 content pages in content.test.mjs.`,
   );
   assert.ok(loose.size > 0 && loose.size < population, "the detector accepted or rejected everything");
 });
@@ -458,7 +458,7 @@ test("AC6: the log carries all six codes the criterion names, and its totals rec
   // sibling-skill pointers. A change that turned one kind into the other while
   // holding 11 would go red here and would not if only the total were checked.
   const d3 = by("D3");
-  assert.equal(d3.length, 11, `D3 total moved: ${d3.length}`);
+  assert.equal(d3.length, 12, `D3 total moved: ${d3.length}`);
   // Discriminated on the LINK TARGET the advisory quotes, not on the substring
   // "../../references/" anywhere in the message: the sibling-skill advisories
   // mention that form too, in a sentence comparing themselves to it, so the
@@ -470,7 +470,7 @@ test("AC6: the log carries all six codes the criterion names, and its totals rec
     `proposal §3.4 D3 describes links escaping to the plugin's references/ and measured 6; ` +
       `${escapes.length} of the ${d3.length} emitted [D3] advisories are of that kind`,
   );
-  assert.equal(d3.length - escapes.length, 5, "the sibling-skill remainder moved");
+  assert.equal(d3.length - escapes.length, 6, "the sibling-skill remainder moved");
   // §3.4 says "two skills". Three emit.
   assert.equal(
     new Set(escapes.map((l) => l.file)).size,
