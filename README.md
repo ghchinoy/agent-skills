@@ -17,6 +17,7 @@ The repository is organized into 11 thematic plugins under `plugins/`:
 - **`ai-pop-audio-synthesizer`**: Composes high-fidelity music tracks via Google DeepMind Lyria.
 - **`ai-pop-visual-designer`**: Generates cohesive album cover art and individual track illustrations using NanoBanana.
 - **`ai-pop-compiler`**: Validates `artist.json` metadata, compiles TypeScript/Vite templates, and verifies static client builds using an embedded Go CLI scaffolder.
+- **`ai-pop-publisher`**: Publishes compiled web player assets (`web/dist`) to a public hosting endpoint (Firebase Hosting or GCS static website bucket) and verifies liveness.
 
 ### 2. 🖥️ macOS HIG (`plugins/macos-hig`)
 *macOS Human Interface Guidelines assistance and code reviewers.*

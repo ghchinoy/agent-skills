@@ -1174,7 +1174,7 @@ function normativeHits(text) {
 // contents rather than on the catalog's claims, and it would be deleted for it.
 //
 // LOSS PROFILE, STATED SO A SILENCE IS INTERPRETABLE. UNIT: sentence.
-// DENOMINATOR: rendered sentences on all 59 pages that contain the literal
+// DENOMINATOR: rendered sentences on all 69 pages that contain the literal
 // string "marketplace.json". This is co-occurrence matching and it is PARA-1
 // all over again — "the index the standard expects at the repository root"
 // names neither string and would pass. It catches the careless sentence, not

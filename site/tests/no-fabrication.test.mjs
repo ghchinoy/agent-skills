@@ -255,7 +255,7 @@ test("AC7: no page renders Tags, Category or Categories as a metadata label", as
     }
   }
   assert.deepEqual(bad, [], `invented taxonomy rendered:\n${bad.join("\n")}`);
-  // NON-VACUITY. "No offending label on 58 pages" and "no label found on 58
+  // NON-VACUITY. "No offending label on all pages" and "no label found on all
   // pages" produce the same empty array, and only one of them is the claim.
   assert.ok(
     scanned > pages.length,

@@ -684,7 +684,7 @@ test("E2E: neither planted unknown key is rendered on the page (report AND ignor
   // rendered value is also a failure) and a label check is added above it.
   //
   // This is the END-TO-END half of the AC 8 gate. fields.test.mjs asserts the
-  // property over the 58 pages of the real catalog, where the population of
+  // property over the pages of the real catalog, where the population of
   // non-spec keys is empty; here a key that does not exist in the source is
   // pushed through a real `astro build` and the same property is asserted on
   // the page it produces. Neither is sufficient alone: the first is an absence

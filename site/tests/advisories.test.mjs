@@ -146,7 +146,7 @@ test("D2: the over-length population is derived, and is 0 now that all skills ar
   const measured = skills.map((s) => ({ route: s.route, lines: countLines(s.raw) }));
   const over = measured.filter((m) => m.lines > SKILL_MD_LINE_GUIDANCE);
 
-  // Moving detailed runbooks into references/ brings all 23 skills under the 500-line guidance.
+  // Moving detailed runbooks into references/ brings all 25 skills under the 500-line guidance.
   assert.equal(
     over.length,
     0,
@@ -188,7 +188,7 @@ test("D4: the dead-pointer population is derived from a class rule over every sk
   const skills = await skillsWithResources();
   const found = skills.flatMap((s) => adviseDeadPointers(s.raw, s).map((a) => `${a.file}:${a.line}`));
 
-  // All 23 skills are scanned for resource-shaped code spans pointing to missing files.
+  // All 25 skills are scanned for resource-shaped code spans pointing to missing files.
   // With macos-hig-reviewer updated to point to assets/swiftlint.yml, the catalog is clean.
   assert.equal(
     found.length,
@@ -356,12 +356,11 @@ test("I4: two mention-detectors with different loss profiles select the same set
   for (const s of skills) {
     for (const group of RESOURCE_GROUPS) population += (s.resources[group] ?? []).length;
   }
-  // NAMED, BECAUSE THE INTEGER IS A HOMONYM. 58 does duty for two unrelated
-  // populations in this suite: RESOURCE FILES here (22 + 12 + 24) and CONTENT
-  // PAGES in content.test.mjs, in the test named "AC1: dist holds exactly 58
-  // content pages", composed 1 + 10 + 23 + 20 + 1 + 3. Same integer, different
-  // things counted, and they are equal today by coincidence rather than by any
-  // relationship — nothing keeps them equal if either population moves.
+  // NAMED, BECAUSE THE INTEGER IS A HOMONYM. 58 did duty for two unrelated
+  // populations in this suite: RESOURCE FILES here (originally 22 + 12 + 24, now 30 + 12 + 24)
+  // and CONTENT PAGES in content.test.mjs, in the test named "AC1: dist holds exactly 69
+  // content pages", composed 1 + 11 + 25 + 28 + 1 + 3. Different things counted,
+  // and nothing keeps them equal if either population moves.
   //
   // Both sites already state their composition, so a reader cannot conflate
   // them. The exposure is a future tidy-up seeing two 58s and lifting a shared

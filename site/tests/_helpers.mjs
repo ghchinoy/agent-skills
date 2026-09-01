@@ -326,7 +326,7 @@ export function pageAt(pages, route) {
  * The rendered field rows of a page: `{ label, source, note, open, dd }`.
  *
  * MOVED HERE IN PHASE 3 from no-fabrication.test.mjs, where it was private.
- * Four suites now scan field labels across all 58 pages, and four copies of a
+ * Four suites now scan field labels across all 69 pages, and four copies of a
  * label extractor is four chances for one of them to quietly stop finding
  * anything and report an absence it never looked for. One extractor, and every
  * suite that uses it also asserts it found a non-zero number of rows.

@@ -150,11 +150,11 @@ test("AC1: dist holds exactly 69 content pages, composed 1 + 11 + 25 + 28 + 1 + 
   assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 69);
 });
 
-test("AC1 control: the 58 is content pages, and dist holds one more file than that", async () => {
+test("AC1 control: the 69 is content pages, and dist holds one more file than that", async () => {
   // The disclosure that goes with the number. `find dist -name '*.html'`
-  // returns 59, and Astro's own build log says "59 page(s) built": the extra
+  // returns 70, and Astro's own build log says "70 page(s) built": the extra
   // is 404.html, which Starlight emits and which is not a content page. AC 1's
-  // 1 + 10 + 23 + 20 + 1 + 3 does not include it, so the counter this suite
+  // 1 + 11 + 25 + 28 + 1 + 3 does not include it, so the counter this suite
   // uses must exclude it — and a counter that excluded a REAL page by the same
   // mechanism would look identical from the inside. Hence: the 404 is asserted
   // to exist, asserted to be the ONLY difference, and asserted to be absent
@@ -202,12 +202,12 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
     "the derived route set itself contains a bundle path",
   );
 
-  // (c) okf_version: computed, not assumed, and now over ALL 58 pages rather
+  // (c) okf_version: computed, not assumed, and now over ALL 69 pages rather
   // than the five of the Phase-1 slice. `entitledSources()` models, in this
   // file, what each ROUTE is allowed to quote — the SKILL.md behind a skill
   // page, the manifest and the skill descriptions behind a plugin page, the
   // lifted repo document behind an about page — and a page renders the token
-  // legitimately only if one of its own sources contains it. 53 of the 58
+  // legitimately only if one of its own sources contains it. 64 of the 69
   // pages have no entitlement at all, so this is a real two-sided comparison
   // and not a permission slip.
   const legitimate = [];

@@ -10,7 +10,7 @@
 // THE CRITERION AS WRITTEN names one skill: "bd-dolt-troubleshooter shows 1.9
 // and 1.9.0 separately, each labelled by source". That skill is real and the
 // numbers are real. It is also ONE OF FIVE. Proposal §3.7 stated an instance
-// and this phase read it as a population; measuring all 23 skills found five
+// and this phase read it as a population; measuring the skills found five
 // skews, four of which nobody had written down.
 //
 // SO NOTHING IN THIS FILE NAMES A SKILL. The population is derived here, from

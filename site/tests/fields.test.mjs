@@ -1,4 +1,4 @@
-// fields.test.mjs — acceptance criteria 3 and 8, across all 58 pages.
+// fields.test.mjs — acceptance criteria 3 and 8, across all 69 pages.
 //
 // Both are ABSENCE claims, and they fail in the two ways an absence claim can.
 //
@@ -16,7 +16,7 @@
 //
 //   THE FORWARD FORM IS VACUOUS TODAY. Derive the population it quantifies
 //   over — top-level keys in this repository's SKILL.md files that are not one
-//   of the spec's six — and it is EMPTY. All 23 skills declare only `name`,
+//   of the spec's six — and it is EMPTY. All 25 skills declare only `name`,
 //   `description`, `license`, `compatibility` and `metadata`. A test that
 //   iterated that set and asserted each member is unrendered would iterate zero
 //   times, pass, and go on passing on the day somebody adds a seventh key.
@@ -24,7 +24,7 @@
 //   with the instance count at zero.
 //
 //   SO THE PRIMARY ASSERTION RUNS BACKWARDS: over every `data-field-label` the
-//   build actually rendered, on all 58 pages, each must trace to the spec's six,
+//   build actually rendered, on all 69 pages, each must trace to the spec's six,
 //   the closed `plugin.json` vocabulary, a `metadata.*` key its own SKILL.md
 //   declares, or a row explicitly marked derived. Nothing else may be on the
 //   page. That is a check over a population that is not empty — it is every
@@ -204,7 +204,7 @@ test("AC8: the forward population is EMPTY, which is why the gate runs backwards
 });
 
 // THE ONE EXEMPTION, ITEMISED AND COUNTED, AND ITS REASON IS A MEASUREMENT
-// (pre-registration §6.5). `description` is declared by 23 of 23 skills and is
+// (pre-registration §6.5). `description` is declared by 25 of 25 skills and is
 // the only declared key that is not a labelled row: Starlight renders it as the
 // page's lead paragraph, which is where a reader meets a description. It is
 // exempted from the ROW requirement and then held to a stronger one at the call
@@ -468,7 +468,7 @@ function scanPages(pages, skills) {
   return { untraceable, checked, byKind };
 }
 
-test("AC8: every rendered field label on all 58 pages traces to a declared key", async () => {
+test("AC8: every rendered field label on all 69 pages traces to a declared key", async () => {
   // THE GATE. Runs over every label the build emitted, on every page it built.
   const skills = await declaredSkills();
   const pages = await distContentPages();

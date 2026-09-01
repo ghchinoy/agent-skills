@@ -11,7 +11,7 @@
 //      title, which is deliberately the body H1 (see src/sidebar.mjs for the
 //      full ruling and rationale).
 //   2. Group order, and skill order within a group, follow marketplace.json
-//      exactly. Phase 3 AC 2 fans this out to 23 skills across 10 plugins; the
+//      exactly. Phase 3 AC 2 fans this out to 25 skills across 11 plugins; the
 //      assertions below are written against N plugins, not against one.
 //
 // Everything expected here is parsed from marketplace.json and the SKILL.md
