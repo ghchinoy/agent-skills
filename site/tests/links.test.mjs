@@ -167,7 +167,7 @@ test("0 broken links: every internal href in dist resolves to a built file", asy
   // without the other.
   const { files, broken, crawled } = await widePopulation();
   assert.deepEqual(broken, [], `broken internal links:\n${broken.join("\n")}`);
-  assert.equal(files.length, 73, `crawled ${files.length} HTML files, not 73`);
+  assert.equal(files.length, 84, `crawled ${files.length} HTML files, not 84`);
   assert.ok(
     crawled > 2000,
     `only ${crawled} internal <a href> across ${files.length} files — this zero is over a ` +
@@ -226,15 +226,15 @@ test("AC6 narrow population: the in-page anchor SET, printed not counted", async
 test("AC6 narrow population: the three load-bearing counts", async () => {
   const { pages, internal, fragments } = await narrowPopulation();
   const { crawled } = await widePopulation();
-  assert.equal(pages.length, 72, `${pages.length} content pages, not 72`);
-  assert.equal(internal.length, 301, `internal <a href> inside <main> is ${internal.length}, not 301`);
+  assert.equal(pages.length, 83, `${pages.length} content pages, not 83`);
+  assert.equal(internal.length, 344, `internal <a href> inside <main> is ${internal.length}, not 344`);
   assert.equal(
     internal.length - fragments.length,
-    299,
+    342,
     `file-resolving internal <a href> inside <main> is ${internal.length - fragments.length}, ` +
-      `not 299. The three load-bearing figures are: ` +
+      `not 342. The three load-bearing figures are: ` +
       `${crawled} (what the 0-broken-links zero is actually over), ` +
-      `${internal.length} (all internal links in <main>), and 299 (those of them that name a file).`,
+      `${internal.length} (all internal links in <main>), and 342 (those of them that name a file).`,
   );
 });
 
