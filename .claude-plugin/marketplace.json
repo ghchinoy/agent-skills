@@ -113,6 +113,23 @@
       "skills": [
         "./plugins/go-readability/skills/go-readability"
       ]
+    },
+    {
+      "name": "brand-identity",
+      "source": "./plugins/brand-identity",
+      "description": "Extract brand identities, synthesize DESIGN.md design system specifications, and generate brand-consistent visual assets",
+      "skills": [
+        "./plugins/brand-identity/skills/brand-extractor",
+        "./plugins/brand-identity/skills/brand-image-generator"
+      ]
+    },
+    {
+      "name": "c2pa-inspector",
+      "source": "./plugins/c2pa-inspector",
+      "description": "Inspect and audit C2PA Content Credentials, cryptographic signatures, provenance assertions, and AI generation metadata across media assets",
+      "skills": [
+        "./plugins/c2pa-inspector/skills/c2pa-inspect"
+      ]
     }
   ]
 }

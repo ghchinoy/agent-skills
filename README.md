@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 12 thematic plugins under `plugins/`:
+The repository is organized into 14 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -71,6 +71,15 @@ The repository is organized into 12 thematic plugins under `plugins/`:
 ### 12. 🏎️ macOS Performance (`plugins/macos-performance`)
 *macOS/SwiftUI application performance assessment for launch responsiveness and runtime smoothness.*
 - **`quick-bounce-assessor`**: Assesses first-frame ("quick bounce") readiness by finding synchronous main-actor I/O on the launch path, Swift strict-concurrency posture, view-model vs business-logic separation, and steady-state render budget (high-frequency `@Published` timers, per-body allocations). Produces a PASS/WARNING/FAIL report with `file:line` evidence and phased fixes. Includes a read-only heuristic scanner (`scripts/scan_launch_path.sh`) and an anti-pattern catalog (`references/PERF_CATALOG.md`).
+
+### 13. 🎨 Brand Identity (`plugins/brand-identity`)
+*Brand identity extraction, DESIGN.md design system synthesis, and brand-consistent image generation.*
+- **`brand-extractor`**: Crawls target websites, captures high-fidelity viewport/full-page screenshots, extracts computed CSS styles and `:root` custom properties, and synthesizes structured Brand DNA and a Google Labs `DESIGN.md` Alpha specification. Includes extraction script (`scripts/extract_brand_dna.py`) and validator (`scripts/validate_design_md.py`).
+- **`brand-image-generator`**: Translates `DESIGN.md` specifications and Brand DNA into evocative, style-adherent prompts and coordinates generative AI image creation. Includes prompt formatter (`scripts/format_image_prompt.py`), prompt recipes, and crafting guide.
+
+### 14. 🛡️ C2PA Inspector (`plugins/c2pa-inspector`)
+*C2PA Content Credentials inspection, cryptographic verification, and batch auditing.*
+- **`c2pa-inspect`**: Audits single media assets, batches, or directories for C2PA Content Credentials, cryptographic signatures, provenance assertions, AI generation metadata, and digital tampering. Built on Google Credentio data models and C-ABI wrapper architecture with a pure-Python container fallback. Includes dual-engine inspector CLI (`scripts/inspect_c2pa.py`), prebuilt native library fetcher (`scripts/fetch_native_lib.sh`), C2PA specification guides, and sample fixtures.
 
 ---
 
