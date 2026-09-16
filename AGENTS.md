@@ -52,23 +52,45 @@ When a plugin or skill is added/modified, the following numbers change:
 | :--- | :--- | :--- |
 | **Plugins** | Total plugin directories under `plugins/` | `site/tests/content.test.mjs`, `README.md` |
 | **Skills** | Total `SKILL.md` files declared in `marketplace.json` | `site/tests/content.test.mjs`, `site/tests/fields.test.mjs`, `site/tests/versions.test.mjs`, `site/tests/skill-index.test.mjs` |
-| **Content Pages** | `1 (Landing) + P (Plugins) + S (Skills) + R (References) + 1 (Skills Index) + 3 (About)` | `site/tests/content.test.mjs`, `site/tests/chrome.test.mjs`, `site/tests/fields.test.mjs`, `site/tests/no-fabrication.test.mjs`, `site/tests/links.test.mjs` |
+| **Content Pages** | `1 (Landing) + P (Plugins) + S (Skills) + R (References) + 1 (Skills Index) + 3 (About)` | `site/tests/content.test.mjs` (line 51), `site/tests/chrome.test.mjs`, `site/tests/fields.test.mjs`, `site/tests/no-fabrication.test.mjs`, `site/tests/links.test.mjs` |
+| **Forbidden `okf_version` Pages** | `Content Pages - 5` (`pages.length - legitimate.length`) | `site/tests/content.test.mjs` (line 239) |
 | **Built HTML** | `Content Pages + 1 (404.html)` | `site/tests/links.test.mjs` |
-| **Resource Files** | `References + Scripts + Assets` | `site/tests/advisories.test.mjs`, `site/tests/resources.test.mjs` |
-| **Scripts** | Count of files under `plugins/*/skills/*/scripts/` | `site/tests/resources.test.mjs` |
-| **Baseline Advisories** | Count base: 1 per plugin for `[I1]`, plus version skews & orphan references | `site/tests/build-e2e.test.mjs` |
-| **Main Links** | Crawled internal `<a href>` inside `<main>` and file-resolving links | `site/tests/links.test.mjs` |
+| **Resource Files** | `References + Scripts + Assets` (`RESOURCE_FILE_POPULATION`) | `site/tests/advisories.test.mjs`, `site/tests/resources.test.mjs` |
+| **Scripts** | Count of files under `plugins/*/skills/*/scripts/` | `site/tests/resources.test.mjs` (AC1 & AC5) |
+| **Baseline Advisories** | Only increments if a new plugin/skill triggers `[I1]`, `[I3]`, or `[I4]` (see Authoring Guardrails below) | `site/tests/build-e2e.test.mjs` |
+| **Main Links** | Crawled internal `<a href>` inside `<main>` (`internal.length`) and file-resolving links (`internal.length - 2`) | `site/tests/links.test.mjs` |
 
-## 2. Fast Verification Workflow
+## 2. Authoring Guardrails (Preventing Unnecessary Advisory & Test Drift)
 
-- **Do not run the full `npm test` after each single-line edit**: The full suite takes 45–90s due to multiple live `astro build` subprocesses.
-- **Run targeted test files first**:
+- **Keep `description` byte-identical between `plugin.json` and `.claude-plugin/marketplace.json`**:
+  The `[I1]` advisory (`two competing descriptions for "<plugin>"`) only fires when `plugin.json` and `marketplace.json` differ. Using the exact same string in both files prevents new `[I1]` advisories and keeps the baseline count in `site/tests/build-e2e.test.mjs` unchanged.
+- **Inline backtick dead-pointer (`[D4]`) rule in `SKILL.md`**:
+  The loader's `adviseDeadPointers` (`[D4]`) rule treats any inline backtick code span (` `...` `) starting with `scripts/`, `references/`, or `assets/` as a literal file path on disk.
+  - **DO NOT** put CLI arguments inside a bare inline span (e.g., `` `scripts/my-tool.sh --flag` `` will fail `[D4]`).
+  - **DO** prefix inline CLI invocations with `./` (e.g., `` `./scripts/my-tool.sh --flag` ``) or place them in fenced ` ```bash ` code blocks, reserving bare `` `scripts/my-tool.sh` `` spans for referring to the file itself.
+
+## 3. Sandbox & Container Environment Setup (`EXDEV` & Node Version)
+
+- **Avoid `EXDEV: cross-device link not permitted`**: In container/sandbox environments where `/tmp` is a separate `tmpfs` mount from `/home`, Astro/Node temporary directory operations across mounts will fail. Always point `TMPDIR` to a directory on the home filesystem:
   ```bash
-  rtk node --test site/tests/<test-name>.test.mjs
+  mkdir -p ~/.tmp && export TMPDIR="$HOME/.tmp"
   ```
-- **Avoid editing files while an Astro build is actively running**: Prevents `.astro/.prerender` module resolution race conditions.
-- **Run the full suite and plugin validator once at the end**:
+- **Node version requirement (`>=22.19.0`)**: `site/package.json` and `site/tests/pins.test.mjs` enforce `node >= 22.19.0`. If your default shell is on an older Node 22.x release, switch via nvm first (`source ~/.config/nvm/nvm.sh && nvm use 22.19.0`).
+
+## 4. Two-Step Fast Verification Workflow (< 2 Seconds vs 90 Seconds)
+
+- **Step 1: Fast (< 2s) Static Tripwire Sweep**:
+  All population tripwires (`Plugins`, `Skills`, `Content Pages`, `Forbidden okf_version Pages`, `Built HTML`, `Scripts`, `Resource Files`, and `Main Links`) are tested by suites that read the static `site/dist/` directory without spawning child `astro build` processes. Run these immediately after building to discover exact link/page counts in ~1.5 seconds:
   ```bash
-  rtk npm test --prefix site && rtk ./scripts/validate-plugins.sh
+  export TMPDIR="$HOME/.tmp"
+  npm run build --prefix site
+  node --test site/tests/{content,fields,links,resources,skill-index,versions,chrome,no-fabrication}.test.mjs
   ```
+- **Step 2: Full Sequential Verification (`--test-concurrency=1`)**:
+  The E2E suites (`advisories.test.mjs` and `build-e2e.test.mjs`) spawn live `astro build` subprocesses. Running them concurrently causes race conditions on the shared `site/.astro/` content collection cache (`AstroUserError: The slug "index" specified in the Starlight sidebar config does not exist`). `npm test` in `site/package.json` is configured with `--test-concurrency=1` to prevent this:
+  ```bash
+  export TMPDIR="$HOME/.tmp"
+  ./scripts/validate-plugins.sh && npm test --prefix site
+  ```
+
 

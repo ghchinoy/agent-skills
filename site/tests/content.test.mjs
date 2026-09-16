@@ -102,7 +102,7 @@ test("AC2: the route set decomposes into the populations that produced it", asyn
   assert.equal(site.length + plugins.length + skills.length + references.length, routes.length);
 });
 
-test("AC1: dist holds exactly 83 content pages, composed 1 + 14 + 29 + 35 + 1 + 3", async () => {
+test("AC1: dist holds exactly 86 content pages, composed 1 + 15 + 31 + 35 + 1 + 3", async () => {
   // AC 1 is an EXACT NUMBER, NOT A FLOOR, and the test above does not supply
   // one: it is a set equality against a derivation, so it stays green if the
   // catalog grows and stays green if the derivation and the build shrink
@@ -124,7 +124,7 @@ test("AC1: dist holds exactly 83 content pages, composed 1 + 14 + 29 + 35 + 1 + 
     skillsIndex: pages.filter((p) => p.route === "skills"),
     about: pages.filter((p) => /^about\/[^/]+$/.test(p.route)),
   };
-  const expected = { landing: 1, plugins: 14, skills: 29, references: 35, skillsIndex: 1, about: 3 };
+  const expected = { landing: 1, plugins: 15, skills: 31, references: 35, skillsIndex: 1, about: 3 };
   assert.deepEqual(
     Object.fromEntries(Object.entries(bucket).map(([k, v]) => [k, v.length])),
     expected,
@@ -146,11 +146,11 @@ test("AC1: dist holds exactly 83 content pages, composed 1 + 14 + 29 + 35 + 1 + 
   }
   const uncounted = pages.filter((p) => !counted.has(p.route)).map((p) => p.route);
   assert.deepEqual(uncounted, [], `pages in no bucket:\n${uncounted.join("\n")}`);
-  assert.equal(pages.length, 83, `dist holds ${pages.length} content pages, not 83`);
-  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 83);
+  assert.equal(pages.length, 86, `dist holds ${pages.length} content pages, not 86`);
+  assert.equal(Object.values(expected).reduce((a, b) => a + b, 0), 86);
 });
 
-test("AC1 control: the 83 is content pages, and dist holds one more file than that", async () => {
+test("AC1 control: the 86 is content pages, and dist holds one more file than that", async () => {
   // The disclosure that goes with the number. `find dist -name '*.html'`
   // returns 73, and Astro's own build log says "73 page(s) built": the extra
   // is 404.html, which Starlight emits and which is not a content page. AC 1's
@@ -236,7 +236,7 @@ test("AC3: zero pages from assets/example-bundle — by exact count and by conte
   assert.ok(!legitimate.includes(`plugins/${PLUGIN}/references/trust-vocabulary`));
   assert.equal(
     pages.length - legitimate.length,
-    78,
+    81,
     "the number of pages forbidden the token — the real denominator of this check",
   );
 

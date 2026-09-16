@@ -44,7 +44,8 @@
         "./plugins/repo-authoring/skills/make-readme",
         "./plugins/repo-authoring/skills/technical-post-editorial",
         "./plugins/repo-authoring/skills/repository-change-recap",
-        "./plugins/repo-authoring/skills/changelog-manager"
+        "./plugins/repo-authoring/skills/changelog-manager",
+        "./plugins/repo-authoring/skills/headless-fork-pr"
       ]
     },
     {
@@ -129,6 +130,14 @@
       "description": "Inspect and audit C2PA Content Credentials, cryptographic signatures, provenance assertions, and AI generation metadata across media assets",
       "skills": [
         "./plugins/c2pa-inspector/skills/c2pa-inspect"
+      ]
+    },
+    {
+      "name": "scion-platform",
+      "source": "./plugins/scion-platform",
+      "description": "Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, and operator tools.",
+      "skills": [
+        "./plugins/scion-platform/skills/scion-hub-admin"
       ]
     }
   ]

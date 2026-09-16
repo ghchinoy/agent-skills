@@ -946,7 +946,7 @@ test("REQUIRED 1: no page renders a typographic character the source never decla
   );
 
   const pages = await distContentPages();
-  assert.equal(pages.length, 83, `swept ${pages.length} pages, not 83`);
+  assert.equal(pages.length, 86, `swept ${pages.length} pages, not 86`);
 
   const found = [];
   let renderedTransformable = 0;

@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 14 thematic plugins under `plugins/`:
+The repository is organized into 15 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -36,6 +36,7 @@ The repository is organized into 14 thematic plugins under `plugins/`:
 - **`technical-post-editorial`**: Edits technical blog posts to remove AI writing patterns while preserving the author's human voice.
 - **`repository-change-recap`**: Generates structured weekly or custom timeframe commit recaps using `git log --stat` and per-repo categorization rules (`.gemini/recap-rules.md`).
 - **`changelog-manager`**: Generates, updates, and curates `CHANGELOG.md` files adhering to Keep a Changelog v1.1.0 and Common Changelog specs.
+- **`headless-fork-pr`**: Executes upstream issue creation, git fork synchronization (`upstream` vs `origin`), and PR submission in headless/sandbox environments using self-cleaning ephemeral GitHub SSH keys (`scripts/ephemeral-ssh-git.sh`).
 
 ### 5. 🛡️ MCP Security (`plugins/mcp-security`)
 *Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.*
@@ -80,6 +81,10 @@ The repository is organized into 14 thematic plugins under `plugins/`:
 ### 14. 🛡️ C2PA Inspector (`plugins/c2pa-inspector`)
 *C2PA Content Credentials inspection, cryptographic verification, and batch auditing.*
 - **`c2pa-inspect`**: Audits single media assets, batches, or directories for C2PA Content Credentials, cryptographic signatures, provenance assertions, AI generation metadata, and digital tampering. Built on Google Credentio data models and C-ABI wrapper architecture with a pure-Python container fallback. Includes dual-engine inspector CLI (`scripts/inspect_c2pa.py`), prebuilt native library fetcher (`scripts/fetch_native_lib.sh`), C2PA specification guides, and sample fixtures.
+
+### 15. 🚀 Scion Platform (`plugins/scion-platform`)
+*Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, and operator tools.*
+- **`scion-hub-admin`**: Diagnoses Scion Hosted Hub AK1 authorization denials (`403 Forbidden`, `CanDelegate`, missing scopes), inspects role definitions and delegation ceilings, and executes zero-downtime agent token re-minting (`reset-auth`) across running containers. Includes diagnostic triage script (`scripts/hub-authz-triage.sh`) and hot-injection token resetter (`scripts/hub-reset-auth.sh`).
 
 ---
 

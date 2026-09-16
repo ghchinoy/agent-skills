@@ -12,7 +12,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "typecheck": "astro check",
-    "test": "npm run typecheck && node --test \"tests/*.test.mjs\"",
+    "test": "npm run typecheck && node --test --test-concurrency=1 \"tests/*.test.mjs\"",
     "check:live": "node scripts/check-live-links.mjs",
     "check:blobs": "node scripts/check-blob-links.mjs"
   },
