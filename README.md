@@ -83,8 +83,9 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`c2pa-inspect`**: Audits single media assets, batches, or directories for C2PA Content Credentials, cryptographic signatures, provenance assertions, AI generation metadata, and digital tampering. Built on Google Credentio data models and C-ABI wrapper architecture with a pure-Python container fallback. Includes dual-engine inspector CLI (`scripts/inspect_c2pa.py`), prebuilt native library fetcher (`scripts/fetch_native_lib.sh`), C2PA specification guides, and sample fixtures.
 
 ### 15. 🚀 Scion Platform (`plugins/scion-platform`)
-*Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, and operator tools.*
-- **`scion-hub-admin`**: Diagnoses Scion Hosted Hub AK1 authorization denials (`403 Forbidden`, `CanDelegate`, missing scopes), inspects role definitions and delegation ceilings, and executes zero-downtime agent token re-minting (`reset-auth`) across running containers. Includes diagnostic triage script (`scripts/hub-authz-triage.sh`) and hot-injection token resetter (`scripts/hub-reset-auth.sh`).
+*Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, fleet model assessment, live model patching, and server lifecycle operations.*
+- **`scion-hub-admin`**: Diagnoses Scion Hosted Hub AK1 authorization denials (`403 Forbidden`, `CanDelegate`, missing scopes), inspects role definitions and delegation ceilings, executes zero-downtime agent token re-minting (`reset-auth`) across running containers, and orchestrates Hub server upgrades. Includes diagnostic triage script (`scripts/hub-authz-triage.sh`), hot-injection token resetter (`scripts/hub-reset-auth.sh`), and server upgrade runner (`scripts/hub-rebuild-server.sh`).
+- **`scion-agent-models`**: Audits fleet model assignments across Hub projects, identifies unpinned fallback drift (e.g. agents falling back to Opus), and executes zero-downtime live-patching on running agent models without container restarts or loss of worktree state. Includes fleet auditing script (`scripts/hub-model-audit.sh`) and live-patching CLI (`scripts/hub-model-patch.sh`).
 
 ---
 
