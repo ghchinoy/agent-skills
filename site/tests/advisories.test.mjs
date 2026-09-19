@@ -370,12 +370,12 @@ test("I4: two mention-detectors with different loss profiles select the same set
   // Cross-referenced by TEST NAME rather than by line number, because a line
   // number is a pin on a moving file and would rot the way the 1527 in
   // site-pages.test.mjs rotted.
-  const RESOURCE_FILE_POPULATION = 88;
+  const RESOURCE_FILE_POPULATION = 91;
   assert.equal(
     population,
     RESOURCE_FILE_POPULATION,
-    `the resource FILE population is ${population}; AC1's 37 + 21 + 30 is ` +
-      `${RESOURCE_FILE_POPULATION}. This is not the 86 content pages in content.test.mjs.`,
+    `the resource FILE population is ${population}; AC1's 37 + 24 + 30 is ` +
+      `${RESOURCE_FILE_POPULATION}. This is not the 87 content pages in content.test.mjs.`,
   );
   assert.ok(loose.size > 0 && loose.size < population, "the detector accepted or rejected everything");
 });

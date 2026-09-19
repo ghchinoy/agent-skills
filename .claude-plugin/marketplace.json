@@ -135,7 +135,7 @@
     {
       "name": "scion-platform",
       "source": "./plugins/scion-platform",
-      "description": "Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, fleet model assessment, and operator tools.",
+      "description": "Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, fleet model assessment, live model patching, and server lifecycle operations.",
       "skills": [
         "./plugins/scion-platform/skills/scion-hub-admin",
         "./plugins/scion-platform/skills/scion-agent-models"
