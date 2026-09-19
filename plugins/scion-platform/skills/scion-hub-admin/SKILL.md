@@ -26,6 +26,7 @@ This skill provides an operational playbook and executable tooling for troublesh
 - [`scripts/hub-authz-triage.sh`](scripts/hub-authz-triage.sh) — Read-only diagnostic script that inspects Role Definitions, running agent `.appliedConfig.agentRole`, and creation timestamps across all three authorization layers.
 - [`scripts/hub-reset-auth.sh`](scripts/hub-reset-auth.sh) — Triggers zero-downtime token re-minting and hot-injection via `POST /api/v1/admin/agents/reset-auth-all` or per-agent `POST /api/v1/agents/{id}/reset-auth`.
 - [`scripts/hub-rebuild-server.sh`](scripts/hub-rebuild-server.sh) — Dispatches, tracks, and verifies server self-rebuilds via `POST /api/v1/admin/maintenance/operations/rebuild-server/run`.
+- [`scripts/hub-health-report.sh`](scripts/hub-health-report.sh) — Subsystem scorecard and per-project agent health and metrics reporting via `/api/v1/admin/health/summary` and `/api/v1/agents`.
 
 ---
 
@@ -131,4 +132,28 @@ When the Hub server binary is behind the local development binary or needs to in
    scripts/hub-rebuild-server.sh --hub https://<your-hub-domain>/
    ```
    *(Triggers `POST /api/v1/admin/maintenance/operations/rebuild-server/run`, tracks the build output, and verifies health upon systemd restart.)*
+
+---
+
+### Step 6: Fleet Health & Per-Project Metrics Reporting
+
+Monitor Hub subsystem health, database connection pool stats, runtime broker readiness, and per-project agent activity:
+
+1. **Overall Hub Subsystem Scorecard**:
+   ```bash
+   scripts/hub-health-report.sh --hub https://<your-hub-domain>/
+   ```
+   Reports Hub uptime, DB connection pool (`active`, `max`, `idle`, `wait_count`), broker states (`runtime_available`), and fleet-wide agent health (highlighting stalled, crashed, or errored agents).
+
+2. **Per-Project Deep Dive**:
+   ```bash
+   scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --project <project-slug-or-id>
+   ```
+   Breaks down agents by template, harness, lifecycle phase, and activity state (`thinking`, `working`, `blocked`, `completed`, `stalled`).
+
+3. **Machine-Readable Fleet Telemetry**:
+   ```bash
+   scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --all-projects --json
+   ```
+
 
