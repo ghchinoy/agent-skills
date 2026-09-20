@@ -61,6 +61,11 @@ Adding a plugin, skill, script, or reference now passes the static tests automat
   The loader's `adviseDeadPointers` (`[D4]`) rule treats any inline backtick code span (` `...` `) starting with `scripts/`, `references/`, or `assets/` as a literal file path on disk.
   - **DO NOT** put CLI arguments inside a bare inline span (e.g., `` `scripts/my-tool.sh --flag` `` will fail `[D4]`).
   - **DO** prefix inline CLI invocations with `./` (e.g., `` `./scripts/my-tool.sh --flag` ``) or place them in fenced ` ```bash ` code blocks, reserving bare `` `scripts/my-tool.sh` `` spans for referring to the file itself.
+- **Do not assert hardcoded scalar counts for catalog populations**:
+  Never assert literal integers for total catalog items (e.g., `pages.length === 87`, `scripts.length === 25`, `population === 91`). Instead, assert:
+  1. Dynamic derivations: `assert.equal(pages.length, routes.length)` against `sourceRoutes()`.
+  2. Bidirectional set parity: `assert.deepEqual(tally(shown), tally(disk))`.
+  3. Non-vacuity lower bounds: `assert.ok(disk.length > 0)` or `assert.ok(population > 50)`.
 
 ## 3. Sandbox & Container Environment Setup (`EXDEV` & Node Version)
 
@@ -76,6 +81,10 @@ Adding a plugin, skill, script, or reference now passes the static tests automat
 
 ## 4. Two-Tier Verification Workflow (< 5 Seconds vs Full E2E)
 
+- **Understanding Test Performance (Astro Build vs E2E Mutation Builds)**:
+  `npm run build` is fast (~2.8s for 88 pages + Pagefind search index). The 90–120s runtime of `npm test` comes from `build-e2e.test.mjs` spawning 9 isolated full Astro builds in temporary trees to test negative controls and error handling. For routine content and link changes, always use `npm run test:fast`.
+- **CI Workflow Meta-Testing (`workflows.test.mjs`)**:
+  `site/tests/workflows.test.mjs` enforces exact order and command matching for GitHub Actions. The root `"test"` script in `site/package.json` (`npm run typecheck && node --test --test-concurrency=1 "tests/*.test.mjs"`) and the CI workflow step order (`npm ci` -> `npm run build` -> `npm test`) are locked by meta-tests. Keep new convenience scripts (like `test:fast`) additive.
 - **Fast Local Iteration (~5s total)**:
   Build the site once (~2.8s) and run the fast static/in-memory test suite (~3.5s):
   ```bash
