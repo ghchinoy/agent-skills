@@ -42,23 +42,16 @@ rtk pip list            rtk pnpm install        rtk npm run <script>
 
 # Docs Site Maintenance & Test Suite Guardrails
 
-The Astro Starlight documentation site (`site/`) enforces exact population invariants across its 311-test suite (`site/tests/`). When adding, modifying, or removing a plugin or skill, update the tripwire assertions in one batch rather than discovering them iteratively.
+The Astro Starlight documentation site (`site/`) enforces exact population invariants across its test suites (`site/tests/`).
 
-## 1. Population Metrics Dependency Formulas
+## 1. Dynamic Population Invariants & Relational Testing
 
-When a plugin or skill is added/modified, the following numbers change:
+The test suite uses **dynamic relational invariants** rather than fragile hardcoded scalar counts:
+- **Routes & Content Pages**: Derived dynamically via `sourceRoutes()` from `marketplace.json` and the `plugins/` tree, verified against `distContentPages()`.
+- **Resources (References, Scripts, Assets)**: Verified group-by-group bidirectionally against disk (`assert.deepEqual(tally(shown), tally(disk))`).
+- **Links & In-Page Anchors**: Verified relationally against parsed files and routes, eliminating manual count updates when content is added or modified.
 
-| Metric | Formula / Calculation | Files to Update |
-| :--- | :--- | :--- |
-| **Plugins** | Total plugin directories under `plugins/` | `site/tests/content.test.mjs`, `README.md` |
-| **Skills** | Total `SKILL.md` files declared in `marketplace.json` | `site/tests/content.test.mjs`, `site/tests/fields.test.mjs`, `site/tests/versions.test.mjs`, `site/tests/skill-index.test.mjs` |
-| **Content Pages** | `1 (Landing) + P (Plugins) + S (Skills) + R (References) + 1 (Skills Index) + 3 (About)` | `site/tests/content.test.mjs` (line 51), `site/tests/chrome.test.mjs`, `site/tests/fields.test.mjs`, `site/tests/no-fabrication.test.mjs`, `site/tests/links.test.mjs` |
-| **Forbidden `okf_version` Pages** | `Content Pages - 5` (`pages.length - legitimate.length`) | `site/tests/content.test.mjs` (line 239) |
-| **Built HTML** | `Content Pages + 1 (404.html)` | `site/tests/links.test.mjs` |
-| **Resource Files** | `References + Scripts + Assets` (`RESOURCE_FILE_POPULATION`) | `site/tests/advisories.test.mjs`, `site/tests/resources.test.mjs` |
-| **Scripts** | Count of files under `plugins/*/skills/*/scripts/` | `site/tests/resources.test.mjs` (AC1 & AC5) |
-| **Baseline Advisories** | Only increments if a new plugin/skill triggers `[I1]`, `[I3]`, or `[I4]` (see Authoring Guardrails below) | `site/tests/build-e2e.test.mjs` |
-| **Main Links** | Crawled internal `<a href>` inside `<main>` (`internal.length`) and file-resolving links (`internal.length - 2`) | `site/tests/links.test.mjs` |
+Adding a plugin, skill, script, or reference now passes the static tests automatically without requiring manual edits across test files.
 
 ## 2. Authoring Guardrails (Preventing Unnecessary Advisory & Test Drift)
 
@@ -75,19 +68,23 @@ When a plugin or skill is added/modified, the following numbers change:
   ```bash
   mkdir -p ~/.tmp && export TMPDIR="$HOME/.tmp"
   ```
-- **Node version requirement (`>=22.19.0`)**: `site/package.json` and `site/tests/pins.test.mjs` enforce `node >= 22.19.0`. If your default shell is on an older Node 22.x release, switch via nvm first (`source ~/.config/nvm/nvm.sh && nvm use 22.19.0`).
+- **Node version requirement (`>=22.19.0`)**: `site/package.json` and `site/tests/pins.test.mjs` enforce `node >= 22.19.0`. If your default shell is on an older Node release, load nvm first:
+  ```bash
+  source ~/.nvm/nvm.sh 2>/dev/null || source ~/.config/nvm/nvm.sh 2>/dev/null
+  nvm use 22.19.0
+  ```
 
-## 4. Two-Step Fast Verification Workflow (< 2 Seconds vs 90 Seconds)
+## 4. Two-Tier Verification Workflow (< 5 Seconds vs Full E2E)
 
-- **Step 1: Fast (< 2s) Static Tripwire Sweep**:
-  All population tripwires (`Plugins`, `Skills`, `Content Pages`, `Forbidden okf_version Pages`, `Built HTML`, `Scripts`, `Resource Files`, and `Main Links`) are tested by suites that read the static `site/dist/` directory without spawning child `astro build` processes. Run these immediately after building to discover exact link/page counts in ~1.5 seconds:
+- **Fast Local Iteration (~5s total)**:
+  Build the site once (~2.8s) and run the fast static/in-memory test suite (~3.5s):
   ```bash
   export TMPDIR="$HOME/.tmp"
   npm run build --prefix site
-  node --test site/tests/{content,fields,links,resources,skill-index,versions,chrome,no-fabrication}.test.mjs
+  npm run test:fast --prefix site
   ```
-- **Step 2: Full Sequential Verification (`--test-concurrency=1`)**:
-  The E2E suites (`advisories.test.mjs` and `build-e2e.test.mjs`) spawn live `astro build` subprocesses. Running them concurrently causes race conditions on the shared `site/.astro/` content collection cache (`AstroUserError: The slug "index" specified in the Starlight sidebar config does not exist`). `npm test` in `site/package.json` is configured with `--test-concurrency=1` to prevent this:
+- **Full Sequential Verification (CI / Pre-Release)**:
+  Runs plugin spec validation, Astro typechecking, and the full sequential test suite including mutation testing and isolated Astro build subprocesses (`build-e2e.test.mjs` and `advisories.test.mjs`):
   ```bash
   export TMPDIR="$HOME/.tmp"
   ./scripts/validate-plugins.sh && npm test --prefix site

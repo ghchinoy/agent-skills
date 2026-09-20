@@ -34,6 +34,7 @@ import {
   rel,
   repoRoot,
   siteRoot,
+  sourceRoutes,
   toText,
   walk,
 } from "./_helpers.mjs";
@@ -946,7 +947,8 @@ test("REQUIRED 1: no page renders a typographic character the source never decla
   );
 
   const pages = await distContentPages();
-  assert.equal(pages.length, 87, `swept ${pages.length} pages, not 87`);
+  const { routes } = await sourceRoutes();
+  assert.equal(pages.length, routes.length, `swept ${pages.length} pages, not ${routes.length}`);
 
   const found = [];
   let renderedTransformable = 0;

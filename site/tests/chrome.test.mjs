@@ -527,13 +527,13 @@ test("AC4: every page renders exactly one H1, and the pages with no source H1 ar
     if (n !== 1) wrong.push(`${p.route}: ${n}`);
   }
   assert.deepEqual(wrong, [], `pages not rendering exactly one H1:\n${wrong.join("\n")}`);
-  assert.equal(pages.length, 87, `swept ${pages.length} pages, not 87`);
+  const { routes, skills } = await sourceRoutes();
+  assert.equal(pages.length, routes.length, `swept ${pages.length} pages, not ${routes.length}`);
 
   // The instance the criterion names, reached by DERIVING it: the skills whose
   // body has no leading H1 for the loader to strip. That set is what makes I2
   // a distinct case, and naming it by property rather than by name means a
   // second such skill is covered the day it lands.
-  const { skills } = await sourceRoutes();
   const noSourceH1 = [];
   for (const s of skills) {
     const raw = await readFile(s.skillMd, "utf8");

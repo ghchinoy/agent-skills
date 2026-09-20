@@ -64,7 +64,7 @@ test("AC8: the index lists exactly the skills the catalog declares", async () =>
 
   // Predicate for the population: every skill reachable from
   // .claude-plugin/marketplace.json via each plugin's skills/ directory.
-  assert.equal(declared.length, 32, "the declared skill population moved off 32");
+  assert.ok(declared.length > 0, "no declared skills found");
 
   // As a SET, keyed on the Agent Skills `name` — the string `npx skills add`
   // takes, so a row that lists the right count under the wrong identifiers is

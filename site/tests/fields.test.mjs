@@ -48,6 +48,7 @@ import {
   fieldRows,
   mainOf,
   pageAt,
+  sourceRoutes,
   toText,
 } from "./_helpers.mjs";
 
@@ -468,10 +469,11 @@ function scanPages(pages, skills) {
   return { untraceable, checked, byKind };
 }
 
-test("AC8: every rendered field label on all 87 pages traces to a declared key", async () => {
+test("AC8: every rendered field label on all pages traces to a declared key", async () => {
   // THE GATE. Runs over every label the build emitted, on every page it built.
   const skills = await declaredSkills();
   const pages = await distContentPages();
+  const { routes } = await sourceRoutes();
   const { untraceable, checked, byKind } = scanPages(pages, skills);
 
   assert.deepEqual(untraceable, [], `untraceable field labels:\n${untraceable.join("\n")}`);
@@ -479,7 +481,7 @@ test("AC8: every rendered field label on all 87 pages traces to a declared key",
   // POPULATION, and every branch non-empty. A sweep in which one branch never
   // ran is a sweep that has not tested that branch, and reporting the totals is
   // what makes the green result readable as evidence rather than as silence.
-  assert.equal(pages.length, 87, `swept ${pages.length} pages, not 87`);
+  assert.equal(pages.length, routes.length, `swept ${pages.length} pages, not ${routes.length}`);
   assert.ok(checked > pages.length, `only ${checked} labels across ${pages.length} pages`);
   for (const [kind, n] of Object.entries(byKind)) {
     assert.ok(n > 0, `no ${kind} row was seen anywhere — that branch of the gate is untested`);
