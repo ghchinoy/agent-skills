@@ -31,7 +31,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`grill-with-beads`**: Grilling session that challenges your plan, sharpens work breakdown, and updates the `bd` issue tracker inline as decisions crystallise.
 
 ### 4. 📚 Repository Authoring (`plugins/repo-authoring`)
-*Repository management skills for technical writing, README generation, changelogs, and commit recaps.*
+*Repository management skills for technical writing, editorial report artifacts, README generation, changelogs, and commit recaps.*
 - **`make-readme`**: Creates, assesses, and improves `README.md` files against a weighted quality rubric or strict `standard-readme` spec compliance.
 - **`technical-post-editorial`**: Edits technical blog posts to remove AI writing patterns while preserving the author's human voice.
 - **`repository-change-recap`**: Generates structured weekly or custom timeframe commit recaps using `git log --stat` and per-repo categorization rules (`.gemini/recap-rules.md`).
