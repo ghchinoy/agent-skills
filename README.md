@@ -37,6 +37,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`repository-change-recap`**: Generates structured weekly or custom timeframe commit recaps using `git log --stat` and per-repo categorization rules (`.gemini/recap-rules.md`).
 - **`changelog-manager`**: Generates, updates, and curates `CHANGELOG.md` files adhering to Keep a Changelog v1.1.0 and Common Changelog specs.
 - **`headless-fork-pr`**: Executes upstream issue creation, git fork synchronization (`upstream` vs `origin`), and PR submission in headless/sandbox environments using self-cleaning ephemeral GitHub SSH keys (`scripts/ephemeral-ssh-git.sh`).
+- **`editorial-report-artifact`**: Authors standalone, zero-dependency HTML technical experiment records, benchmark ablations, and architecture briefings with warm editorial design tokens (`--ivory`/`--clay`/`--olive`), offline mathematical typography (`.math`), inline SVG schematics, interactive pipeline explorers, and automated LaTeX/Markdown bleed linting (`scripts/lint-html-artifact.py`).
 
 ### 5. 🛡️ MCP Security (`plugins/mcp-security`)
 *Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.*

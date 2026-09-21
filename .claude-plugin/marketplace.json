@@ -45,7 +45,8 @@
         "./plugins/repo-authoring/skills/technical-post-editorial",
         "./plugins/repo-authoring/skills/repository-change-recap",
         "./plugins/repo-authoring/skills/changelog-manager",
-        "./plugins/repo-authoring/skills/headless-fork-pr"
+        "./plugins/repo-authoring/skills/headless-fork-pr",
+        "./plugins/repo-authoring/skills/editorial-report-artifact"
       ]
     },
     {

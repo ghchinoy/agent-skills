@@ -293,9 +293,15 @@ test("AC8 forward: every key a skill declares reaches its page", async () => {
   }
   assert.deepEqual(suppressed, [], `declared keys that never reach a reader:\n${suppressed.join("\n")}`);
 
-  // DENOMINATORS. 32 skills; the exemption fires once per skill and no more,
-  // so it is 32 of 32 and cannot have quietly widened to cover a second key.
-  assert.equal(skills.length, 32, `swept ${skills.length} skills, not 32`);
+  // DENOMINATORS. Dynamic derivation from sourceRoutes(); the exemption fires
+  // once per skill and no more, so it cannot have quietly widened to cover a second key.
+  const { skills: expectedSkillRoutes } = await sourceRoutes();
+  assert.equal(
+    skills.length,
+    expectedSkillRoutes.length,
+    `swept ${skills.length} skills, not ${expectedSkillRoutes.length}`,
+  );
+  assert.ok(skills.length > 0, "expected non-empty skills population");
   assert.equal(
     exemptSeen,
     skills.length,
