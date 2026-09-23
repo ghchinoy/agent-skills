@@ -73,10 +73,25 @@
   .pill.clay { background: var(--clay-soft); border-color: var(--clay); color: var(--clay-deep); font-weight: 600; }
 
   /* toc */
-  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 42px; }
-  nav.toc a { font-size: 12.5px; padding: 7px 14px; border: var(--border); border-radius: 999px; color: var(--g700); background: var(--paper); text-decoration: none; display: inline-flex; gap: 7px; align-items: center; }
-  nav.toc a .n { font-family: var(--mono); font-size: 10px; color: var(--g500); }
-  nav.toc a:hover { border-color: var(--slate); color: var(--slate); }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0 36px;
+    padding: 10px 0;
+    background: rgba(250, 249, 245, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--g200);
+  }
+  nav.toc a { font-size: 12.5px; padding: 7px 14px; border: var(--border); border-radius: 999px; color: var(--g700); background: var(--paper); text-decoration: none; display: inline-flex; gap: 7px; align-items: center; cursor: pointer; transition: all 0.15s ease; }
+  nav.toc a .n { font-family: var(--mono); font-size: 10px; color: var(--clay-deep); font-weight: 700; }
+  nav.toc a:hover { border-color: var(--slate); color: var(--slate); transform: translateY(-1px); }
+  nav.toc a.active { background: var(--slate); border-color: var(--slate); color: var(--ivory); }
+  nav.toc a.active .n { color: var(--clay); }
 
   /* summary strip */
   .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 56px; }
@@ -89,7 +104,7 @@
   .cell.olive { border-left: 4px solid var(--olive); }
 
   /* sections & grids */
-  section { margin-bottom: 68px; scroll-margin-top: 24px; }
+  section { margin-bottom: 68px; scroll-margin-top: 76px; }
   .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
   .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate); padding: 3px 9px; border-radius: 8px; }
   .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 28px; color: var(--slate); letter-spacing: -0.01em; }
@@ -194,13 +209,61 @@
   </div>
 
   <section id="s1">
-    <div class="sec-head"><span class="num">01</span><h2>Mathematical formulation &amp; system schematic</h2></div>
+    <div class="sec-head"><span class="n num">01</span><h2>Mathematical formulation &amp; system schematic</h2></div>
     <p class="sec-intro">
       Use semantic <code>&lt;span class="math"&gt;</code> elements for equations such as
       <span class="math"><i>H&#771;</i><sub><i>m</i></sub> = <i>H</i><sub><i>m</i></sub> / ln|<i>V</i><sub><i>m</i></sub>| &in; [0, 1]</span>
       so formulas render cleanly offline without external CDN dependencies.
     </p>
   </section>
+
+  <section id="s2">
+    <div class="sec-head"><span class="n num">02</span><h2>Empirical ablation &amp; verification</h2></div>
+    <p class="sec-intro">
+      Document multi-way benchmark comparisons with right-aligned monospace numeric columns.
+    </p>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head"><span class="n num">03</span><h2>Interactive pipeline explorer</h2></div>
+    <p class="sec-intro">
+      Click any SVG stage node to inspect the live implementation and receipt metrics.
+    </p>
+  </section>
 </div>
+
+<script>
+  // Universal TOC smooth-scroll handler (fixes WebView/iframe previewers blocking bare #fragment anchor jumps)
+  document.querySelectorAll('nav.toc a[href^="#"]').forEach(link => {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      const targetId = this.getAttribute('href').slice(1);
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        document.querySelectorAll('nav.toc a').forEach(a => a.classList.remove('active'));
+        this.classList.add('active');
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        try { history.replaceState(null, '', '#' + targetId); } catch (_) {}
+      }
+    });
+  });
+
+  // Highlight active TOC pill as user scrolls
+  if ('IntersectionObserver' in window) {
+    const sections = document.querySelectorAll('section[id^="s"]');
+    const tocLinks = document.querySelectorAll('nav.toc a[href^="#"]');
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.getAttribute('id');
+          tocLinks.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+          });
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
+    sections.forEach(sec => observer.observe(sec));
+  }
+</script>
 </body>
 </html>

@@ -67,6 +67,24 @@ def audit_html(path: pathlib.Path, check_gitignored: bool = False) -> int:
         for m in BACKTICK_IN_HTML_RE.finditer(line):
             issues.append((idx, "MARKDOWN_BACKTICK", f"Stray Markdown backtick `{m.group(1)}` — convert to <code>{m.group(1)}</code>"))
 
+    # 3. Verify all internal #fragment anchor links resolve to an id="..." target
+    #    and that nav.toc includes a WebView-safe scrollIntoView handler
+    defined_ids = set(re.findall(r'\bid=["\']([^"\']+)["\']', body_only))
+    has_toc_anchor = False
+    for idx, line in enumerate(body_lines, start=1):
+        for m in re.finditer(r'<a\b[^>]*\bhref=["\']#([^"\']+)["\']', line, flags=re.IGNORECASE):
+            target_id = m.group(1)
+            has_toc_anchor = True
+            if target_id and target_id not in defined_ids:
+                issues.append((idx, "BROKEN_ANCHOR_TARGET", f"Anchor href='#{target_id}' has no matching id='{target_id}' in document"))
+
+    if has_toc_anchor and "scrollIntoView" not in raw:
+        issues.append((
+            0,
+            "TOC_MISSING_SCROLL_JS",
+            "Document has #fragment TOC links but no JS scrollIntoView handler (bare href='#...' links fail in IDE/WebView previewers)",
+        ))
+
     if check_gitignored:
         res = subprocess.run(
             ["git", "check-ignore", "-q", str(path)],
@@ -77,7 +95,7 @@ def audit_html(path: pathlib.Path, check_gitignored: bool = False) -> int:
             issues.append((0, "GIT_NOT_IGNORED", f"File '{path}' is NOT gitignored; move to a gitignored directory (e.g., scratch/)"))
 
     if not issues:
-        print(f"[PASS] {path}: 0 LaTeX/Markdown bleed issues, valid SVG entities" + (" (gitignored verified)" if check_gitignored else ""))
+        print(f"[PASS] {path}: 0 LaTeX/Markdown bleed issues, valid SVG entities & TOC anchors" + (" (gitignored verified)" if check_gitignored else ""))
         return 0
 
     print(f"[FAIL] {path}: found {len(issues)} formatting issue(s):", file=sys.stderr)

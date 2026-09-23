@@ -39,7 +39,8 @@ Start from [`assets/artifact-skeleton.html`](assets/artifact-skeleton.html) and 
    - `p.lead`: Narrative synthesis naming the model/system, the core mathematical or architectural mechanism, and the headline improvement.
    - `.status-line`: 4–5 `.pill` badges (`live` olive for verified lifts, `clay` for active mechanisms, neutral for hardware/latency specs).
 2. **Numbered Pill Table of Contents (`nav.toc`)**:
-   - Anchor pills (`01` through `07`+) linking to `#s1`..`#s8`.
+   - Sticky top bar (`position: sticky; top: 0; backdrop-filter: blur(8px)`) with anchor pills (`01` through `07`+) linking to `#s1`..`#s8`.
+   - **Mandatory WebView Smooth-Scroll Handler**: Embedded IDE/WebView HTML previewers block bare `<a href="#s1">` anchor navigation. Always include the vanilla JS `scrollIntoView({ behavior: 'smooth', block: 'start' })` + `IntersectionObserver` active-pill script from [`assets/artifact-skeleton.html`](assets/artifact-skeleton.html), and ensure every `<section id="s1..s8">` sets `scroll-margin-top: 76px`.
 3. **Four-Cell KPI Summary Strip (`.summary`)**:
    - Big `28px` serif metric (`.v`), uppercase monospace label (`.k`), and baseline delta caption (`.s`).
 4. **Core Analytical Sections (`section#s1..#s7`)**:
@@ -75,4 +76,4 @@ Before presenting the generated HTML file to the user, always run [`scripts/lint
 ./scripts/lint-html-artifact.py path/to/report.html --check-gitignored
 ```
 
-Fix any reported `[LATEX_MACRO]`, `[INLINE_MATH_$]`, `[MARKDOWN_BACKTICK]`, `[SVG_XML_ENTITY]`, or `[GIT_NOT_IGNORED]` findings until the script outputs `[PASS]`.
+Fix any reported `[LATEX_MACRO]`, `[INLINE_MATH_$]`, `[MARKDOWN_BACKTICK]`, `[SVG_XML_ENTITY]`, `[BROKEN_ANCHOR_TARGET]`, `[TOC_MISSING_SCROLL_JS]`, or `[GIT_NOT_IGNORED]` findings until the script outputs `[PASS]`.
