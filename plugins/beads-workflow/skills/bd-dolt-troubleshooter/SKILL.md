@@ -21,6 +21,24 @@ from a mismatch between four layers:
 2. **JSONL export** — `.beads/issues.jsonl` (git source of truth)
 3. **Auto-backup** — `.beads/backup/` (a local Dolt backup target)
 
+## Fast-Triage: Schema Skew & "Refusing to auto-apply migrations"
+
+When `bd` refuses to open with `refusing to auto-apply N pending schema migrations to a remote-backed database (vX -> vY)`:
+
+1. **Check with the human operator**: Confirm whether another clone has already migrated and pushed.
+2. **Run `bd dolt pull`**: Check if the remote already has the migrated schema.
+3. **If this machine is the single designated migrator**:
+   ```bash
+   cp .beads/issues.jsonl /tmp/beads-backup.jsonl
+   bd migrate --force
+   bd migrate --inspect
+   bd doctor
+   bd dolt push
+   ```
+4. **If another clone already migrated**: Do NOT run `--force`. Run `bd bootstrap` to adopt the remote schema.
+
+See `references/schema-version-skew.md` for full runbook, dirty working set recovery, and `unreadable-remote-state` handling.
+
 ## The Signature Failure: Writes Silently Revert
 
 **Symptom:** You run `bd close X` or `bd update X`, bd prints success, but the
