@@ -21,7 +21,7 @@ Targeting (specify at least one):
   --all                 Target all matching active agents
 
 Required:
-  --model <model>       Model string to set (e.g. 'claude-opus-4-8', 'gemini-3.8-flash', 'claude-3-7-sonnet')
+  --model <model>       Model string to set (e.g. 'claude-opus-5-5', 'gemini-3.8-flash', 'claude-sonnet-5')
 
 Options:
   --hub <url>           Hub endpoint URL (required or via SCION_HUB_ENDPOINT)
@@ -31,13 +31,13 @@ Options:
 
 Examples:
   # Patch a single coordinator by ID:
-  $(basename "$0") --hub \$HUB --agent 1e156f1c-7ace... --model claude-opus-4-8
+  $(basename "$0") --hub \$HUB --agent 1e156f1c-7ace... --model claude-opus-5-5
 
   # Dry-run: preview updating all developer agents in okf-app to gemini-3.8-flash:
   $(basename "$0") --hub \$HUB --project okf-app --template developer --model gemini-3.8-flash --dry-run
 
-  # Live-patch all running coordinators across all projects to claude-opus-4-8:
-  $(basename "$0") --hub \$HUB --all --template coordinator --model claude-opus-4-8
+  # Live-patch all running coordinators across all projects to claude-opus-5-5:
+  $(basename "$0") --hub \$HUB --all --template coordinator --model claude-opus-5-5
 EOF
   exit 1
 }

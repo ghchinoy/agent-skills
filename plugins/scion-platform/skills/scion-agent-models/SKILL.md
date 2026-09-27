@@ -61,13 +61,13 @@ To audit model assignments across all projects and agents:
 
 ### Workflow 2: Zero-Downtime Live-Patching Running Agents
 
-When an agent needs to switch models (e.g. moving a coordinator from unpinned `opus` to `claude-opus-4-8`, or switching worker agents to `gemini-3.8-flash` on Vertex):
+When an agent needs to switch models (e.g. moving a coordinator from unpinned `opus` to `claude-opus-5-5`, or switching worker agents to `gemini-3.8-flash` on Vertex):
 
 #### A. Preview Changes (Dry-Run)
 ```bash
 ./scripts/hub-model-patch.sh --hub https://<your-hub-domain>/ \
   --template coordinator \
-  --model claude-opus-4-8 \
+  --model claude-opus-5-5 \
   --dry-run
 ```
 
@@ -75,15 +75,15 @@ When an agent needs to switch models (e.g. moving a coordinator from unpinned `o
 ```bash
 ./scripts/hub-model-patch.sh --hub https://<your-hub-domain>/ \
   --agent <agent-id> \
-  --model claude-opus-4-8
+  --model claude-opus-5-5
 ```
 
 #### C. Bulk Patch by Template Role
 ```bash
-# Patch all running coordinators to claude-opus-4-8:
+# Patch all running coordinators to claude-opus-5-5:
 ./scripts/hub-model-patch.sh --hub https://<your-hub-domain>/ \
   --all --template coordinator \
-  --model claude-opus-4-8
+  --model claude-opus-5-5
 
 # Patch all developers in a project to gemini-3.8-flash:
 ./scripts/hub-model-patch.sh --hub https://<your-hub-domain>/ \
@@ -107,7 +107,7 @@ To prevent newly created agents from drifting into unexpected harness defaults:
    system_prompt: system-prompt.md
 
    default_harness_config: "claude"
-   model: "claude-opus-4-8"
+   model: "claude-opus-5-5"
    ```
    Sync to Hub:
    ```bash
