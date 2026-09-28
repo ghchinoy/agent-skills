@@ -213,12 +213,12 @@ for row in $(echo "$MATCHES" | jq -r '.[] | @base64'); do
       HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/api/v1/agents/${AID}/message" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{\"message\": \"/model ${NEW_MODEL}\", \"raw\": true}")
-      sleep 0.3
+        -d "{\"structured_message\": {\"msg\": \"/model ${NEW_MODEL}\", \"raw\": true}}")
+      sleep 1
       curl -s -o /dev/null -X POST "${API_BASE}/api/v1/agents/${AID}/message" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"message": "\r", "raw": true}'
+        -d '{"structured_message": {"msg": "Enter", "raw": true}}'
     else
       METHOD_USED="restart_only"
       HTTP_CODE=200

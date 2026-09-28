@@ -73,7 +73,11 @@ Understanding how Scion resolves models and Vertex AI endpoints prevents acciden
 
 ### Workflow 2: Live-Switching Running Agents & Refreshing Container Env Vars
 
-Because `PATCH /api/v1/agents/{id}` only allows `config.model` modifications when `phase == "created"`, running Claude Code agents (`phase == "running"`) must be switched in-place via `POST /api/v1/agents/{id}/message` (`{"message": "/model <model-id>", "raw": true}` followed by `{"message": "\r", "raw": true}`).
+Because `PATCH /api/v1/agents/{id}` only allows `config.model` modifications when `phase == "created"`, running Claude Code agents (`phase == "running"`) must be switched in-place via `POST /api/v1/agents/{id}/message` using `structured_message` with `"raw": true` (`{"structured_message": {"msg": "/model <model-id>", "raw": true}}` followed by `{"structured_message": {"msg": "Enter", "raw": true}}`, or via the CLI `scion message <agent> --project <slug> --raw "/model <model-id>"` + `"Enter"`). Note that top-level `"raw": true` outside `structured_message` is ignored by the Hub API and delivered as a chat message envelope.
+
+**Claude Code Version Gate (`>= 2.1.280` for `claude-opus-5-5`)**:
+- Vertex AI rejects `claude-opus-5-5@default` (and the `opus` alias, which resolves to Opus 5 in Claude Code `2.1.270`) with `HTTP 400 claude_code_version_too_old` (`Claude Code 2.1.270 does not support this model; version 2.1.280 or newer is required`) if the `scion-claude` container image has Claude Code `< 2.1.280`.
+- Verify the container's Claude Code version with `scion look <agent> --project <slug>`. If the container runs Claude Code `< 2.1.280`, switch the agent to `claude-opus-4-8` (`--model claude-opus-4-8`) until `scion-claude` is rebuilt with Claude Code `>= 2.1.280`.
 
 Furthermore, if you updated Hub or project environment variables (such as setting `CLOUD_ML_REGION=global`), existing Docker containers retain their old `os.Environ()` (`CLOUD_ML_REGION=us-east5`) until recreated via `stop` + `start` (`--restart-containers`), which preserves the workspace and `.claude` conversation (`--resume`).
 
