@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hub-model-patch.sh — Live-patch model configurations on running Scion agents
+# hub-model-patch.sh — Live-switch model configurations on Scion agents (with optional container recreate)
 set -euo pipefail
 
 HUB_URL="${SCION_HUB_ENDPOINT:-}"
@@ -7,6 +7,7 @@ AGENT_TARGET=""
 PROJECT_FILTER=""
 TEMPLATE_FILTER=""
 NEW_MODEL=""
+RESTART_CONTAINERS=false
 DRY_RUN=false
 OUTPUT_JSON=false
 
@@ -15,29 +16,27 @@ usage() {
 Usage: $(basename "$0") --hub <https://hub.example.com/> --model <model-identifier> [targets] [options]
 
 Targeting (specify at least one):
-  --agent <id|slug>     Target a specific agent by ID or slug
-  --project <id|slug>   Filter targets to a specific project
-  --template <name>     Filter targets by agent template (e.g. 'coordinator', 'developer')
-  --all                 Target all matching active agents
+  --agent <id|slug>        Target a specific agent by ID or slug
+  --project <id|slug>      Filter targets to a specific project
+  --template <name>        Filter targets by agent template (e.g. 'coordinator', 'developer')
+  --all                    Target all matching active agents
 
 Required:
-  --model <model>       Model string to set (e.g. 'claude-opus-5-5', 'gemini-3.8-flash', 'claude-sonnet-5')
+  --model <model>          Model string to set (e.g. 'claude-opus-5-5@default', 'Gemini 3.8 Flash (Medium)')
 
 Options:
-  --hub <url>           Hub endpoint URL (required or via SCION_HUB_ENDPOINT)
-  --dry-run             Preview matching agents and proposed changes without applying
-  --json                Output results in JSON format
-  -h, --help            Show this help message
+  --hub <url>              Hub endpoint URL (required or via SCION_HUB_ENDPOINT)
+  --restart-containers     Stop and start running agents first so recreated containers pick up updated Hub/project env vars (e.g. CLOUD_ML_REGION=global)
+  --dry-run                Preview matching agents and proposed actions without applying
+  --json                   Output results in JSON format
+  -h, --help               Show this help message
 
 Examples:
-  # Patch a single coordinator by ID:
-  $(basename "$0") --hub \$HUB --agent 1e156f1c-7ace... --model claude-opus-5-5
+  # Switch a single running coordinator by ID:
+  $(basename "$0") --hub \$HUB --agent 1e156f1c-7ace... --model claude-opus-5-5@default
 
-  # Dry-run: preview updating all developer agents in okf-app to gemini-3.8-flash:
-  $(basename "$0") --hub \$HUB --project okf-app --template developer --model gemini-3.8-flash --dry-run
-
-  # Live-patch all running coordinators across all projects to claude-opus-5-5:
-  $(basename "$0") --hub \$HUB --all --template coordinator --model claude-opus-5-5
+  # Recreate containers (to pick up CLOUD_ML_REGION=global) and switch all coordinators to claude-opus-5-5@default:
+  $(basename "$0") --hub \$HUB --all --template coordinator --restart-containers --model claude-opus-5-5@default
 EOF
   exit 1
 }
@@ -63,6 +62,10 @@ while [[ $# -gt 0 ]]; do
     --model)
       NEW_MODEL="$2"
       shift 2
+      ;;
+    --restart-containers)
+      RESTART_CONTAINERS=true
+      shift
       ;;
     --dry-run)
       DRY_RUN=true
@@ -116,16 +119,14 @@ if [[ ! -f "$CREDS_FILE" ]]; then
   exit 1
 fi
 
-TOKEN=$(jq -r --arg h "$HUB_URL" '.hubs[$h].accessToken // empty' "$CREDS_FILE")
+TOKEN=$(jq -r --arg h "$HUB_URL" --arg h2 "$API_BASE" '.hubs[$h].accessToken // .hubs[$h2].accessToken // empty' "$CREDS_FILE")
 if [[ -z "$TOKEN" ]]; then
   echo "Error: No access token for $HUB_URL found in $CREDS_FILE." >&2
   exit 1
 fi
 
-# Fetch agents
 AGENTS_RAW=$(curl -s -H "Authorization: Bearer $TOKEN" "${API_BASE}/api/v1/agents?limit=250")
 
-# Identify matching targets
 MATCHES=$(echo "$AGENTS_RAW" | jq \
   --arg a_target "$AGENT_TARGET" \
   --arg p_filter "$PROJECT_FILTER" \
@@ -161,21 +162,21 @@ fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
   if [[ "$OUTPUT_JSON" == "true" ]]; then
-    jq -n --arg new "$NEW_MODEL" --argjson matches "$MATCHES" '{dryRun: true, proposedModel: $new, targetCount: ($matches | length), targets: $matches}'
+    jq -n --arg new "$NEW_MODEL" --argjson restart "$RESTART_CONTAINERS" --argjson matches "$MATCHES" \
+      '{dryRun: true, proposedModel: $new, restartContainers: $restart, targetCount: ($matches | length), targets: $matches}'
   else
-    echo "=== DRY RUN: Found $COUNT matching agent(s) to patch with model '$NEW_MODEL' ==="
+    echo "=== DRY RUN: Found $COUNT matching agent(s) to switch to model '$NEW_MODEL' (restartContainers=$RESTART_CONTAINERS) ==="
     echo "$MATCHES" | jq -r --arg new "$NEW_MODEL" '
       .[] |
       "  * [\(.name)] (\(.id)) in project \(.project) [phase: \(.phase)]\n" +
       "      Template: \(.template) | Harness: \(.harness)\n" +
-      "      Current Model: \(.currentModel)  -->  Proposed Model: \($new)\n"
+      "      Current Model: \(.currentModel)  -->  Target Model: \($new)\n"
     '
     echo "Dry run complete. No changes were applied."
   fi
   exit 0
 fi
 
-# Execute Live Patch
 RESULTS="[]"
 for row in $(echo "$MATCHES" | jq -r '.[] | @base64'); do
   _decode() {
@@ -183,37 +184,70 @@ for row in $(echo "$MATCHES" | jq -r '.[] | @base64'); do
   }
   AID=$(_decode '.id')
   ANAME=$(_decode '.name')
+  APHASE=$(_decode '.phase')
+  AHARNESS=$(_decode '.harness')
   ACURR=$(_decode '.currentModel')
 
-  # Send PATCH request
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "${API_BASE}/api/v1/agents/${AID}" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"config\": {\"model\": \"${NEW_MODEL}\"}}")
+  METHOD_USED=""
+  HTTP_CODE=0
+
+  if [[ "$APHASE" == "created" ]]; then
+    METHOD_USED="patch_config"
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "${API_BASE}/api/v1/agents/${AID}" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"config\": {\"model\": \"${NEW_MODEL}\"}}")
+  else
+    if [[ "$RESTART_CONTAINERS" == "true" ]]; then
+      curl -s -o /dev/null -X POST "${API_BASE}/api/v1/agents/${AID}/stop" \
+        -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}'
+      sleep 1
+      curl -s -o /dev/null -X POST "${API_BASE}/api/v1/agents/${AID}/start" \
+        -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}'
+      sleep 4
+    fi
+
+    if [[ "$AHARNESS" == "claude" ]]; then
+      METHOD_USED="live_slash_model"
+      [[ "$RESTART_CONTAINERS" == "true" ]] && METHOD_USED="restart_and_live_slash_model"
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/api/v1/agents/${AID}/message" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"message\": \"/model ${NEW_MODEL}\", \"raw\": true}")
+      sleep 0.3
+      curl -s -o /dev/null -X POST "${API_BASE}/api/v1/agents/${AID}/message" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"message": "\r", "raw": true}'
+    else
+      METHOD_USED="restart_only"
+      HTTP_CODE=200
+    fi
+  fi
 
   SUCCESS=false
   if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
     SUCCESS=true
     if [[ "$OUTPUT_JSON" != "true" ]]; then
-      echo "✓ Successfully patched $ANAME ($AID): $ACURR -> $NEW_MODEL"
+      echo "✓ Updated $ANAME ($AID) via $METHOD_USED: $ACURR -> $NEW_MODEL"
     fi
   else
     if [[ "$OUTPUT_JSON" != "true" ]]; then
-      echo "✗ Failed to patch $ANAME ($AID) [HTTP $HTTP_CODE]" >&2
+      echo "✗ Failed to update $ANAME ($AID) via $METHOD_USED — HTTP $HTTP_CODE" >&2
     fi
   fi
 
-  RESULTS=$(jq -n \
-    --argjson existing "$RESULTS" \
-    --arg aid "$AID" \
+  RESULTS=$(echo "$RESULTS" | jq \
+    --arg id "$AID" \
     --arg name "$ANAME" \
     --arg prev "$ACURR" \
     --arg new "$NEW_MODEL" \
+    --arg method "$METHOD_USED" \
+    --argjson code "$HTTP_CODE" \
     --argjson ok "$SUCCESS" \
-    --arg code "$HTTP_CODE" \
-    '$existing + [{id: $aid, name: $name, previousModel: $prev, updatedModel: $new, success: $ok, httpStatus: ($code | tonumber)}]')
+    '. + [{id: $id, name: $name, previousModel: $prev, newModel: $new, method: $method, statusCode: $code, success: $ok}]')
 done
 
 if [[ "$OUTPUT_JSON" == "true" ]]; then
-  echo "$RESULTS"
+  echo "$RESULTS" | jq .
 fi

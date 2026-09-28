@@ -1,16 +1,16 @@
 ---
 name: scion-hub-admin
-description: Diagnose Scion Hub AK1 authorization denials (403 Forbidden, CanDelegate, missing scopes), inspect role definitions and delegation ceilings, and execute zero-downtime agent token re-minting via Hub admin APIs. Requires the scion CLI, jq, and curl.
+description: Diagnose Scion Hub AK1 authorization denials (403 Forbidden, CanDelegate, missing scopes) and broker quota ceilings (429 Too Many Requests, max_agents_per_broker), inspect role definitions and delegation ceilings, and execute zero-downtime agent token re-minting via Hub admin APIs. Requires the scion CLI, jq, and curl.
 license: Apache-2.0
 compatibility: Requires scion CLI, jq, curl, and bash.
 metadata:
   author: ghchinoy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
-# Scion Hub Administration & Authz Triage (`scion-hub-admin`)
+# Scion Hub Administration, Authz & Quota Triage (`scion-hub-admin`)
 
-This skill provides an operational playbook and executable tooling for troubleshooting Scion Hosted Hub authorization (`AK1` kernel), diagnosing `403 Forbidden` / `CanDelegate` denials on coordinator and manager agents, and executing zero-downtime JWT token re-minting across running agent containers.
+This skill provides an operational playbook and executable tooling for troubleshooting Scion Hosted Hub authorization (`AK1` kernel), diagnosing `403 Forbidden` / `CanDelegate` denials and `429 Too Many Requests` (`max_agents_per_broker`) quota ceilings on coordinator and manager agents, and executing zero-downtime JWT token re-minting across running agent containers.
 
 ## Prerequisites
 
@@ -25,6 +25,7 @@ This skill provides an operational playbook and executable tooling for troublesh
 
 - [`scripts/hub-authz-triage.sh`](scripts/hub-authz-triage.sh) — Read-only diagnostic script that inspects Role Definitions, running agent `.appliedConfig.agentRole`, and creation timestamps across all three authorization layers.
 - [`scripts/hub-reset-auth.sh`](scripts/hub-reset-auth.sh) — Triggers zero-downtime token re-minting and hot-injection via `POST /api/v1/admin/agents/reset-auth-all` or per-agent `POST /api/v1/agents/{id}/reset-auth`.
+- [`scripts/hub-quota-manage.sh`](scripts/hub-quota-manage.sh) — Audits system quota definitions (`/api/v1/admin/limits`) and active broker agent counts against `max_agents_per_broker`, and creates/updates per-broker entitlement bindings to resolve `HTTP 429 quota_exceeded` errors.
 - [`scripts/hub-rebuild-server.sh`](scripts/hub-rebuild-server.sh) — Dispatches, tracks, and verifies server self-rebuilds via `POST /api/v1/admin/maintenance/operations/rebuild-server/run`.
 - [`scripts/hub-health-report.sh`](scripts/hub-health-report.sh) — Subsystem scorecard and per-project agent health and metrics reporting via `/api/v1/admin/health/summary` and `/api/v1/agents`.
 
@@ -90,13 +91,13 @@ To re-derive JWT scopes from each agent's stored `.appliedConfig.agentRole` (`Sc
 
 - **Bulk Re-Mint All Running Agents**:
   ```bash
-  scripts/hub-reset-auth.sh --hub https://<your-hub-domain>/ --all
+  ./scripts/hub-reset-auth.sh --hub https://<your-hub-domain>/ --all
   ```
   *(Calls `POST /api/v1/admin/agents/reset-auth-all`)*
 
 - **Targeted Re-Mint for a Specific Agent**:
   ```bash
-  scripts/hub-reset-auth.sh --hub https://<your-hub-domain>/ --agent <agent-uuid>
+  ./scripts/hub-reset-auth.sh --hub https://<your-hub-domain>/ --agent <agent-uuid>
   ```
   *(Calls `POST /api/v1/agents/<agent-uuid>/reset-auth`)*
 
@@ -129,7 +130,7 @@ When the Hub server binary is behind the local development binary or needs to in
    ```
 2. **Execute and stream self-rebuild**:
    ```bash
-   scripts/hub-rebuild-server.sh --hub https://<your-hub-domain>/
+   ./scripts/hub-rebuild-server.sh --hub https://<your-hub-domain>/
    ```
    *(Triggers `POST /api/v1/admin/maintenance/operations/rebuild-server/run`, tracks the build output, and verifies health upon systemd restart.)*
 
@@ -141,19 +142,37 @@ Monitor Hub subsystem health, database connection pool stats, runtime broker rea
 
 1. **Overall Hub Subsystem Scorecard**:
    ```bash
-   scripts/hub-health-report.sh --hub https://<your-hub-domain>/
+   ./scripts/hub-health-report.sh --hub https://<your-hub-domain>/
    ```
    Reports Hub uptime, DB connection pool (`active`, `max`, `idle`, `wait_count`), broker states (`runtime_available`), and fleet-wide agent health (highlighting stalled, crashed, or errored agents).
 
 2. **Per-Project Deep Dive**:
    ```bash
-   scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --project <project-slug-or-id>
+   ./scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --project <project-slug-or-id>
    ```
    Breaks down agents by template, harness, lifecycle phase, and activity state (`thinking`, `working`, `blocked`, `completed`, `stalled`).
 
 3. **Machine-Readable Fleet Telemetry**:
    ```bash
-   scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --all-projects --json
+   ./scripts/hub-health-report.sh --hub https://<your-hub-domain>/ --all-projects --json
    ```
 
+---
 
+### Step 7: Broker Quota Ceiling & `429 Too Many Requests` Triage (`max_agents_per_broker`)
+
+When agents or operators report `429` errors during `scion start`, `scion resume`, or DM wake-ups, distinguish between **Hub Broker Quota Ceilings** and **Vertex AI Regional Quota**:
+
+1. **Audit Broker Quota & Live Reservations**:
+   ```bash
+   ./scripts/hub-quota-manage.sh --hub https://<your-hub-domain>/
+   ```
+   - Upstream Scion seeds a system limit `max_agents_per_broker` with `defaultValue: 12` (`system: true`).
+   - Any agent not in `stopped`, `suspended`, or `error` phase counts against its runtime broker's ceiling. When `countedAgents >= effectiveCeiling`, the Hub returns `HTTP 429 Too Many Requests` (`{"error":{"code":"quota_exceeded","message":"quota exceeded: max_agents_per_broker"}}`).
+   - Because `max_agents_per_broker` is a system-seeded limit (`system: true`), calling `PUT /api/v1/admin/limits/{id}` directly returns `403 Forbidden ("system-seeded limit definitions cannot be modified")`.
+
+2. **Raise the Per-Broker Ceiling via Entitlement Binding**:
+   ```bash
+   ./scripts/hub-quota-manage.sh --hub https://<your-hub-domain>/ --set-broker-ceiling 200
+   ```
+   *(Creates or updates an entitlement binding on `max_agents_per_broker` with `subjectType: "user"`, `subjectId: "<broker-id>"`, `scopeType: "broker"`, `scopeId: "<broker-id>"`, `value: 200`—or `0` for unlimited).*
