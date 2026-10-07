@@ -34,16 +34,24 @@ else
   ok "Found 'plugins/' directory."
 fi
 
-# Symlink safety check (skipping git-ignored paths)
-for symlink in $(find . -type l -not -path '*/.git/*' 2>/dev/null); do
+# Symlink safety check (skipping git-ignored paths and common dependency trees)
+ABS_ROOT="$(pwd -P)"
+while IFS= read -r symlink; do
+  [ -n "$symlink" ] || continue
   if git check-ignore -q "$symlink" 2>/dev/null; then
     continue
   fi
   target="$(readlink "$symlink")"
-  if [[ "$target" == /* ]] || [[ "$target" == ../* ]]; then
+  sym_dir="$(dirname "$symlink")"
+  if command -v realpath >/dev/null 2>&1 && realpath -m . >/dev/null 2>&1; then
+    real_target="$(cd "$sym_dir" 2>/dev/null && realpath -m "$target" 2>/dev/null || true)"
+  else
+    real_target="$(python3 -c "import os, sys; print(os.path.realpath(os.path.join(sys.argv[1], sys.argv[2])))" "$sym_dir" "$target" 2>/dev/null || true)"
+  fi
+  if [ -z "$real_target" ] || { [[ "$real_target" != "$ABS_ROOT" ]] && [[ "$real_target" != "$ABS_ROOT"/* ]]; }; then
     err "Symlink '$symlink' escapes repository root ($target)"
   fi
-done
+done < <(find . -type l -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null)
 
 info "2. Validating Plugin Package Manifests (plugin.json)"
 for plugin_dir in plugins/*; do
