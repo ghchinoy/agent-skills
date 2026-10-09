@@ -117,6 +117,14 @@
       ]
     },
     {
+      "name": "python-readability",
+      "source": "./plugins/python-readability",
+      "description": "Modern Python and Google readability standards, style guidelines, code review checklists, and linter automation.",
+      "skills": [
+        "./plugins/python-readability/skills/python-readability"
+      ]
+    },
+    {
       "name": "brand-identity",
       "source": "./plugins/brand-identity",
       "description": "Extract brand identities and DESIGN.md design systems from live websites and sources for downstream brand-consistent image generation.",
