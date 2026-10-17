@@ -48,7 +48,7 @@
  * @property {Set<string>} routedPluginRefs   plugin-level reference slugs
  * @property {Set<string>} routedSkillRefs    this skill's routed reference slugs
  * @property {Set<string>} routedSkills       sibling skill slugs in this plugin
- * @property {object|null} resources          depth-1 inventory for this skill
+ * @property {Record<string, any>|null} resources          depth-1 inventory for this skill
  * @property {string} sourceRepoPath          for error and advisory messages
  * @property {Set<string>} [routedPages]     every route this build emits, as
  *   base-prefixed paths with a trailing slash. Required for `kind: "site"`.
@@ -57,13 +57,23 @@
 
 const EXTERNAL = /^(https?:|mailto:|tel:|data:|ftp:)/i;
 
-/** Splits `path#anchor` without losing an empty anchor. */
+/**
+ * Splits `path#anchor` without losing an empty anchor.
+ * @param {string} target
+ * @returns {[string, string]}
+ */
 function splitAnchor(target) {
   const i = target.indexOf("#");
   if (i === -1) return [target, ""];
   return [target.slice(0, i), target.slice(i)];
 }
 
+/**
+ * @param {string} target
+ * @param {LinkContext} ctx
+ * @param {number} line
+ * @param {string} why
+ */
 function fail(target, ctx, line, why) {
   return new Error(
     `skills-loader: unresolvable link target "${target}" at ` +
@@ -83,7 +93,7 @@ function fail(target, ctx, line, why) {
  * @returns {string}
  */
 export function resolveTarget(target, at, ctx) {
-  const { line, isImage } = at;
+  const { line } = at;
 
   if (target === "" ) throw fail(target, ctx, line, "empty target.");
   if (EXTERNAL.test(target)) return target;
@@ -95,7 +105,7 @@ export function resolveTarget(target, at, ctx) {
   if (target.startsWith("/")) {
     if (ctx.kind === "site") {
       const [routePath, routeAnchor] = splitAnchor(target);
-      if (ctx.routedPages.has(routePath)) return `${routePath}${routeAnchor}`;
+      if (ctx.routedPages?.has(routePath)) return `${routePath}${routeAnchor}`;
       throw fail(
         target,
         ctx,
@@ -103,7 +113,7 @@ export function resolveTarget(target, at, ctx) {
         `this site emits no page at "${routePath}". A site page's internal ` +
           `links are checked against the routes the build produced, so a link ` +
           `to a page that does not exist stops the build instead of shipping ` +
-          `a 404 for a reader to find. Known routes: ${ctx.routedPages.size}.`,
+          `a 404 for a reader to find. Known routes: ${ctx.routedPages?.size ?? 0}.`,
       );
     }
     throw fail(
@@ -145,8 +155,14 @@ export function resolveTarget(target, at, ctx) {
  *    and today every link in every lifted region is an absolute http(s) URL —
  *    measured, 5 of 5. Writing a speculative blob-URL rule instead would ship
  *    an unproven path and hide the day the README starts linking sideways.
+ * @param {string} _path
+ * @param {string} _anchor
+ * @param {string} target
+ * @param {{line: number, isImage: boolean}} at
+ * @param {LinkContext} ctx
+ * @returns {never}
  */
-function resolveFromSitePage(path, anchor, target, at, ctx) {
+function resolveFromSitePage(_path, _anchor, target, at, ctx) {
   const { line } = at;
   // Site-absolute never reaches here: resolveTarget throws on a leading "/"
   // before the split. So the base-prefixed case is handled there, not here —
@@ -163,9 +179,17 @@ function resolveFromSitePage(path, anchor, target, at, ctx) {
   );
 }
 
+/**
+ * @param {string} path
+ * @param {string} anchor
+ * @param {string} target
+ * @param {{line: number, isImage: boolean}} at
+ * @param {LinkContext} ctx
+ * @returns {string}
+ */
 function resolveFromSkill(path, anchor, target, at, ctx) {
   const { line, isImage } = at;
-  const { base, blobBase, treeBase, plugin, skill, pluginRepoPath } = ctx;
+  const { base, blobBase, plugin, skill, pluginRepoPath } = ctx;
   const skillRepoDir = `${pluginRepoPath}/skills/${skill}`;
 
   // ── ../../references/<f> — escapes the SKILL root into the PLUGIN root ─────
@@ -224,7 +248,7 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
   m = /^references\/([^/]+)$/.exec(path);
   if (m) {
     const file = m[1];
-    const present = (ctx.resources?.references ?? []).some((r) => r.name === file);
+    const present = (ctx.resources?.references ?? []).some((/** @type {any} */ r) => r.name === file);
     if (!present) {
       throw fail(
         target,
@@ -249,11 +273,12 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
   // ── scripts/<f> — never routed ─────────────────────────────────────────────
   m = /^scripts\/([^/]+)$/.exec(path);
   if (m) {
-    const present = (ctx.resources?.scripts ?? []).some((r) => r.name === m[1]);
+    const scriptName = m[1];
+    const present = (ctx.resources?.scripts ?? []).some((/** @type {any} */ r) => r.name === scriptName);
     if (!present) {
-      throw fail(target, ctx, line, `${skillRepoDir}/scripts/ has no entry named "${m[1]}".`);
+      throw fail(target, ctx, line, `${skillRepoDir}/scripts/ has no entry named "${scriptName}".`);
     }
-    return `${blobBase}/${skillRepoDir}/scripts/${m[1]}${anchor}`;
+    return `${blobBase}/${skillRepoDir}/scripts/${scriptName}${anchor}`;
   }
 
   // ── assets/… ───────────────────────────────────────────────────────────────
@@ -273,8 +298,8 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
     // up when the data underneath a lookup changes shape.
     const bare = rest.replace(/\/$/, "");
     const assets = ctx.resources?.assets ?? [];
-    const isFile = assets.some((r) => r.name === bare);
-    const isDirectory = assets.some((r) => r.name.startsWith(`${bare}/`));
+    const isFile = assets.some((/** @type {any} */ r) => r.name === bare);
+    const isDirectory = assets.some((/** @type {any} */ r) => r.name.startsWith(`${bare}/`));
     if (!isFile && !isDirectory) {
       throw fail(
         target,
@@ -327,8 +352,16 @@ function resolveFromSkill(path, anchor, target, at, ctx) {
   );
 }
 
+/**
+ * @param {string} path
+ * @param {string} anchor
+ * @param {string} target
+ * @param {{line: number, isImage: boolean}} at
+ * @param {LinkContext} ctx
+ * @returns {string}
+ */
 function resolveFromReference(path, anchor, target, at, ctx) {
-  const { line } = at;
+  const { line, isImage } = at;
   const { base, plugin, skill } = ctx;
 
   // A reference body is resolved in ITS OWN scope. `ctx.skill` is what says
@@ -344,11 +377,46 @@ function resolveFromReference(path, anchor, target, at, ctx) {
     : { routed: ctx.routedSkillRefs, prefix: `${base}/plugins/${plugin}/${skill}/references` };
 
   // Sibling reference files link to each other by bare basename.
-  const m = /^([^/]+)\.md$/i.exec(path);
+  let m = /^([^/]+)\.md$/i.exec(path);
   if (m) {
     const slug = m[1];
     if (scoped.routed.has(slug)) return `${scoped.prefix}/${slug}/${anchor}`;
     throw fail(target, ctx, line, `no sibling reference page named "${slug}".`);
+  }
+
+  // Skill-level reference bodies may also link back to their owning SKILL.md,
+  // to non-markdown sibling references, or to sibling resource groups
+  // (../scripts/..., ../assets/...).
+  if (skill !== undefined) {
+    const skillRepoDir = `${ctx.pluginRepoPath}/skills/${skill}`;
+
+    // 1. ../SKILL.md -> the owning skill's routed page.
+    if (path === "../SKILL.md") {
+      return `${base}/plugins/${plugin}/${skill}/${anchor}`;
+    }
+
+    // 2. Non-markdown sibling reference (e.g. HoverAndInputs.swift or billing.sql)
+    m = /^([^/]+)$/.exec(path);
+    if (m && !/\.md$/i.test(m[1])) {
+      const file = m[1];
+      const present = (ctx.resources?.references ?? []).some((/** @type {any} */ r) => r.name === file);
+      if (present) {
+        return `${ctx.blobBase}/${skillRepoDir}/references/${file}${anchor}`;
+      }
+      throw fail(
+        target,
+        ctx,
+        line,
+        `${skillRepoDir}/references/ has no entry named "${file}".`,
+      );
+    }
+
+    // 3. ../references/..., ../scripts/..., or ../assets/... -> delegate to the
+    //    skill-root resolver so the exact same inventory and image rules apply.
+    m = /^\.\.\/((?:references|scripts|assets)\/.+)$/.exec(path);
+    if (m) {
+      return resolveFromSkill(m[1], anchor, target, { line, isImage }, ctx);
+    }
   }
 
   throw fail(

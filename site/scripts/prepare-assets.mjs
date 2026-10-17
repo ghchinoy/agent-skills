@@ -79,6 +79,7 @@ export const OUT_DIR_NAME = "skill-assets";
  */
 export async function selectImageAssets({ root = repoRoot, fs = nodeFs } = {}) {
   const { plugins } = await enumerate({ repoRoot: root, fs });
+  /** @type {{plugin: string, skill: string, rest: string, repoPath: string, from: string, to: string, declaredIn: string}[]} */
   const picked = [];
   const seen = new Set();
 
@@ -133,7 +134,7 @@ async function main() {
     let st;
     try {
       st = await stat(asset.from);
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       throw new Error(
         `prepare-assets: ${asset.declaredIn} embeds "assets/${asset.rest}" as ` +
           `an image, but ${asset.repoPath} is not readable. ${err.message}`,

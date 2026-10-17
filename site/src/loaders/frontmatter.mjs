@@ -40,7 +40,7 @@ const FM_RE = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
  * every downstream advisory and build error can name a line the reader can
  * actually open.
  *
- * @returns {{data: object, body: string, fmText: string, fmFirstLine: number, bodyFirstLine: number}}
+ * @returns {{data: Record<string, any>, body: string, fmText: string, fmFirstLine: number, bodyFirstLine: number}}
  */
 export function splitFrontmatter(raw, file) {
   const m = FM_RE.exec(raw);
@@ -55,7 +55,7 @@ export function splitFrontmatter(raw, file) {
   let data;
   try {
     data = parseYaml(fmText);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     throw new Error(`skills-loader: ${file} frontmatter is not valid YAML: ${err.message}`);
   }
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
@@ -67,7 +67,14 @@ export function splitFrontmatter(raw, file) {
   return { data, body, fmText, fmFirstLine: 2, bodyFirstLine: consumedLines + 1 };
 }
 
-/** 1-based file line of the first top-level frontmatter key named `key`. */
+/**
+ * 1-based file line of the first top-level frontmatter key named `key`.
+ * @param {string} fmText
+ * @param {number} fmFirstLine
+ * @param {string} key
+ * @param {{nested?: boolean}} [opts]
+ * @returns {number | null}
+ */
 export function frontmatterKeyLine(fmText, fmFirstLine, key, { nested = false } = {}) {
   const lines = fmText.split("\n");
   const re = nested
@@ -87,24 +94,25 @@ export function frontmatterKeyLine(fmText, fmFirstLine, key, { nested = false } 
  * present on the returned object, so a template branches on `undefined` rather
  * than on a sentinel. There is no default value anywhere in this function.
  *
- * @param {object} data      parsed YAML mapping
+ * @param {Record<string, any>} data  parsed YAML mapping
  * @param {object} opts
  * @param {string} opts.file        repo-relative path
  * @param {string} opts.fmText
  * @param {number} opts.fmFirstLine
- * @param {string} opts.expectedName  the directory name (the spec requires a match)
+ * @param {string} [opts.expectedName]  the directory name (the spec requires a match)
  *
  * The returned shape is the closed vocabulary itself. `name` and `description`
  * are non-optional because this function throws rather than return without
  * them; the other four are absent when undeclared, never defaulted.
  *
- * @typedef {object} DeclaredFields
- * @property {string} name
- * @property {string} description
- * @property {string} [license]
- * @property {string} [compatibility]
- * @property {string} ["allowed-tools"]
- * @property {Record<string, string|string[]>} [metadata]
+ * @typedef {{
+ *   name: string,
+ *   description: string,
+ *   license?: string,
+ *   compatibility?: string,
+ *   "allowed-tools"?: string,
+ *   metadata?: Record<string, string|string[]>
+ * }} DeclaredFields
  *
  * @returns {{declared: DeclaredFields, advisories: import("./enumerate.mjs").Advisory[]}}
  */

@@ -320,7 +320,7 @@ For more detail on specific topics, see these reference files:
 -   `references/self_audit_checklist.md` — Mechanical greps for catching common style violations before submitting code.
 -   `references/cli_review_checklist.md` — Comprehensive Go CLI review checklist covering 12 categories of issues.
 -   `references/cobra_cli_patterns.md` — Cobra-specific patterns (package doc scope, `ctx` naming, inlining timeouts, testing `package main`).
--   `examples/before_after_examples.md` — Before/after code transformations showing common fixes reviewers request.
+-   `references/before_after_examples.md` — Before/after code transformations showing common fixes reviewers request.
 
 ## Review Guidelines
 

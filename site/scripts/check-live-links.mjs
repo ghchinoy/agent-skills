@@ -160,7 +160,10 @@ export const NEGATIVE_CONTROL = "__no-such-page-negative-control__/";
 
 // ── pure helpers (unit-tested in tests/live-links.test.mjs) ─────────────────
 
-/** Minimal `--flag value` parsing. Unknown flags are an error, not ignored. */
+/**
+ * Minimal `--flag value` parsing. Unknown flags are an error, not ignored.
+ * @param {string[]} argv
+ */
 export function parseArgs(argv) {
   const out = {
     url: DEFAULT_URL,
@@ -207,6 +210,7 @@ export function parseArgs(argv) {
  * purpose: this script's job is to check what was PUBLISHED, and reading the
  * expected answer out of the source it is checking is how a test agrees with
  * itself. The base it derives is tied back to the build by the byte comparison.
+ * @param {string} liveUrl
  */
 export function originAndBase(liveUrl) {
   const u = new URL(liveUrl);
@@ -214,7 +218,11 @@ export function originAndBase(liveUrl) {
   return { origin: u.origin, base };
 }
 
-/** dist-relative HTML path -> the live path that should serve it. */
+/**
+ * dist-relative HTML path -> the live path that should serve it.
+ * @param {string} relPath
+ * @param {string} base
+ */
 export function routeForHtml(relPath, base) {
   const p = relPath.split("\\").join("/");
   if (p === "index.html") return `${base}/`;
@@ -228,6 +236,9 @@ export function routeForHtml(relPath, base) {
  * HTML goes through `routeForHtml` (directory routes, not `/index.html`);
  * everything else is served at its own path. Used by the artifact sweep, which
  * is the part that does not care what the pages happen to reference.
+ *
+ * @param {string} relPath
+ * @param {string} base
  */
 export function liveUrlForFile(relPath, base) {
   const p = relPath.split("\\").join("/");
@@ -238,6 +249,9 @@ export function liveUrlForFile(relPath, base) {
  * How long this request may take: the per-request cap, or whatever is left of
  * the overall budget, whichever is smaller. `0` means the budget is spent and
  * the caller must not issue the request at all.
+ *
+ * @param {number} budgetLeft
+ * @param {number} [cap]
  */
 export function requestTimeoutMs(budgetLeft, cap = FETCH_TIMEOUT_MS) {
   if (!Number.isFinite(budgetLeft)) return cap;
@@ -255,6 +269,10 @@ export function requestTimeoutMs(budgetLeft, cap = FETCH_TIMEOUT_MS) {
  *
  * Returns null when the hop is fine (no redirect, or a redirect that stays
  * inside the base), or a reason string naming what it left.
+ *
+ * @param {string} requestedUrl
+ * @param {string | undefined} finalUrl
+ * @param {{origin: string, base: string}} scope
  */
 export function redirectVerdict(requestedUrl, finalUrl, { origin, base }) {
   if (!finalUrl || finalUrl === requestedUrl) return null;
@@ -283,6 +301,7 @@ export function redirectVerdict(requestedUrl, finalUrl, { origin, base }) {
  * tests/links.test.mjs. A live check narrower than the local one would let a
  * whole class of breakage through while reporting green — and the local one
  * being narrower is exactly the defect that produced the exemption below.
+ * @param {string} html
  */
 export function refsIn(html) {
   const out = [];
@@ -298,8 +317,11 @@ export function refsIn(html) {
   return out;
 }
 
-/** The page's `rel=canonical` href, or "". Attribute order varies by emitter,
- *  so both orders are matched rather than the one Astro happens to produce. */
+/**
+ * The page's `rel=canonical` href, or "". Attribute order varies by emitter,
+ * so both orders are matched rather than the one Astro happens to produce.
+ * @param {string} html
+ */
 export function canonicalOf(html) {
   const m =
     /<link\b[^>]*\srel="canonical"[^>]*\shref="([^"]*)"/.exec(html) ??
@@ -331,6 +353,10 @@ export function canonicalOf(html) {
  * this cannot quietly become "404 pages are not checked" or "canonicals are not
  * checked". Exemptions are COUNTED and reported, and a run that exempts more
  * than one reference fails.
+ * @param {string} ref
+ * @param {string} html
+ * @param {string} pageUrl
+ * @param {{origin: string, base: string}} scope
  */
 export function errorDocExemption(ref, html, pageUrl, { origin, base }) {
   if (pageUrl !== `${origin}${base}/404.html`) return null;
@@ -341,11 +367,15 @@ export function errorDocExemption(ref, html, pageUrl, { origin, base }) {
   return "the error document's canonical, which names a route Pages cannot serve";
 }
 
-/** Every `id="..."` on a page, for fragment resolution. */
+/**
+ * Every `id="..."` on a page, for fragment resolution.
+ * @param {string} html
+ */
 export function idsIn(html) {
   return new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 }
 
+/** @param {string} s */
 function decodeAmp(s) {
   return s.replace(/&amp;/g, "&");
 }
@@ -366,6 +396,10 @@ function decodeAmp(s) {
  * A same-origin absolute URL (Starlight emits `<link rel="canonical">` as one)
  * is internal and IS checked. Treating "starts with https://" as external would
  * silently drop it.
+ *
+ * @param {string} ref
+ * @param {{origin: string, base: string}} scope
+ * @param {string} pageUrl
  */
 export function classify(ref, { origin, base }, pageUrl) {
   const trimmed = ref.trim();
@@ -393,7 +427,12 @@ export function classify(ref, { origin, base }, pageUrl) {
 
 // ── fs + network ────────────────────────────────────────────────────────────
 
+/**
+ * @param {string} dir
+ * @returns {Promise<string[]>}
+ */
 async function walk(dir) {
+  /** @type {string[]} */
   const out = [];
   for (const ent of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, ent.name);
@@ -407,6 +446,8 @@ async function walk(dir) {
  * One GET. Never throws: a transport error comes back as `{ ok: false, error }`
  * so the caller records it as a failure. Swallowing it into a skip is the
  * "gate that cannot fire" shape this script is written against.
+ *
+ * @param {string} url
  */
 async function get(url) {
   const timeout = requestTimeoutMs(remainingMs());
@@ -444,7 +485,7 @@ async function get(url) {
   }
 }
 
-const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
+const sleep = (/** @type {number} */ s) => new Promise((r) => setTimeout(r, s * 1000));
 
 /**
  * Memoise `getFn(url)` in `cache`, storing the PROMISE rather than the result.
@@ -468,6 +509,10 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
  * lands inside get()'s own try, so the promise never rejects and removing this
  * catch changed nothing observable. An untestable safeguard is indistinguishable
  * from an absent one.
+ *
+ * @param {Map<string, Promise<any>>} cache
+ * @param {string} url
+ * @param {(url: string) => any} getFn
  */
 export function cacheThrough(cache, url, getFn) {
   if (!cache.has(url)) {
@@ -503,6 +548,11 @@ export function cacheThrough(cache, url, getFn) {
  *   output readable; evaluating in source order keeps both. Asserted by
  *   tests/live-check-e2e.test.mjs, which runs a multi-failure scenario twice
  *   and requires the two failure arrays to be identical.
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T) => any} fn
  */
 async function pooled(items, limit, fn) {
   const iter = items[Symbol.iterator]();
@@ -521,7 +571,10 @@ async function pooled(items, limit, fn) {
   await Promise.allSettled(workers);
 }
 
-/** Content hash of a Buffer. Exported so the sweep's comparison is testable. */
+/**
+ * Content hash of a Buffer. Exported so the sweep's comparison is testable.
+ * @param {Buffer} buf
+ */
 export function sha256(buf) {
   return createHash("sha256").update(buf).digest("hex");
 }
@@ -549,6 +602,8 @@ export function sha256(buf) {
  * because nothing in the real run produces a duplicate key. A guard that cannot
  * be made to fire is indistinguishable from an absent one, so it is tested
  * directly with records the real passes cannot currently produce.
+ *
+ * @param {{key: number[], msg: string}[]} raised
  */
 export function orderFindings(raised) {
   const seen = new Set();
@@ -583,6 +638,8 @@ export function orderFindings(raised) {
  * whole suite green, so the comparison needs a test that goes red when it is
  * stripped, and only running the real thing against a deliberately-wrong server
  * can establish that.
+ *
+ * @param {{liveUrl: string, distDir: string}} opts
  */
 export async function runOnce({ liveUrl, distDir }) {
   const { origin, base } = originAndBase(liveUrl);
@@ -601,8 +658,9 @@ export async function runOnce({ liveUrl, distDir }) {
   // alphabetically keeps each page's findings together and the artifact sweep
   // in artifact order, which is what makes the output readable, while making
   // the order independent of WHEN anything completed.
+  /** @type {{key: number[], msg: string}[]} */
   const raised = [];
-  const fail = (key, msg) => {
+  const fail = (/** @type {number[]} */ key, /** @type {string} */ msg) => {
     raised.push({ key, msg });
     return msg;
   };
@@ -686,9 +744,10 @@ export async function runOnce({ liveUrl, distDir }) {
   // URL still make exactly one request. `fetched.size` is therefore the honest
   // count of distinct requests this run issued.
   const fetched = new Map();
-  const fetchCached = (url) => cacheThrough(fetched, url, get);
+  const fetchCached = (/** @type {string} */ url) => cacheThrough(fetched, url, get);
   /** Warm the cache for a set of URLs, 8 at a time. */
-  const prefetch = (urls) => pooled([...new Set(urls)], CONCURRENCY, (u) => fetchCached(u));
+  const prefetch = (/** @type {string[]} */ urls) =>
+    pooled([...new Set(urls)], CONCURRENCY, (u) => fetchCached(u));
 
   // URLs whose CONTENT has been confirmed against the artifact, and URLs that
   // have already been named in a failure. The artifact sweep needs both: a 200
@@ -782,10 +841,19 @@ export async function runOnce({ liveUrl, distDir }) {
   // artifact. Two spellings of one decision drift; one spelling cannot.
   const decided = refWork.map((w) => {
     const c = classify(w.ref, { origin, base }, w.pageUrl);
-    return { ...w, c, exempt: c.verdict === "check" && errorDocExemption(c.url, w.html, w.pageUrl, { origin, base }) };
+    return {
+      ...w,
+      c,
+      exempt:
+        c.verdict === "check" &&
+        typeof c.url === "string" &&
+        errorDocExemption(c.url, w.html, w.pageUrl, { origin, base }),
+    };
   });
   await prefetch(
-    decided.filter((d) => d.c.verdict === "check" && !d.exempt).map((d) => d.c.url),
+    decided
+      .filter((d) => d.c.verdict === "check" && !d.exempt && typeof d.c.url === "string")
+      .map((d) => /** @type {string} */ (d.c.url)),
   );
 
   for (const [refIndex, { pageUrl, kind, ref, c, exempt }] of decided.entries()) {
@@ -807,33 +875,34 @@ export async function runOnce({ liveUrl, distDir }) {
     }
     if (c.verdict === "fragment") {
       stats.fragmentsChecked += 1;
-      if (!idsIn(html).has(c.fragment)) {
+      if (c.fragment && !idsIn(html).has(c.fragment)) {
         fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}"`);
       }
       continue;
     }
-    const res = await fetchCached(c.url);
+    const targetUrl = /** @type {string} */ (c.url);
+    const res = await fetchCached(targetUrl);
     stats.refsResolved += 1;
     if (!res.ok) {
-      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${c.url}: ${res.error}`);
-      reportedUrls.add(c.url);
+      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — UNREACHABLE ${targetUrl}: ${res.error}`);
+      reportedUrls.add(targetUrl);
       continue;
     }
     if (res.status !== 200) {
-      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${c.url}`);
-      reportedUrls.add(c.url);
+      fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — HTTP ${res.status} at ${targetUrl}`);
+      reportedUrls.add(targetUrl);
       continue;
     }
-    const hop = redirectVerdict(c.url, res.finalUrl, { origin, base });
+    const hop = redirectVerdict(targetUrl, res.finalUrl, { origin, base });
     if (hop) {
       fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — ${hop}`);
-      reportedUrls.add(c.url);
+      reportedUrls.add(targetUrl);
       continue;
     }
     if (c.fragment) {
       stats.fragmentsChecked += 1;
       if (!idsIn(res.body).has(c.fragment)) {
-        fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${c.url}`);
+        fail([2, refIndex], `${pageUrl} -> ${kind} ${ref} — no element with id="${c.fragment}" at ${targetUrl}`);
       }
     }
   }
@@ -991,6 +1060,9 @@ export async function runOnce({ liveUrl, distDir }) {
  * that compares fewer files than it ships says so by construction, without
  * anyone remembering to update this text.
  */
+/**
+ * @param {Record<string, number>} stats
+ */
 export function summaryLine(stats) {
   const claims = [];
 
@@ -1038,12 +1110,15 @@ export function summaryLine(stats) {
   return `PASS: ${claims.join("; ")}.`;
 }
 
+/**
+ * @param {string[]} argv
+ */
 async function main(argv) {
   const args = parseArgs(argv);
   const distDir = join(siteRoot, args.dist);
   try {
     if (!(await stat(distDir)).isDirectory()) throw new Error("not a directory");
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     console.error(`FAIL: --dist ${distDir} is not readable (${err.message}).`);
     console.error("The live check compares the served bytes against the deployed artifact and");
     console.error("cannot run without it. This is a failure, not a skip.");
@@ -1056,6 +1131,7 @@ async function main(argv) {
   budgetMs = args.deadlineMinutes * 60_000;
   deadlineAt = Date.now() + budgetMs;
 
+  /** @type {any} */
   let last;
   for (let attempt = 1; attempt <= args.attempts; attempt += 1) {
     if (attempt > 1) {
@@ -1087,7 +1163,7 @@ async function main(argv) {
 
     // Every remaining failure is one that waiting cannot fix. Propagation is
     // the only reason to retry, and none of these are propagation.
-    if (last.failures.every((f) => last.deterministic.has(f))) {
+    if (last.failures.every((/** @type {string} */ f) => last.deterministic.has(f))) {
       console.log(
         `-- every failure is a build-side problem that retrying cannot change; ` +
           `stopping after attempt ${attempt} instead of waiting out the schedule --`,

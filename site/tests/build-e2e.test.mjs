@@ -114,20 +114,19 @@ async function tempParent() {
 async function privateNodeModules(dest) {
   const src = join(siteRoot, "node_modules");
   try {
-    // GNU cp. `--link` hard-links regular files; -a keeps symlinks (node_modules/.bin)
-    // as symlinks, which is correct because they are relative and stay inside.
-    await run("cp", ["-a", "--link", src, dest]);
+    // macOS / BSD `cp -cR`: APFS copy-on-write clonefiles (~50ms for 40k files).
+    await run("cp", ["-cR", src, dest]);
   } catch {
-    // BSD cp, or a hard link that could not be made. Correct but slow; better
-    // a slow suite than a suite that quietly stops covering the build.
-    //
-    // `dest` MUST be removed first (review O3). GNU `cp -a --link` creates the
-    // destination and THEN fails per-entry on a cross-device link, so by the
-    // time we get here `dest` usually exists and is partially populated — and
-    // `cp -a src dest` onto an existing directory copies INTO it, producing
-    // `node_modules/node_modules/...` and a tree that resolves nothing.
     await rm(dest, { recursive: true, force: true });
-    await run("cp", ["-a", src, dest]);
+    try {
+      // GNU cp. `--link` hard-links regular files; -a keeps symlinks (node_modules/.bin)
+      // as symlinks, which is correct because they are relative and stay inside.
+      await run("cp", ["-a", "--link", src, dest]);
+    } catch {
+      // Fallback: full copy. `dest` MUST be removed first (review O3).
+      await rm(dest, { recursive: true, force: true });
+      await run("cp", ["-a", src, dest]);
+    }
   }
   // Each case must start from a cold cache; a copied one would bleed state.
   await rm(join(dest, ".astro"), { recursive: true, force: true });
@@ -141,24 +140,28 @@ async function privateNodeModules(dest) {
  */
 async function buildWith(mutate) {
   const root = await mkdtemp(join(await tempParent(), ".site-e2e-"));
-  await cp(repoRoot, root, {
-    recursive: true,
-    filter: (src) =>
-      !src.includes(`${"/"}node_modules`) &&
-      !src.includes(`${"/"}.git${"/"}`) &&
-      !src.endsWith(`${"/"}.git`) &&
-      !src.includes(`${"/"}dist`) &&
-      !src.includes(`${"/"}.astro`) &&
-      !src.includes(`${"/"}.site-e2e-`),
-  });
+  for (const entry of [".claude-plugin", "plugins", "README.md", "CONTRIBUTING.md", "site"]) {
+    await cp(join(repoRoot, entry), join(root, entry), {
+      recursive: true,
+      filter: (src) =>
+        !src.includes(`${"/"}node_modules`) &&
+        !src.includes(`${"/"}dist`) &&
+        !src.includes(`${"/"}.astro`) &&
+        !src.includes(`${"/"}tests`),
+    });
+  }
   await privateNodeModules(join(root, "site", "node_modules"));
   await mutate(root);
   try {
-    const { stdout, stderr } = await run("npm", ["run", "build"], {
-      cwd: join(root, "site"),
-      env: process.env,
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    const { stdout, stderr } = await run(
+      process.execPath,
+      ["./node_modules/astro/bin/astro.mjs", "build"],
+      {
+        cwd: join(root, "site"),
+        env: process.env,
+        maxBuffer: 32 * 1024 * 1024,
+      },
+    );
     return { ok: true, output: stdout + stderr, root };
   } catch (err) {
     return { ok: false, output: `${err.stdout ?? ""}${err.stderr ?? ""}`, root };

@@ -48,8 +48,13 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = join(here, "..");
 
-/** Every `.html` under `dir`, at any depth. */
+/**
+ * Every `.html` under `dir`, at any depth.
+ * @param {string} dir
+ * @returns {Promise<string[]>}
+ */
 async function htmlFiles(dir) {
+  /** @type {string[]} */
   const out = [];
   for (const e of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -105,9 +110,12 @@ export async function blobTargets(distDir) {
  * whose 404 may have nothing to do with the ones under test; this one differs
  * from a passing URL in the filename alone, so a 404 here and a 200 there is a
  * statement about the file and not about the host, the ref or the repository.
+ *
+ * @param {(string | null)[]} urls
+ * @returns {string[]}
  */
 export function negativeControlsFor(urls) {
-  if (urls.length === 0) return [];
+  if (urls.length === 0 || !urls[0]) return [];
   const first = urls[0];
   return [
     // Same directory, a file that is not there.
@@ -117,7 +125,13 @@ export function negativeControlsFor(urls) {
   ];
 }
 
+/**
+ * @param {string} url
+ * @param {number} attempts
+ * @returns {Promise<number | string>}
+ */
 async function status(url, attempts) {
+  /** @type {any} */
   let last = null;
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -137,6 +151,10 @@ async function status(url, attempts) {
 
 async function main() {
   const args = process.argv.slice(2);
+  /**
+   * @param {string} name
+   * @param {string} fallback
+   */
   const arg = (name, fallback) => {
     const i = args.indexOf(`--${name}`);
     return i === -1 ? fallback : args[i + 1];
@@ -152,7 +170,7 @@ async function main() {
   for (const t of targets) console.log(`  ${t.page}  ${t.name}  ${t.url ?? "(NO HREF)"}`);
   if (targets.length === 0) failures.push("no script blob links were derived — nothing was checked");
 
-  const urls = [...new Set(targets.filter((t) => t.url).map((t) => t.url))];
+  const urls = /** @type {string[]} */ ([...new Set(targets.filter((t) => t.url).map((t) => t.url))]);
   for (const t of targets) {
     if (!t.url) failures.push(`${t.page}: the row for ${t.name} has no href`);
   }

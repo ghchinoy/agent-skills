@@ -84,7 +84,17 @@ const author = manifest.author;
         <p class="derived-note">
           Install — derived; the command form is the repository README's own:
         </p>
-        <pre><code>{d.installCommand}</code></pre>
+        <div class="install-box">
+          <pre><code data-install-command>{d.installCommand}</code></pre>
+          <button
+            type="button"
+            class="copy-install"
+            data-copy-install={d.installCommand}
+            aria-label="Copy install command"
+          >
+            Copy
+          </button>
+        </div>
       </div>
     )
   }
@@ -223,6 +233,20 @@ const author = manifest.author;
 
     {/* ── DERIVED: computed by this build, and labelled as computed ───────── */}
     {
+      d.kind === "reference" && typeof d.skill === "string" && (
+        <div class="field-row">
+          <dt data-field-label data-field-source="derived">
+            skill <span class="src">derived</span>
+          </dt>
+          <dd>
+            <a href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/plugins/${d.plugin}/${d.skill}/`}>
+              <code>{d.skill}</code>
+            </a>
+          </dd>
+        </div>
+      )
+    }
+    {
       d.kind !== "plugin" && (
         <div class="field-row">
           <dt data-field-label data-field-source="derived">
@@ -341,10 +365,20 @@ const author = manifest.author;
 
   {
     d.kind === "reference" && (
-      <p class="derived-note">
-        A plugin-level reference of <code>{d.plugin}</code>. This location is
-        not defined by Agent Plugins §6.1; the title below is this file's own
-        H1, extracted, not composed.
+      <p class="derived-note" data-reference-note={d.skill ? "skill" : "plugin"}>
+        {d.skill ? (
+          <>
+            A reference of skill <code>{d.skill}</code> (in plugin{" "}
+            <code>{d.plugin}</code>). The title above is this file's own H1,
+            extracted, not composed.
+          </>
+        ) : (
+          <>
+            A plugin-level reference of <code>{d.plugin}</code>. This location is
+            not defined by Agent Plugins §6.1; the title above is this file's own
+            H1, extracted, not composed.
+          </>
+        )}
       </p>
     )
   }
@@ -372,6 +406,26 @@ const author = manifest.author;
   )
 }
 
+{
+  d && d.kind === "skill" && (
+    <script is:inline>
+      {`
+      (function () {
+        var btn = document.querySelector("button[data-copy-install]");
+        if (!btn || !navigator.clipboard) return;
+        btn.addEventListener("click", function () {
+          var cmd = btn.getAttribute("data-copy-install") || "";
+          navigator.clipboard.writeText(cmd).then(function () {
+            btn.textContent = "Copied";
+            setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+          });
+        });
+      })();
+      `}
+    </script>
+  )
+}
+
 <style>
   .entry-meta {
     margin-block-end: 2rem;
@@ -384,8 +438,30 @@ const author = manifest.author;
     padding-inline-start: 1rem;
     margin-block: 0 1.5rem;
   }
-  .install pre {
+  .install-box {
+    position: relative;
     margin-block: 0.25rem 1.5rem;
+  }
+  .install-box pre {
+    margin: 0;
+    padding-inline-end: 4.5rem;
+  }
+  .copy-install {
+    position: absolute;
+    inset-block-start: 0.45rem;
+    inset-inline-end: 0.5rem;
+    font: inherit;
+    font-size: var(--sl-text-xs);
+    padding: 0.15rem 0.55rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.25rem;
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+  }
+  .copy-install:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
   }
   .derived-note {
     font-size: var(--sl-text-xs);

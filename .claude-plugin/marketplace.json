@@ -7,7 +7,7 @@
     {
       "name": "ai-pop",
       "source": "./plugins/ai-pop",
-      "description": "Virtual music artist production suite",
+      "description": "Virtual music artist production suite: lore planning, audio synthesis, visual design, web player compilation, and public endpoint deployment.",
       "skills": [
         "./plugins/ai-pop/skills/ai-pop-producer",
         "./plugins/ai-pop/skills/ai-pop-concept-planner",
@@ -20,7 +20,7 @@
     {
       "name": "macos-hig",
       "source": "./plugins/macos-hig",
-      "description": "macOS Human Interface Guidelines assistance and code reviewers",
+      "description": "macOS Human Interface Guidelines assistance and code reviewers for layout, interactions, and HIG compliance.",
       "skills": [
         "./plugins/macos-hig/skills/macos-hig-layout",
         "./plugins/macos-hig/skills/macos-hig-interaction",
@@ -30,7 +30,7 @@
     {
       "name": "beads-workflow",
       "source": "./plugins/beads-workflow",
-      "description": "Tools and workflows for the beads (bd) issue tracking ecosystem",
+      "description": "Tools and workflows for the beads (bd) Dolt-powered issue tracking ecosystem, including diagnostics, repairs, and plan stress-testing.",
       "skills": [
         "./plugins/beads-workflow/skills/bd-dolt-troubleshooter",
         "./plugins/beads-workflow/skills/grill-with-beads"
@@ -39,7 +39,7 @@
     {
       "name": "repo-authoring",
       "source": "./plugins/repo-authoring",
-      "description": "Repository management skills for technical writing, READMEs, changelogs, and recaps",
+      "description": "Repository management skills for technical writing, editorial report artifacts, README generation, changelog curation, and commit recaps.",
       "skills": [
         "./plugins/repo-authoring/skills/make-readme",
         "./plugins/repo-authoring/skills/technical-post-editorial",
@@ -52,7 +52,7 @@
     {
       "name": "mcp-security",
       "source": "./plugins/mcp-security",
-      "description": "MCP security auditing for RCE and supply chain vulnerabilities",
+      "description": "Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.",
       "skills": [
         "./plugins/mcp-security/skills/mcp-auditor"
       ]
@@ -60,7 +60,7 @@
     {
       "name": "agent-aware-cli",
       "source": "./plugins/agent-aware-cli",
-      "description": "Guidelines for CLI tools optimized for humans and AI agents",
+      "description": "Best practices and architectural guidelines for CLI tools optimized for both human users and AI coding agents.",
       "skills": [
         "./plugins/agent-aware-cli/skills/agent-aware-cli"
       ]
@@ -68,7 +68,7 @@
     {
       "name": "agent-plugin-authoring",
       "source": "./plugins/agent-plugin-authoring",
-      "description": "Authoring, migration, and linting tools for Agent Plugins v1.0.0 packages",
+      "description": "Authoring, migration, and linting tools for packaging Agent Skills into Agent Plugins v1.0.0 spec packages.",
       "skills": [
         "./plugins/agent-plugin-authoring/skills/skills-to-plugins"
       ]
@@ -85,7 +85,7 @@
     {
       "name": "automation-governance",
       "source": "./plugins/automation-governance",
-      "description": "Automation readiness and delegation governance framework based on Google DeepMind research",
+      "description": "Framework and tooling for evaluating workflow, skill, and process automation readiness based on the Google DeepMind Intelligent AI Delegation framework.",
       "skills": [
         "./plugins/automation-governance/skills/automation-readiness"
       ]
@@ -93,7 +93,7 @@
     {
       "name": "macos-performance",
       "source": "./plugins/macos-performance",
-      "description": "macOS/SwiftUI application performance assessment: launch-time first-frame readiness, main-actor I/O, strict concurrency, and render budget",
+      "description": "macOS and SwiftUI application performance assessment: launch-time (\"quick bounce\") first-frame readiness, main-actor I/O, Swift strict concurrency adoption, view-model/business-logic separation, and steady-state render budget.",
       "skills": [
         "./plugins/macos-performance/skills/quick-bounce-assessor"
       ]
@@ -101,7 +101,7 @@
     {
       "name": "gcp-management",
       "source": "./plugins/gcp-management",
-      "description": "Google Cloud Platform and Firebase project assessment, itemized BigQuery spend analysis, quota governance, and consolidation",
+      "description": "Google Cloud Platform and Firebase project assessment, itemized BigQuery spend analysis, quota governance, and consolidation skills.",
       "skills": [
         "./plugins/gcp-management/skills/gcp-project-assessment",
         "./plugins/gcp-management/skills/gcp-quota-governance",
@@ -111,7 +111,7 @@
     {
       "name": "go-readability",
       "source": "./plugins/go-readability",
-      "description": "Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns",
+      "description": "Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns.",
       "skills": [
         "./plugins/go-readability/skills/go-readability"
       ]
@@ -119,7 +119,7 @@
     {
       "name": "brand-identity",
       "source": "./plugins/brand-identity",
-      "description": "Extract brand identities, synthesize DESIGN.md design system specifications, and generate brand-consistent visual assets",
+      "description": "Extract brand identities and DESIGN.md design systems from live websites and sources for downstream brand-consistent image generation.",
       "skills": [
         "./plugins/brand-identity/skills/brand-extractor",
         "./plugins/brand-identity/skills/brand-image-generator"
@@ -128,7 +128,7 @@
     {
       "name": "c2pa-inspector",
       "source": "./plugins/c2pa-inspector",
-      "description": "Inspect and audit C2PA Content Credentials, cryptographic signatures, provenance assertions, and AI generation metadata across media assets",
+      "description": "Inspect and audit C2PA Content Credentials, cryptographic signatures, provenance assertions, and AI generation metadata across media assets.",
       "skills": [
         "./plugins/c2pa-inspector/skills/c2pa-inspect"
       ]
@@ -136,7 +136,7 @@
     {
       "name": "scion-platform",
       "source": "./plugins/scion-platform",
-      "description": "Scion platform administration, Hub authorization diagnostics, zero-downtime agent token re-minting, fleet model assessment, live model patching, and server lifecycle operations.",
+      "description": "Scion platform administration, Hub bootstrap and GCE reconciliation, authorization and broker quota diagnostics, zero-downtime agent token re-minting, fleet model assessment, live model patching, and server lifecycle operations.",
       "skills": [
         "./plugins/scion-platform/skills/scion-hub-admin",
         "./plugins/scion-platform/skills/scion-agent-models",

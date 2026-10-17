@@ -57,6 +57,9 @@ import { splitFrontmatter } from "./loaders/frontmatter.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
 
+/**
+ * @param {string[]} [onlyPlugins]
+ */
 export async function buildSidebar(onlyPlugins) {
   const { plugins } = await enumerate({ repoRoot, fs: nodeFs, onlyPlugins });
   const displayNames = await readDisplayNames(repoRoot);
@@ -68,6 +71,7 @@ export async function buildSidebar(onlyPlugins) {
   // a more permanent place. Adding a skill changes this label and nothing else.
   const skillCount = plugins.reduce((n, p) => n + p.skills.length, 0);
 
+  /** @type {{label: string, items: {label?: string, slug: string}[]}[]} */
   const groups = [
     // ── Start (proposal §6.3) ────────────────────────────────────────────────
     // Explicit labels, because these are not pages whose title happens to suit
@@ -91,6 +95,7 @@ export async function buildSidebar(onlyPlugins) {
     },
   ];
   for (const plugin of plugins) {
+    /** @type {{label?: string, slug: string}[]} */
     const items = [
       // The plugin overview page keeps its inherited title, which is the
       // README display name — the same string as the group label, and the
@@ -129,6 +134,8 @@ export async function buildSidebar(onlyPlugins) {
  * in `analyzeDeclared()` — there is no honest label to render, and inventing
  * one from the directory would be the site asserting something the source does
  * not say.
+ *
+ * @param {import("./loaders/enumerate.mjs").SkillEntry} skill
  */
 async function declaredName(skill) {
   const raw = await readFile(skill.skillMdPath, "utf8");
@@ -143,6 +150,9 @@ async function declaredName(skill) {
   return name;
 }
 
+/**
+ * @param {string} root
+ */
 async function readDisplayNames(root) {
   const out = new Map();
   let readme;

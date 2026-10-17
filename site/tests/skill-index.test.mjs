@@ -246,4 +246,8 @@ test("AC8: the whole list is in the markup, so a reader without JS sees all of i
   const [filter] = elementsWithAttr(main, "data-keyword-filter");
   const shown = elementsWithAttr(filter.inner, "data-shown-count")[0];
   assert.equal(Number(toText(shown.inner)), declared.length);
+
+  // URL-addressable keyword sync (`?keyword=<kw>`) is wired in the inline script.
+  assert.match(main, /URLSearchParams\(window\.location\.search\)\.get\("keyword"\)/);
+  assert.match(main, /window\.history\.replaceState/);
 });

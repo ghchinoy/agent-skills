@@ -182,8 +182,8 @@ export function validateSpecSource(data) {
 
   data.specifications.forEach(validateSpec);
 
-  const ids = data.specifications.map((s) => s.id);
-  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  const ids = data.specifications.map((/** @type {any} */ s) => s.id);
+  const dupes = ids.filter((/** @type {string} */ id, /** @type {number} */ i) => ids.indexOf(id) !== i);
   if (dupes.length > 0) {
     throw new Error(
       `specification-source.json pins ${dupes.join(", ")} more than once. Two ` +
@@ -204,7 +204,7 @@ export async function loadSpecSource() {
   let raw;
   try {
     raw = await readFile(SPEC_SOURCE_PATH, "utf8");
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     throw new Error(
       `spec-source: cannot read ${SPEC_SOURCE_PATH}. This file is the only ` +
         `place the site learns which revision of each standard it was built ` +
@@ -216,7 +216,7 @@ export async function loadSpecSource() {
   let data;
   try {
     data = JSON.parse(raw);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     throw new Error(`spec-source: ${SPEC_SOURCE_PATH} is not valid JSON. ${err.message}`);
   }
 

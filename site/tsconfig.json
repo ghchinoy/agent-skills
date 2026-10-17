@@ -1,150 +1,37 @@
 {
   // ───────────────────────────────────────────────────────────────────────────
-  // SCOPE OF THE TYPE CHECK — READ THIS BEFORE ASSUMING COVERAGE.
+  // SCOPE OF THE TYPE CHECK
   //
-  // `npm run typecheck` (astro check) reports 0 errors. That does NOT mean the
-  // codebase type-checks. `checkJs` is FALSE, so:
+  // `npm run typecheck` (`astro check`) runs with `checkJs: true` under
+  // `astro/tsconfigs/strict`, covering every production module in `src/`,
+  // `scripts/`, and `astro.config.mjs`:
   //
-  //   CHECKED      src/loaders/skills.ts       (the only .ts file here)
-  //                src/**/*.astro              (component script blocks)
-  //
-  //   NOT CHECKED — type errors in these are invisible to `astro check`:
+  //   CHECKED      src/loaders/skills.ts
   //                src/loaders/advise.mjs
   //                src/loaders/enumerate.mjs
+  //                src/loaders/frontmatter.mjs
   //                src/loaders/links.mjs
   //                src/loaders/markdown.mjs
-  //                src/loaders/frontmatter.mjs
   //                src/loaders/site-pages.mjs
   //                src/loaders/spec-source.mjs
   //                src/sidebar.mjs
   //                src/site.config.mjs
+  //                src/content.config.ts
+  //                src/components/*.astro
   //                scripts/check-blob-links.mjs
   //                scripts/check-live-links.mjs
   //                scripts/prepare-assets.mjs
-  //                tests/*.mjs
+  //                astro.config.mjs
   //
-  // That is most of the loader. Verified, not assumed: a `@type {number}`
-  // annotation on a string constant, planted in enumerate.mjs and again in
-  // sidebar.mjs, leaves `astro check` reporting 0 errors — while the same
-  // class of error in skills.ts reports 1.
-  //
-  // CONSEQUENCE THAT BITES: the JSDoc `@typedef` blocks in enumerate.mjs and
-  // frontmatter.mjs are INERT. They are accurate documentation, and they are
-  // load-bearing for skills.ts — which imports them and IS checked, so a lie
-  // in them surfaces over there — but nothing verifies them against the .mjs
-  // code they sit in. Treat them as comments that happen to be
-  // machine-readable, not as a guarantee.
-  //
-  // PHASE 2 added one file to that list: scripts/check-live-links.mjs, the
-  // live-deployment link checker. Its decision-making — reference extraction,
-  // internal/external classification, dist-path-to-URL mapping — is factored
-  // out and unit-tested in tests/live-links.test.mjs precisely because the type
-  // checker is not watching it.
-  //
-  // PHASE 3 added two more, and both are load-bearing:
-  //
-  //   src/loaders/site-pages.mjs   builds the five pages ABOUT the catalog,
-  //                                including the verbatim README lifts
-  //   scripts/prepare-assets.mjs   selects and copies the image assets that
-  //                                SKILL.md bodies embed, before every build
-  //
-  // Neither is checked, and both are consumed by src/loaders/skills.ts, which
-  // IS — so a shape mismatch at that boundary surfaces there. That is the only
-  // type coverage they have. Their behaviour is covered by
-  // tests/site-pages.test.mjs and tests/assets.test.mjs instead, for the same
-  // reason the live-link checker's is.
-  //
-  // PHASE 4 added two:
-  //
-  //   src/loaders/advise.mjs        derives the D2, D4 and I4 advisories
-  //   scripts/check-blob-links.mjs  requests the script blob URLs (AC5)
-  //
-  // The first has the same situation and the same mitigation as the Phase 3
-  // pair — skills.ts imports it and is checked, so the boundary shape is
-  // covered there, and its conditions are covered by tests/advisories.test.mjs.
-  // Worth naming the specific exposure: it reads `skill.resources[group]`,
-  // whose `null`-means-absent convention is the kind of thing a type checker
-  // would enforce here and does not.
-  //
-  // The second is the live-link checker's situation exactly: its derivation of
-  // WHICH URLs to request is exported and asserted offline in
-  // tests/resources.test.mjs against an independently written extractor, and
-  // only the fetching is left unchecked by anything. Its specific exposure is
-  // that `blobTargets()` may return `url: null` for a row with no href; the
-  // script reports that as a failure rather than filtering it, and the test
-  // asserts the null case is empty.
-  //
-  // PHASE 5 added one:
-  //
-  //   src/loaders/spec-source.mjs   reads and validates
-  //                                 site/specification-source.json (AC5)
-  //
-  // Its exposure is narrower than the others and worth naming precisely. It is
-  // the only module here whose input is a hand-edited JSON file rather than
-  // repository structure, so it has NO compile-time shape guarantee at all —
-  // `strict` would not have helped even with checkJs on, because the file is
-  // parsed at runtime and `JSON.parse` returns `any` either way. That is why
-  // every field it depends on is validated explicitly and fatally in the module
-  // itself rather than annotated, and why tests/spec-source.test.mjs drives
-  // `validateSpecSource()` with MUTATED objects: for this file, mutation
-  // testing is not a supplement to type checking, it is the substitute for it.
-  //
-  // WHY IT IS NOT SIMPLY TURNED ON: `checkJs: true` surfaces errors that are
-  // overwhelmingly missing annotations and implicit `any` under `strict` rather
-  // than latent bugs. Fixing them is real work and out of scope. Logged as a
-  // PHASE 5 CANDIDATE, to be sized by running the command below at the moment
-  // the phase is scoped.
-  //
-  //   HOW TO SIZE IT (the measurement this comment used to record):
-  //   flip `checkJs` to true, run `npx astro check`, restore the file. Confirm
-  //   with `cmp` that the flip landed and the restore was byte-identical, and
-  //   that `git status --porcelain` is empty before and after.
-  //
-  // NO ERROR COUNT IS RECORDED HERE, DELIBERATELY, AND THAT IS THE FIX FOR A
-  // DEFECT THIS COMMENT COMMITTED FOUR TIMES. A per-file census used to sit at
-  // this spot. It was re-measured in Phase 2, re-measured twice in Phase 3, and
-  // went stale again in the very commit whose purpose was to correct it — each
-  // value correct on the day it was written and wrong by the next commit,
-  // because the figure counts errors in files that every phase edits.
-  //
-  // The Phase 3 round-2 review is what established the pattern rather than the
-  // instance. Its readings, quoted as that review's findings at 06d2a02 and
-  // not as properties of this tree: 23 of 26 rows still matched, and the 3 that
-  // diverged were exactly the 3 files edited after the census was taken, their
-  // deltas summing to the change in the total with no residual. Attributing
-  // them that way is what keeps them from becoming the next stale figure — a
-  // reading indexed to a moment cannot go out of date; a reading presented as a
-  // current fact can.
-  //
-  // A number that decays by construction is not documentation of a fact, it is
-  // a copy of a measurement, and the copy is what goes false. Note also which
-  // of these was the more dangerous: the total was TRUE when written, every
-  // time. A false figure is catchable by anyone who reads it against the tree.
-  // A true-but-unbound one fails silently — right today, nothing goes red the
-  // day it stops being right. So the copy is gone and the command that produces
-  // it stays.
-  //
-  // WHAT IS NOT DELETED: the list of unchecked files above is BOUND.
-  // `tests/pins.test.mjs` R6 derives that set from the filesystem and fails if
-  // any unchecked source is missing from the list block, with a non-vacuity
-  // floor and a control proving the scoped search can fail. That binding is
-  // measured by mutation, not asserted: deleting any one of the listed files
-  // from the list block turns R6 red.
-  //
-  // Standard 2 says a number is re-measured at the moment it is quoted, not
-  // inherited. Four recurrences here say the stronger thing: a number nothing
-  // re-measures should not be written down beside a command that produces it.
-  //
-  // If you turn it on, do it as its own change with its own review. Do not
-  // widen it as a side effect of something else, and do not restate the
-  // coverage claim anywhere without changing this comment with it.
+  //   EXCLUDED     tests/*.mjs (executed and verified directly by `node --test`)
+  //                dist/       (build output)
   // ───────────────────────────────────────────────────────────────────────────
   "extends": "astro/tsconfigs/strict",
-  "include": [".astro/types.d.ts", "**/*"],
+  "include": [".astro/types.d.ts", "src/**/*", "scripts/**/*", "astro.config.mjs"],
   "exclude": ["dist"],
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "allowImportingTsExtensions": true
   }
 }

@@ -50,12 +50,19 @@
 // string on a closing fence. One implementation, one behaviour, one place to
 // fix next time.
 
-/** A fence opener/closer match on a line, or `null`. */
+/**
+ * A fence opener/closer match on a line, or `null`.
+ * @param {string} line
+ */
 function fenceMatch(line) {
   return /^ {0,3}(`{3,}|~{3,})/.exec(line);
 }
 
-/** True when `line` closes an open `fence` ({char, len}). */
+/**
+ * True when `line` closes an open `fence` ({char, len}).
+ * @param {string} line
+ * @param {{char: string, len: number}} fence
+ */
 function closesFence(line, fence) {
   const m = fenceMatch(line);
   if (!m) return false;
@@ -65,7 +72,11 @@ function closesFence(line, fence) {
   return line.slice(m[0].length).trim() === "";
 }
 
-/** The fence a line opens, or `null`. */
+/**
+ * The fence a line opens, or `null`.
+ * @param {string} line
+ * @returns {{char: string, len: number} | null}
+ */
 function opensFence(line) {
   const m = fenceMatch(line);
   return m ? { char: m[1][0], len: m[1].length } : null;
@@ -79,9 +90,11 @@ function opensFence(line) {
  * @returns {[number, number][]} sorted, non-overlapping-enough `[start, end)`
  */
 export function protectedRanges(text) {
+  /** @type {[number, number][]} */
   const ranges = [];
   const lines = text.split("\n");
   let offset = 0;
+  /** @type {{char: string, len: number} | null} */
   let fence = null; // { char: "`" | "~", len: number }
 
   for (const line of lines) {
@@ -109,8 +122,12 @@ export function protectedRanges(text) {
  * Inline code spans within ONE line, as `[start, end)` offsets into that line.
  * CommonMark: a run of N backticks opens a span that the next run of EXACTLY N
  * backticks closes. An unterminated run is literal text and protects nothing.
+ *
+ * @param {string} line
+ * @returns {[number, number][]}
  */
 function codeSpansIn(line) {
+  /** @type {[number, number][]} */
   const out = [];
   let i = 0;
   while (i < line.length) {
@@ -162,8 +179,10 @@ function codeSpansIn(line) {
  * @returns {{text: string, line: number}[]} in source order
  */
 export function inlineCodeSpans(text) {
+  /** @type {{text: string, line: number}[]} */
   const out = [];
   const lines = text.split("\n");
+  /** @type {{char: string, len: number} | null} */
   let fence = null;
 
   lines.forEach((line, i) => {
@@ -197,7 +216,11 @@ export function inlineCodeSpans(text) {
   return out;
 }
 
-/** True when `pos` falls inside any protected range. */
+/**
+ * True when `pos` falls inside any protected range.
+ * @param {[number, number][]} ranges
+ * @param {number} pos
+ */
 export function isProtected(ranges, pos) {
   for (const [s, e] of ranges) {
     if (pos >= s && pos < e) return true;
@@ -205,7 +228,10 @@ export function isProtected(ranges, pos) {
   return false;
 }
 
-/** Offsets at which each 1-based line begins. */
+/**
+ * Offsets at which each 1-based line begins.
+ * @param {string} text
+ */
 function lineStarts(text) {
   const starts = [0];
   for (let i = 0; i < text.length; i += 1) {
@@ -214,7 +240,11 @@ function lineStarts(text) {
   return starts;
 }
 
-/** 1-based line number of a byte offset. */
+/**
+ * 1-based line number of a byte offset.
+ * @param {number[]} starts
+ * @param {number} pos
+ */
 function lineOf(starts, pos) {
   let lo = 0;
   let hi = starts.length - 1;
@@ -271,9 +301,13 @@ export function stripLeadingH1(body) {
  * from (§3.6). Fence-aware, and `null` when there is none — the caller turns
  * that into a hard build error rather than prettifying the filename into a
  * title nobody wrote.
+ *
+ * @param {string} text
+ * @returns {string | null}
  */
 export function firstH1(text) {
   const lines = text.split("\n");
+  /** @type {{char: string, len: number} | null} */
   let fence = null;
   for (const line of lines) {
     if (fence) {
@@ -317,6 +351,7 @@ export function rewriteLinks(body, resolve, opts = {}) {
   const lineOffset = opts.lineOffset ?? 0;
   const ranges = protectedRanges(body);
   const starts = lineStarts(body);
+  /** @type {{line: number, from: string, to: string}[]} */
   const rewrites = [];
 
   const out = body.replace(LINK_RE, (whole, label, target, title, index) => {

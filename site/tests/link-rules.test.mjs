@@ -118,3 +118,72 @@ test("N2 control: the error path is reachable for the OTHER unresolvable shapes 
   assert.throws(() => resolveTarget("", at(), c), /empty target/);
   assert.throws(() => resolveTarget("some-loose-file.md", at(), c), /no §6\.5 rule matches/);
 });
+
+test("reference-body resolution: skill-level references resolve sibling resources and owning SKILL.md", () => {
+  const refCtx = (overrides = {}) =>
+    ctx({
+      kind: "reference",
+      skill: "okf-author",
+      routedSkillRefs: new Set(["guide", "other-ref"]),
+      resources: {
+        references: [
+          { name: "guide.md", kind: "file" },
+          { name: "other-ref.md", kind: "file" },
+          { name: "queries.sql", kind: "file" },
+        ],
+        scripts: [{ name: "run.sh", kind: "file" }],
+        assets: [{ name: "README.md", kind: "file" }],
+      },
+      sourceRepoPath: "plugins/okf-authoring/skills/okf-author/references/guide.md",
+      ...overrides,
+    }).ctx;
+
+  // POSITIVE: bare sibling markdown reference
+  assert.equal(
+    resolveTarget("other-ref.md#sec", at(), refCtx()),
+    `${BASE}/plugins/okf-authoring/okf-author/references/other-ref/#sec`,
+  );
+  // POSITIVE: ../SKILL.md back to owning skill page
+  assert.equal(
+    resolveTarget("../SKILL.md#overview", at(), refCtx()),
+    `${BASE}/plugins/okf-authoring/okf-author/#overview`,
+  );
+  // POSITIVE: bare non-markdown sibling reference -> GitHub blob
+  assert.equal(
+    resolveTarget("queries.sql", at(), refCtx()),
+    "https://github.com/o/r/blob/main/plugins/okf-authoring/skills/okf-author/references/queries.sql",
+  );
+  // POSITIVE: ../scripts/<f> and ../assets/<f> -> GitHub blob via resolveFromSkill
+  assert.equal(
+    resolveTarget("../scripts/run.sh", at(), refCtx()),
+    "https://github.com/o/r/blob/main/plugins/okf-authoring/skills/okf-author/scripts/run.sh",
+  );
+  assert.equal(
+    resolveTarget("../assets/README.md", at(), refCtx()),
+    "https://github.com/o/r/blob/main/plugins/okf-authoring/skills/okf-author/assets/README.md",
+  );
+
+  // NEGATIVE CONTROLS: missing files still throw hard build errors with file & line
+  assert.throws(
+    () => resolveTarget("missing.md", at(19), refCtx()),
+    /guide\.md:19 — no sibling reference page named "missing"/,
+  );
+  assert.throws(
+    () => resolveTarget("missing.sql", at(21), refCtx()),
+    /guide\.md:21 — .* has no entry named "missing\.sql"/,
+  );
+  assert.throws(
+    () => resolveTarget("../scripts/missing.sh", at(23), refCtx()),
+    /guide\.md:23 — .* has no entry named "missing\.sh"/,
+  );
+
+  // NEGATIVE CONTROL: plugin-level references (skill === undefined) do not resolve ../SKILL.md
+  const pluginRefCtx = refCtx({
+    skill: undefined,
+    sourceRepoPath: "plugins/okf-authoring/references/trust-vocabulary.md",
+  });
+  assert.throws(
+    () => resolveTarget("../SKILL.md", at(11), pluginRefCtx),
+    /trust-vocabulary\.md:11 — no §6\.5 rule matches/,
+  );
+});

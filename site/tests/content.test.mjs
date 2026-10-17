@@ -21,6 +21,7 @@ import {
   dist,
   distContentPages,
   elementsWithAttr,
+  fieldRows,
   rel,
   repoRoot,
   toText,
@@ -337,6 +338,56 @@ test("AC6 control: at least one of those titles really does contain U+2014", asy
   assert.ok(found.length > 0, "no reference H1 contains an em dash — the criterion is vacuous");
 });
 
+test("AC6: skill-level vs plugin-level reference pages state accurate scope and provenance", async () => {
+  const { references } = await sourceRoutes();
+  const pages = await distContentPages();
+
+  const pluginRefRoutes = references.filter((r) => /^plugins\/[^/]+\/references\/[^/]+$/.test(r));
+  const skillRefRoutes = references.filter((r) => /^plugins\/[^/]+\/[^/]+\/references\/[^/]+$/.test(r));
+
+  // Non-vacuity: both scopes must exist in the catalog.
+  assert.ok(pluginRefRoutes.length > 0, "no plugin-level reference routes found");
+  assert.ok(skillRefRoutes.length > 0, "no skill-level reference routes found");
+  assert.equal(pluginRefRoutes.length + skillRefRoutes.length, references.length);
+
+  for (const route of pluginRefRoutes) {
+    const html = mainOf(page(pages, route).html);
+    const rows = fieldRows(html);
+    assert.ok(
+      !rows.some((r) => r.label.trim() === "skill"),
+      `${route}: plugin-level reference rendered a skill row`,
+    );
+    const notes = elementsWithAttr(html, "data-reference-note");
+    assert.equal(notes.length, 1, `${route}: missing data-reference-note`);
+    assert.match(notes[0].open, /data-reference-note="plugin"/);
+    assert.match(toText(notes[0].inner), /plugin-level reference of/);
+  }
+
+  for (const route of skillRefRoutes) {
+    const [, pluginName, skillName] = route.split("/");
+    const html = mainOf(page(pages, route).html);
+    const rows = fieldRows(html);
+    const skillRow = rows.find((r) => r.label.trim() === "skill");
+    assert.ok(skillRow, `${route}: skill-level reference is missing its derived skill row`);
+    assert.equal(skillRow.source, "derived");
+    assert.equal(toText(skillRow.dd), skillName);
+    assert.ok(
+      skillRow.dd.includes(`href="${BASE}/plugins/${pluginName}/${skillName}/"`),
+      `${route}: skill row does not link back to ${BASE}/plugins/${pluginName}/${skillName}/`,
+    );
+
+    const notes = elementsWithAttr(html, "data-reference-note");
+    assert.equal(notes.length, 1, `${route}: missing data-reference-note`);
+    assert.match(notes[0].open, /data-reference-note="skill"/);
+    assert.match(toText(notes[0].inner), new RegExp(`A reference of skill ${skillName}`));
+    assert.doesNotMatch(
+      toText(notes[0].inner),
+      /plugin-level reference|not defined by Agent Plugins §6\.1/,
+      `${route}: skill-level reference carries the plugin-level §6.1 disclaimer`,
+    );
+  }
+});
+
 // ── AC7 ─────────────────────────────────────────────────────────────────────
 
 test("AC7: both skill descriptions render in full, unclipped, at 755 and 790 characters", async () => {
@@ -367,6 +418,19 @@ test("AC7: both skill descriptions render in full, unclipped, at 755 and 790 cha
     );
   }
   assert.deepEqual(lengths, { "okf-author": 755, "okf-validate": 790 });
+
+  // Every skill page carries a copy-install button whose data attribute matches the
+  // rendered install command byte-for-byte.
+  for (const skill of ["okf-author", "okf-validate"]) {
+    const p = page(pages, `plugins/${PLUGIN}/${skill}`);
+    const cmds = elementsWithAttr(p.html, "data-install-command");
+    const btns = elementsWithAttr(p.html, "data-copy-install");
+    assert.equal(cmds.length, 1, `${skill}: expected 1 data-install-command`);
+    assert.equal(btns.length, 1, `${skill}: expected 1 data-copy-install button`);
+    const cmdText = toText(cmds[0].inner);
+    const btnAttr = /data-copy-install="([^"]*)"/.exec(btns[0].open)?.[1] ?? "";
+    assert.equal(btnAttr, cmdText, `${skill}: copy button attribute disagrees with rendered command`);
+  }
 });
 
 test("AC7: no stylesheet clamps the description element (I9)", async () => {

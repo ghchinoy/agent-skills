@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from "astro/config";
+import { satteri } from "@astrojs/markdown-satteri";
 import starlight from "@astrojs/starlight";
 
 import { BASE, REPO_URL, SITE } from "./src/site.config.mjs";
@@ -31,7 +32,7 @@ export default defineConfig({
   // entire claim is that it renders what the source declares.
   //
   // Off. The declared bytes are the declared bytes, apostrophes included.
-  markdown: { smartypants: false },
+  markdown: { processor: satteri({ features: { smartPunctuation: false } }) },
 
   // NO `redirects` HERE, AND THAT IS THE CHANGE. Phase 1 routed five content
   // pages and no landing page, so the site root was a redirect stub whose only

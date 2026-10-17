@@ -59,11 +59,14 @@ const REPO_SLUG = new URL(REPO_URL).pathname.replace(/^\/+|\/+$/g, "");
 /**
  * Reads `file` from the repository root, failing with the path rather than an
  * ENOENT nobody can place.
+ *
+ * @param {string} repoRoot
+ * @param {string} file
  */
 async function repoDoc(repoRoot, file) {
   try {
     return await readFile(join(repoRoot, file), "utf8");
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     throw new Error(
       `site-pages: ${file} is not readable, and a page of this site is a LIFT ` +
         `of its bytes rather than a copy kept under site/. ${err.message}`,
@@ -78,6 +81,11 @@ async function repoDoc(repoRoot, file) {
  * extraction silently matches nothing, and `/about/install/` ships with no
  * install instructions and a green build. Same class as `plantOrThrow()` in the
  * test helpers, and for the same reason.
+ *
+ * @param {string | undefined} value
+ * @param {string} what
+ * @param {string} source
+ * @returns {string}
  */
 function assertLift(value, what, source) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -90,7 +98,11 @@ function assertLift(value, what, source) {
   return value;
 }
 
-/** Everything between the document's H1 and its first `---` or `##`. */
+/**
+ * Everything between the document's H1 and its first `---` or `##`.
+ * @param {string} markdown
+ * @param {string} source
+ */
 function leadParagraphs(markdown, source) {
   const afterH1 = markdown.replace(/^\s*#[^\n]*\n/, "");
   const cut = afterH1.search(/^(?:---\s*$|##\s)/m);
@@ -101,7 +113,12 @@ function leadParagraphs(markdown, source) {
   );
 }
 
-/** The body of the `## <heading>` section, exclusive of the heading itself. */
+/**
+ * The body of the `## <heading>` section, exclusive of the heading itself.
+ * @param {string} markdown
+ * @param {string} heading
+ * @param {string} source
+ */
 function section(markdown, heading, source) {
   const lines = markdown.split("\n");
   const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
@@ -125,7 +142,10 @@ function section(markdown, heading, source) {
   return assertLift(body.trim(), `the "${heading}" section`, source);
 }
 
-/** The `### …` sub-headings of a section body, in document order. */
+/**
+ * The `### …` sub-headings of a section body, in document order.
+ * @param {string} sectionBody
+ */
 function subHeadings(sectionBody) {
   return [...sectionBody.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim());
 }
@@ -157,6 +177,7 @@ export async function buildSitePages(opts) {
   // failure on purpose — see spec-source.mjs on why nothing falls back.
   const specSource = await loadSpecSource();
   const specById = new Map(specSource.specifications.map((s) => [s.id, s]));
+  /** @param {string} id */
   const specOrThrow = (id) => {
     const spec = specById.get(id);
     if (spec === undefined) {
@@ -179,10 +200,10 @@ export async function buildSitePages(opts) {
     referenceCount:
       p.references.length +
       p.skills.reduce(
-        (n, s) =>
+        (/** @type {number} */ n, /** @type {any} */ s) =>
           n +
           (s.resources.references ?? []).filter(
-            (r) => r.kind === "file" && /\.md$/i.test(r.name),
+            (/** @type {any} */ r) => r.kind === "file" && /\.md$/i.test(r.name),
           ).length,
         0,
       ),
@@ -219,6 +240,15 @@ export async function buildSitePages(opts) {
    * a field. Absence here is a key holding `undefined`, which is what the
    * schema's `.optional()` already means; this is an internal record, not a
    * rendered field, so the site's absence-is-absence rule is untouched.
+   * @param {{
+   *   id: string,
+   *   title: string,
+   *   body: string,
+   *   sourcePath?: string | null,
+   *   stripH1?: boolean,
+   *   lists?: any,
+   *   installerCount?: number
+   * }} def
    */
   const page = ({
     id,

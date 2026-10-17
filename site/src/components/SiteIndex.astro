@@ -162,25 +162,37 @@ const keywords: string[] = [
         if (!filter || !list) return;
         var rows = Array.prototype.slice.call(list.querySelectorAll("[data-index-entry]"));
         var shown = filter.querySelector("[data-shown-count]");
-        filter.addEventListener("click", function (event) {
-          var button = event.target.closest("button[data-keyword]");
-          if (!button) return;
-          var want = button.getAttribute("data-keyword");
+        function applyKeyword(want, pushUrl) {
+          var targetBtn =
+            filter.querySelector('button[data-keyword="' + CSS.escape(want) + '"]') ||
+            filter.querySelector('button[data-keyword=""]');
+          var actual = targetBtn ? targetBtn.getAttribute("data-keyword") || "" : "";
           var visible = 0;
           rows.forEach(function (row) {
             var on =
-              want === "" ||
-              (" " + (row.getAttribute("data-keywords") || "") + " ").indexOf(" " + want + " ") !== -1;
+              actual === "" ||
+              (" " + (row.getAttribute("data-keywords") || "") + " ").indexOf(" " + actual + " ") !== -1;
             row.hidden = !on;
             if (on) visible += 1;
           });
           filter.querySelectorAll("button[data-keyword]").forEach(function (b) {
-            b.setAttribute("aria-pressed", String(b === button));
+            b.setAttribute("aria-pressed", String(b === targetBtn));
           });
-          // The count is read off the DOM that was just set, so it cannot
-          // report a filter the page is not showing.
           if (shown) shown.textContent = String(visible);
+          if (pushUrl && window.history && window.history.replaceState) {
+            var u = new URL(window.location.href);
+            if (actual) u.searchParams.set("keyword", actual);
+            else u.searchParams.delete("keyword");
+            window.history.replaceState(null, "", u.pathname + u.search + u.hash);
+          }
+        }
+        filter.addEventListener("click", function (event) {
+          var button = event.target.closest("button[data-keyword]");
+          if (!button) return;
+          applyKeyword(button.getAttribute("data-keyword") || "", true);
         });
+        var initial = new URLSearchParams(window.location.search).get("keyword");
+        if (initial) applyKeyword(initial, false);
       })();
       `}
     </script>

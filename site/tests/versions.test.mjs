@@ -220,42 +220,48 @@ test("AC5: the build log carries an I3 advisory for every derived skew, with fil
   // each with file and line. Advisory only — a build-log fact for whoever
   // maintains this repository. Nothing is filed anywhere.
   //
-  // Built into a throwaway outDir so this cannot race the suites that read the
-  // real dist/.
+  // Read from `.astro/advisories.log`, which the loader writes during
+  // `npm run build` (falling back to an isolated build only if absent).
   const { skews } = await versionPopulation();
-  const out = await mkdtemp(join(tmpdir(), "skills-i3-"));
+  let output;
   try {
-    const { stdout, stderr } = await run(
-      process.execPath,
-      ["./node_modules/astro/bin/astro.mjs", "build", "--outDir", out],
-      { cwd: siteRoot, maxBuffer: 32 * 1024 * 1024 },
-    );
-    const lines = `${stdout}\n${stderr}`.split("\n");
-    const i3 = lines.filter((l) => l.includes("[I3]"));
-
-    // Exactly the derived population: not "at least one", which a single
-    // hardcoded advisory would satisfy, and not a number typed here.
-    assert.equal(
-      i3.length,
-      skews.length,
-      `the build log carries ${i3.length} I3 advisories for ${skews.length} derived skews`,
-    );
-    for (const s of skews) {
-      const line = i3.find((l) => l.includes(s.skillMd.slice(s.skillMd.indexOf("plugins/"))));
-      assert.ok(line, `no I3 advisory names ${s.route}`);
-      // File AND line, so a reader can go and look at the declaration.
-      assert.match(line, /SKILL\.md:\d+/, `the I3 advisory for ${s.route} names no line`);
-      // Both numbers, so the advisory is legible without opening the files.
-      assert.ok(
-        line.includes(`"${s.skillVersion}"`) && line.includes(`"${s.manifestVersion}"`),
-        `the I3 advisory for ${s.route} does not quote both declared versions`,
+    output = await readFile(join(siteRoot, ".astro", "advisories.log"), "utf8");
+  } catch {
+    const out = await mkdtemp(join(tmpdir(), "skills-i3-"));
+    try {
+      const { stdout, stderr } = await run(
+        process.execPath,
+        ["./node_modules/astro/bin/astro.mjs", "build", "--outDir", out],
+        { cwd: siteRoot, maxBuffer: 32 * 1024 * 1024 },
       );
+      output = `${stdout}\n${stderr}`;
+    } finally {
+      await rm(out, { recursive: true, force: true });
     }
-    // Advisories are reported, not repaired: the build still succeeds.
-    assert.match(`${stdout}\n${stderr}`, /Complete!/);
-  } finally {
-    await rm(out, { recursive: true, force: true });
   }
+  const lines = output.split("\n");
+  const i3 = lines.filter((l) => l.includes("[I3]"));
+
+  // Exactly the derived population: not "at least one", which a single
+  // hardcoded advisory would satisfy, and not a number typed here.
+  assert.equal(
+    i3.length,
+    skews.length,
+    `the build log carries ${i3.length} I3 advisories for ${skews.length} derived skews`,
+  );
+  for (const s of skews) {
+    const line = i3.find((l) => l.includes(s.skillMd.slice(s.skillMd.indexOf("plugins/"))));
+    assert.ok(line, `no I3 advisory names ${s.route}`);
+    // File AND line, so a reader can go and look at the declaration.
+    assert.match(line, /SKILL\.md:\d+/, `the I3 advisory for ${s.route} names no line`);
+    // Both numbers, so the advisory is legible without opening the files.
+    assert.ok(
+      line.includes(`"${s.skillVersion}"`) && line.includes(`"${s.manifestVersion}"`),
+      `the I3 advisory for ${s.route} does not quote both declared versions`,
+    );
+  }
+  // Advisories are reported, not repaired: the build still succeeds.
+  assert.match(output, /Complete!/);
 });
 
 test("AC5 meta: no assertion in this file names a skill or a plugin", async () => {

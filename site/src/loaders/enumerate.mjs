@@ -71,6 +71,11 @@ export const MANIFEST_FIELDS = [
  * advisory that names a line the reader can open is worth this much and no
  * more, and returning `null` when it cannot be found is honest.
  */
+/**
+ * @param {string} raw
+ * @param {string} key
+ * @returns {number | null}
+ */
 function jsonKeyLine(raw, key) {
   const re = new RegExp(`^\\s*"${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:`);
   const lines = raw.split("\n");
@@ -85,13 +90,15 @@ function jsonKeyLine(raw, key) {
  * ONLY the declared fields, plus advisories. Never throws on an unknown key —
  * §5.2 says report and ignore, not reject.
  *
- * @param {object} manifest  parsed plugin.json
- * @param {string} raw       its source text, for line numbers
- * @param {string} file      repo-relative path, for messages
- * @returns {{manifest: object, advisories: object[]}}
+ * @param {Record<string, any>} manifest  parsed plugin.json
+ * @param {string} raw                    its source text, for line numbers
+ * @param {string} file                   repo-relative path, for messages
+ * @returns {{manifest: Record<string, any>, advisories: Advisory[]}}
  */
 export function analyzeManifest(manifest, raw, file) {
+  /** @type {Advisory[]} */
   const advisories = [];
+  /** @type {Record<string, any>} */
   const kept = {};
   for (const key of Object.keys(manifest)) {
     if (!MANIFEST_FIELDS.includes(key)) {
@@ -113,7 +120,10 @@ export function analyzeManifest(manifest, raw, file) {
   return { manifest: kept, advisories };
 }
 
-/** Normalizes a platform path to forward slashes so ids are stable. */
+/**
+ * Normalizes a platform path to forward slashes so ids are stable.
+ * @param {string} p
+ */
 export function toPosix(p) {
   return p.split(sep).join("/");
 }
@@ -125,6 +135,10 @@ export function toPosix(p) {
  *
  * @typedef {{code: string, file: string, line: number|null, message: string}} Advisory
  *
+ * @param {string} code
+ * @param {string} file
+ * @param {number|null} line
+ * @param {string} message
  * @returns {Advisory}
  */
 function advisory(code, file, line, message) {
@@ -190,7 +204,7 @@ function advisory(code, file, line, message) {
  *
  * @param {object} opts
  * @param {string} opts.repoRoot   absolute path to the repository root
- * @param {object} opts.fs         `{ readFile, readdir, stat }`
+ * @param {any} opts.fs            `{ readFile, readdir, stat }`
  * @param {string[]} [opts.onlyPlugins]  scope filter (Phase 1 renders one
  *   plugin). A filter narrows WHICH declared plugins are built; it never
  *   changes HOW they are discovered.
@@ -219,7 +233,7 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
 
   const wanted = onlyPlugins ? new Set(onlyPlugins) : null;
   if (wanted) {
-    const declared = new Set(marketplace.plugins.map((p) => p.name));
+    const declared = new Set(marketplace.plugins.map((/** @type {any} */ p) => p.name));
     for (const name of wanted) {
       if (!declared.has(name)) {
         throw new Error(
@@ -252,7 +266,7 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
     let manifestRaw;
     try {
       manifestRaw = await fs.readFile(join(pluginDir, "plugin.json"), "utf8");
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       throw new Error(
         `skills-loader: ${manifestRel} is missing or unreadable, but ` +
           `${marketplaceRel} declares plugin "${entry.name}" at ${source}. ` +
@@ -347,7 +361,7 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
 
     // ── Ordering: the index's declared order, then anything it omitted ───────
     const declaredOrder = Array.isArray(entry.skills)
-      ? entry.skills.map((p) => basename(String(p).replace(/\/+$/, "")))
+      ? entry.skills.map((/** @type {any} */ p) => basename(String(p).replace(/\/+$/, "")))
       : [];
     const byName = new Map(discovered.map((s) => [s.name, s]));
     const ordered = [];
@@ -465,6 +479,10 @@ export async function enumerate({ repoRoot, fs, onlyPlugins }) {
  * enumerated this directory and it was empty"; `null` means "there is no such
  * directory". Shipping `[]` for something never checked would be a claim the
  * build did not earn.
+ *
+ * @param {any} fs
+ * @param {string} dir
+ * @returns {Promise<ResourceEntry[] | null>}
  */
 async function listDir(fs, dir) {
   let dirents;
@@ -478,7 +496,10 @@ async function listDir(fs, dir) {
   // so a locale difference between a developer's machine and CI would silently
   // reorder rendered output. Byte order is boring and reproducible everywhere.
   return dirents
-    .map((d) => ({ name: d.name, kind: d.isDirectory() ? "directory" : "file" }))
+    .map((/** @type {any} */ d) => ({
+      name: d.name,
+      kind: /** @type {"file"|"directory"} */ (d.isDirectory() ? "directory" : "file"),
+    }))
     .sort(byCodeUnit);
 }
 
@@ -512,6 +533,9 @@ async function listDir(fs, dir) {
  * — are asserted independently in `tests/enumeration.test.mjs`
  * (`assetFileReads`) and `tests/content.test.mjs` (the bundle leak detector),
  * and neither moved to make this possible.
+ * @param {any} fs
+ * @param {string} dir
+ * @returns {Promise<ResourceEntry[] | null>}
  */
 async function listTree(fs, dir) {
   let dirents;
@@ -520,9 +544,11 @@ async function listTree(fs, dir) {
   } catch {
     return null;
   }
+  /** @type {ResourceEntry[]} */
   const out = [];
   for (const d of dirents.slice().sort(byCodeUnit)) {
     if (d.isDirectory()) {
+      /** @type {ResourceEntry[]} */
       const nested = (await listTree(fs, join(dir, d.name))) ?? [];
       for (const n of nested) out.push({ name: `${d.name}/${n.name}`, kind: n.kind });
     } else {
@@ -535,6 +561,9 @@ async function listTree(fs, dir) {
 /**
  * The ONE ordering comparator in this file. Every rendered list sorts through
  * it, so there is a single place to read and a single place to get wrong.
+ *
+ * @param {{name: string}} a
+ * @param {{name: string}} b
  */
 export function byCodeUnit(a, b) {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;

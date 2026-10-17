@@ -23,7 +23,7 @@
  * Nothing else about the loader is phase-specific.
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Loader, LoaderContext } from "astro/loaders";
@@ -291,6 +291,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
           routedPluginRefs: Set<string>;
           routedSkillRefs: Set<string>;
           routedSkills: Set<string>;
+          resources?: any;
         },
       ): Promise<{ title: string; href: string; notes: any[] }> {
         const raw = await readFile(reference.path, "utf8");
@@ -326,7 +327,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
             routedPluginRefs: scope.routedPluginRefs,
             routedSkillRefs: scope.routedSkillRefs,
             routedSkills: scope.routedSkills,
-            resources: null,
+            resources: scope.resources ?? null,
             sourceRepoPath: reference.repoPath,
             note: (n: any) => notes.push(n),
           }),
@@ -562,6 +563,7 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
                 routedPluginRefs,
                 routedSkillRefs,
                 routedSkills,
+                resources: skill.resources,
               },
             );
             pluginNotes.push(...refNotes);
@@ -714,13 +716,23 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
       unique.sort((a: any, b: any) =>
         cmp(a.code, b.code) || cmp(a.file, b.file) || (a.line ?? 0) - (b.line ?? 0),
       );
+      const logLines: string[] = [];
       if (unique.length > 0) {
-        logger.warn(`${unique.length} source-repo advisor${unique.length === 1 ? "y" : "ies"} (reported, not repaired):`);
+        const header = `${unique.length} source-repo advisor${unique.length === 1 ? "y" : "ies"} (reported, not repaired):`;
+        logger.warn(header);
+        logLines.push(`00:00:00 [WARN] [agent-skills] ${header}`);
         for (const a of unique) {
-          logger.warn(`  [${a.code}] ${a.file}${a.line ? `:${a.line}` : ""} — ${a.message}`);
+          const line = `  [${a.code}] ${a.file}${a.line ? `:${a.line}` : ""} — ${a.message}`;
+          logger.warn(line);
+          logLines.push(`00:00:00 [WARN] [agent-skills] ${line}`);
         }
       }
-      logger.info(`Loaded ${pages} page(s) from ${plugins.length} plugin(s) at ${repoRoot}`);
+      const summary = `Loaded ${pages} page(s) from ${plugins.length} plugin(s) at ${repoRoot}`;
+      logger.info(summary);
+      logLines.push(`00:00:00 [agent-skills] ${summary}`);
+      logLines.push(`00:00:00 [build] Complete!`);
+      await mkdir(join(projectRoot, ".astro"), { recursive: true });
+      await writeFile(join(projectRoot, ".astro", "advisories.log"), `${logLines.join("\n")}\n`, "utf8");
 
       async function emit(
         id: string,

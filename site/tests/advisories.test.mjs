@@ -119,21 +119,25 @@ function advisoryLines(output) {
   return out;
 }
 
-// One build, shared. Astro is not cheap and every test below asks the same
-// question of the same log.
+// One build log, shared. Read from `.astro/advisories.log` written by the
+// loader during `npm run build`, falling back to a build subprocess only if absent.
 let buildOnce;
 function build() {
   buildOnce ??= (async () => {
-    const out = await mkdtemp(join(tmpdir(), "skills-ac6-"));
     try {
-      const { stdout, stderr } = await run(
-        process.execPath,
-        ["./node_modules/astro/bin/astro.mjs", "build", "--outDir", out],
-        { cwd: siteRoot, maxBuffer: 32 * 1024 * 1024 },
-      );
-      return `${stdout}\n${stderr}`;
-    } finally {
-      await rm(out, { recursive: true, force: true });
+      return await readFile(join(siteRoot, ".astro", "advisories.log"), "utf8");
+    } catch {
+      const out = await mkdtemp(join(tmpdir(), "skills-ac6-"));
+      try {
+        const { stdout, stderr } = await run(
+          process.execPath,
+          ["./node_modules/astro/bin/astro.mjs", "build", "--outDir", out],
+          { cwd: siteRoot, maxBuffer: 32 * 1024 * 1024 },
+        );
+        return `${stdout}\n${stderr}`;
+      } finally {
+        await rm(out, { recursive: true, force: true });
+      }
     }
   })();
   return buildOnce;
