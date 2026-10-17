@@ -149,6 +149,11 @@ const SitePage = z.object({
           }),
         )
         .optional(),
+      disambiguation: z
+        .object({
+          repoSlug: z.string(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -770,6 +775,14 @@ export function skillsLoader(options: SkillsLoaderOptions): Loader {
         );
         const parsed = await parseData({ id, data, filePath });
         const rendered = await renderMarkdown(body, { fileURL: pathToFileURL(abs) });
+        const disambiguation = (data._page as any)?.lists?.disambiguation;
+        if (disambiguation && Array.isArray(rendered.metadata?.headings)) {
+          rendered.metadata.headings.push({
+            depth: 2,
+            slug: "not-to-be-confused-with",
+            text: "Not to be confused with",
+          });
+        }
         store.set({
           id,
           data: parsed,

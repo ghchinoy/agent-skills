@@ -53,6 +53,7 @@ const { entry } = Astro.props;
 const lists = entry?.data?._page?.lists;
 const plugins = lists?.plugins;
 const skills = lists?.skills;
+const disambiguation = lists?.disambiguation;
 
 // Every keyword any listed skill's plugin declares, deduplicated, in code-unit
 // order. DERIVED FROM THE ROWS THEMSELVES — not from a second pass over the
@@ -88,6 +89,35 @@ const keywords: string[] = [
         </li>
       ))}
     </ol>
+  )
+}
+
+{
+  disambiguation && (
+    <>
+      <h2 id="not-to-be-confused-with">Not to be confused with</h2>
+      <p>Three repositories sit one hyphen or one owner apart:</p>
+      <ul>
+        <li>
+          <code>{disambiguation.repoSlug}</code> — this catalog. It is what these
+          pages describe.
+        </li>
+        <li>
+          <code>ghchinoy/agentskills</code> — the same owner's Go CLI, a
+          different project.
+        </li>
+        <li>
+          <code>agentskills/agentskills</code> — the standard itself, published by
+          a different organisation that happens to share the second repository's
+          name.
+        </li>
+      </ul>
+      <p>
+        Both standards this catalog targets are published elsewhere, by other
+        people: <a href="https://agentskills.io">Agent Skills</a> and{" "}
+        <a href="https://agent-plugins.org">Agent Plugins</a>.
+      </p>
+    </>
   )
 }
 

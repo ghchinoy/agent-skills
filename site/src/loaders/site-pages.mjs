@@ -280,30 +280,6 @@ export async function buildSitePages(opts) {
     body: [
       leadParagraphs(readme, "README.md"),
       "",
-      // Proposal §2.1, "A three-way naming collision", which AC2 names as the
-      // ONE addition permitted on this page beyond counts, names and README
-      // bytes. §2.1 asks for "a one-line 'not to be confused with' note on both
-      // landing pages, linking agentskills.io and agent-plugins.org."
-      //
-      // WHAT §2.1 ALSO PROPOSES AND THIS DOES NOT DO. The same section suggests
-      // the site title "Agent Skills Catalog (10 plugins, 23 skills, conformant
-      // with the Agent Plugins spec)". Those are two hand-typed integers, and
-      // AC1 forbids a catalog figure typed into source — they would be correct
-      // today, silently wrong at the next merge, and invisible to every count
-      // test because no count test reads a title. So this note takes the NAMING
-      // half of §2.1 and leaves the figures to the computed counts below.
-      "## Not to be confused with",
-      "",
-      "Three repositories sit one hyphen or one owner apart:",
-      "",
-      `- \`${REPO_SLUG}\` — this catalog. It is what these pages describe.`,
-      "- `ghchinoy/agentskills` — the same owner's Go CLI, a different project.",
-      "- `agentskills/agentskills` — the standard itself, published by a different",
-      "  organisation that happens to share the second repository's name.",
-      "",
-      "Both standards this catalog targets are published elsewhere, by other people:",
-      "[Agent Skills](https://agentskills.io) and [Agent Plugins](https://agent-plugins.org).",
-      "",
       "## What is in here",
       "",
       "Every number on this page is counted by the build that produced it, from",
@@ -356,7 +332,7 @@ export async function buildSitePages(opts) {
       "## The plugins",
       "",
     ].join("\n"),
-    lists: { plugins: pluginList },
+    lists: { plugins: pluginList, disambiguation: { repoSlug: REPO_SLUG } },
   }));
 
   // ── /skills/ ───────────────────────────────────────────────────────────────

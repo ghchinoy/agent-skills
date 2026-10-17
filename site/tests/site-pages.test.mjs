@@ -1093,6 +1093,22 @@ test("§11: every count on the landing page is the measured one", async () => {
       `the landing page states ${skills.length + off} skills as well as ${skills.length}`,
     );
   }
+
+  // "Not to be confused with" is the LAST section on the landing page, rendered
+  // after "The plugins" and the plugin list.
+  const main = mainOf(pageAt(await distContentPages(), "").html);
+  const h2s = [...main.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map((m) =>
+    inlineText(m[1]).replace(/\s*Section titled.*$/i, "").replace(/\s*Direct link to.*$/i, "").trim(),
+  );
+  assert.equal(
+    h2s.at(-1),
+    "Not to be confused with",
+    `expected "Not to be confused with" to be the last H2 on the landing page; got: ${h2s.join(" -> ")}`,
+  );
+  assert.ok(
+    main.indexOf('data-site-index="plugins"') < main.indexOf('id="not-to-be-confused-with"'),
+    '"Not to be confused with" must appear after the plugins list on the landing page',
+  );
 });
 
 /**
