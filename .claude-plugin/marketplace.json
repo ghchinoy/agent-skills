@@ -39,7 +39,7 @@
     {
       "name": "repo-authoring",
       "source": "./plugins/repo-authoring",
-      "description": "Repository management skills for technical writing, editorial report artifacts, README generation, changelog curation, and commit recaps.",
+      "description": "Repository management skills for technical writing, arXiv/Syntaxis academic preprints, editorial report artifacts, README generation, changelog curation, and commit recaps.",
       "skills": [
         "./plugins/repo-authoring/skills/make-readme",
         "./plugins/repo-authoring/skills/technical-post-editorial",
@@ -47,7 +47,8 @@
         "./plugins/repo-authoring/skills/changelog-manager",
         "./plugins/repo-authoring/skills/headless-fork-pr",
         "./plugins/repo-authoring/skills/editorial-report-artifact",
-        "./plugins/repo-authoring/skills/node-security-audit"
+        "./plugins/repo-authoring/skills/node-security-audit",
+        "./plugins/repo-authoring/skills/arxiv-preprint-authoring"
       ]
     },
     {

@@ -31,7 +31,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`grill-with-beads`**: Grilling session that challenges your plan, sharpens work breakdown, and updates the `bd` issue tracker inline as decisions crystallise.
 
 ### 4. 📚 Repository Authoring (`plugins/repo-authoring`)
-*Repository management skills for technical writing, editorial report artifacts, README generation, changelogs, and commit recaps.*
+*Repository management skills for technical writing, arXiv/Syntaxis academic preprints, editorial report artifacts, README generation, changelogs, and commit recaps.*
 - **`make-readme`**: Creates, assesses, and improves `README.md` files against a weighted quality rubric or strict `standard-readme` spec compliance.
 - **`technical-post-editorial`**: Edits technical blog posts to remove AI writing patterns while preserving the author's human voice.
 - **`repository-change-recap`**: Generates structured weekly or custom timeframe commit recaps using `git log --stat` and per-repo categorization rules (`.gemini/recap-rules.md`).
@@ -39,6 +39,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`headless-fork-pr`**: Executes upstream issue creation, git fork synchronization (`upstream` vs `origin`), and PR submission in headless/sandbox environments using self-cleaning ephemeral GitHub SSH keys (`scripts/ephemeral-ssh-git.sh`).
 - **`editorial-report-artifact`**: Authors standalone, zero-dependency HTML technical experiment records, benchmark ablations, and architecture briefings with warm editorial design tokens (`--ivory`/`--clay`/`--olive`), offline mathematical typography (`.math`), inline SVG schematics, interactive pipeline explorers, and automated LaTeX/Markdown bleed linting (`scripts/lint-html-artifact.py`).
 - **`node-security-audit`**: Audits and remediates Node.js runtime, npm/pnpm/yarn dependency, and GitHub Actions supply-chain vulnerabilities across local and remote GitHub repositories while preserving exact-pin test suites (`scripts/discover-node-repos.sh`, `scripts/scan-remote-repos.mjs`, `scripts/audit-repo.mjs`).
+- **`arxiv-preprint-authoring`**: Outlines, writes, packages, and deterministically validates arXiv-style academic preprints (`paper.md`, `@preview/arkheion:0.1.2` `paper.typ`, `data/*.csv`, and semantic Luminous Graphviz `.dot` diagrams) following the `arXiv:2610.28380` empirical narrative blueprint and Syntaxis house-style clarity rules (`scripts/validate_preprint.py`).
 
 ### 5. 🛡️ MCP Security (`plugins/mcp-security`)
 *Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.*
