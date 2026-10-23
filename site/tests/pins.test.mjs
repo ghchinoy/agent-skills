@@ -14,9 +14,9 @@ import { join } from "node:path";
 import { codeOnlyLines, repoRoot, siteRoot, walk, rel } from "./_helpers.mjs";
 
 const PINNED = {
-  astro: "7.2.4",
-  "@astrojs/starlight": "0.41.7",
-  "@astrojs/check": "0.9.10",
+  astro: "7.4.2",
+  "@astrojs/starlight": "0.42.6",
+  "@astrojs/check": "0.9.12",
   typescript: "5.9.3",
 };
 
@@ -392,11 +392,11 @@ test("type-check disclosure control: the scoped search can actually fail", () =>
 
 test("engines.node requires Node 22, and the running Node satisfies it", async () => {
   const manifest = await pkg(join(siteRoot, "package.json"));
-  assert.equal(manifest.engines?.node, ">=22.19.0");
+  assert.equal(manifest.engines?.node, ">=22.23.4");
 
   const [major, minor, patch] = process.versions.node.split(".").map(Number);
   const ok =
-    major > 22 || (major === 22 && (minor > 19 || (minor === 19 && patch >= 0)));
+    major > 22 || (major === 22 && (minor > 23 || (minor === 23 && patch >= 4)));
   assert.ok(
     ok,
     `these tests are running on Node ${process.versions.node}, below the declared floor`,

@@ -73,10 +73,10 @@ Adding a plugin, skill, script, or reference now passes the static tests automat
   ```bash
   mkdir -p ~/.tmp && export TMPDIR="$HOME/.tmp"
   ```
-- **Node version requirement (`>=22.19.0`)**: `site/package.json` and `site/tests/pins.test.mjs` enforce `node >= 22.19.0`. If your default shell is on an older Node release, load nvm first:
+- **Node version requirement (`>=22.23.4`)**: `site/package.json` and `site/tests/pins.test.mjs` enforce `node >= 22.23.4`. If your default shell is on an older Node release, load nvm first:
   ```bash
   source ~/.nvm/nvm.sh 2>/dev/null || source ~/.config/nvm/nvm.sh 2>/dev/null
-  nvm use 22.19.0
+  nvm use 22.23.4
   ```
 
 ## 4. Two-Tier Verification Workflow (< 5 Seconds vs Full E2E)

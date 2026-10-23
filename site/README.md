@@ -11,7 +11,7 @@ out to the rest of the catalog is a later change to a single array; see
 
 ## Build it
 
-Node 22.19.0 or newer (`engines.node` enforces the floor).
+Node 22.23.4 or newer (`engines.node` enforces the floor).
 
 ```sh
 cd site
