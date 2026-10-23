@@ -46,7 +46,8 @@
         "./plugins/repo-authoring/skills/repository-change-recap",
         "./plugins/repo-authoring/skills/changelog-manager",
         "./plugins/repo-authoring/skills/headless-fork-pr",
-        "./plugins/repo-authoring/skills/editorial-report-artifact"
+        "./plugins/repo-authoring/skills/editorial-report-artifact",
+        "./plugins/repo-authoring/skills/node-security-audit"
       ]
     },
     {
@@ -105,7 +106,8 @@
       "skills": [
         "./plugins/gcp-management/skills/gcp-project-assessment",
         "./plugins/gcp-management/skills/gcp-quota-governance",
-        "./plugins/gcp-management/skills/gcp-project-consolidation"
+        "./plugins/gcp-management/skills/gcp-project-consolidation",
+        "./plugins/gcp-management/skills/gcp-cloud-run-audit"
       ]
     },
     {

@@ -38,6 +38,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`changelog-manager`**: Generates, updates, and curates `CHANGELOG.md` files adhering to Keep a Changelog v1.1.0 and Common Changelog specs.
 - **`headless-fork-pr`**: Executes upstream issue creation, git fork synchronization (`upstream` vs `origin`), and PR submission in headless/sandbox environments using self-cleaning ephemeral GitHub SSH keys (`scripts/ephemeral-ssh-git.sh`).
 - **`editorial-report-artifact`**: Authors standalone, zero-dependency HTML technical experiment records, benchmark ablations, and architecture briefings with warm editorial design tokens (`--ivory`/`--clay`/`--olive`), offline mathematical typography (`.math`), inline SVG schematics, interactive pipeline explorers, and automated LaTeX/Markdown bleed linting (`scripts/lint-html-artifact.py`).
+- **`node-security-audit`**: Audits and remediates Node.js runtime, npm/pnpm/yarn dependency, and GitHub Actions supply-chain vulnerabilities across local and remote GitHub repositories while preserving exact-pin test suites (`scripts/discover-node-repos.sh`, `scripts/scan-remote-repos.mjs`, `scripts/audit-repo.mjs`).
 
 ### 5. 🛡️ MCP Security (`plugins/mcp-security`)
 *Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.*
@@ -65,6 +66,7 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`gcp-project-assessment`**: Audits and categorizes 60+ GCP/Firebase projects across billing links, active compute, 30-day Cloud Logging traffic, BigQuery billing export spend, and Firebase assets. Produces structured Markdown reports with Mermaid cost diagrams. Includes parallelized audit script (`scripts/audit_portfolio.py`) and SQL queries (`references/billing-export-queries.sql`).
 - **`gcp-quota-governance`**: Analyzes API spend velocity (e.g. Vertex AI frontier Claude & Gemini models) and establishes enforceable hard request/token quotas, Cloud Run scaling caps, and event-driven automated billing circuit breakers. Includes quota inspector script (`scripts/inspect_quotas.py`), capping reference guide, and circuit breaker architecture.
 - **`gcp-project-consolidation`**: Guides the identification, cleanup, and consolidation of duplicate environments, orphaned persistent disks on terminated VMs, unattached static IPs, deletion lien removals, and safe project retirement. Includes decommissioning checklists and orphaned resource playbooks.
+- **`gcp-cloud-run-audit`**: Sweeps and audits deployed Cloud Run services and jobs across all GCP projects for public unauthenticated exposure (`allUsers` vs IAP), container image age and runtime CVE posture, idle `minScale`/GPU cost leaks, default service account usage, and literal secret env vars (`scripts/audit_cloud_run_fleet.py`).
 
 ### 11. 🐹 Go Readability (`plugins/go-readability`)
 *Modern Go and Google readability standards, style guidelines, code review checklists, and testing patterns.*
