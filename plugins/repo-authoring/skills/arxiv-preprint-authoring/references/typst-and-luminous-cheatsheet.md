@@ -9,12 +9,15 @@ This reference prevents common compilation errors when generating `@preview/arkh
 1. **Quote Multi-Letter Identifiers:**
    - In Typst math mode (`$...$`), consecutive unquoted letters are parsed as multiplication of single-letter variables (`$FVR$` renders as $F \cdot V \cdot R$).
    - Always quote multi-letter variable or metric names: `$"FVR"$`, `$"SIR"$`, `$"BT"$`, `$"PASS"$`, `$S_"max"$`, `$P_"free"$`, `$P_"struct"$`, `$T_"prompt"$`.
-2. **Use Native Typst Math Symbols (Never LaTeX Macros):**
+2. **Use Native Typst Math Symbols (Never LaTeX Macros or Invalid Symbol Names):**
    - `\times` $\to$ `times` (`$2 times 2$`, `$3.57 times$`)
    - `\to` / `\rightarrow` $\to$ `arrow.r` (`$V: cal(W) arrow.r [0, 100]$`)
    - `\in` $\to$ `in` (`$x in cal(X)$`)
    - `\mathcal{T}` $\to$ `cal(T)`
    - `\mathbb{I}` $\to$ `bb(I)`
+   - `\oplus` / `plus.circle` $\to$ `plus.o` (`$a plus.o b$`; note: `plus.circle` is invalid in Typst)
+   - `\cap` / `sect` $\to$ `inter` (`$A inter B$`; note: `sect` is invalid in Typst)
+   - `\cup` $\to$ `union` (`$A union B$`)
    - `\emptyset` $\to$ `emptyset`
    - `\sim` $\to$ `tilde.op`
    - `\frac{a}{b}` $\to$ `frac(a, b)`

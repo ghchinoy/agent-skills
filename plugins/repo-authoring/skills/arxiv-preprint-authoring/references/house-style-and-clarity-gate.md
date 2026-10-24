@@ -31,7 +31,18 @@ Every sentence describing system behavior or experimental methodology must name 
 
 ---
 
-## 3. Readability & Audience Calibration
+## 3. Clean-Prose Readability & Technical Density Calibration
 
-- **Target Grade Band:** Flesch-Kincaid Grade **12.0 to 14.5** (Academic / Systems Research).
-- **Paragraph Unity:** Each paragraph opens with a declarative topic sentence stating the claim, develops the formal or empirical mechanism in the middle sentences, and closes with the quantitative consequence or table/figure reference.
+1. **Always Measure Clean Prose (Avoid the Raw-Markdown Illusion):**
+   - Running Flesch-Kincaid (`FK`) on a raw Markdown file (`paper.md`) produces an artificially low grade (`FK ~11–13`) because Markdown table rows and headers are parsed as short sentences, masking `Very Dense` or `Impenetrable` prose (`FK 20+`).
+   - Always strip Markdown tables, fenced code blocks, inline code tokens, and LaTeX display/inline math (`$$...$$`, `$...$`) before evaluating readability (e.g., via `~/projects/docstats` or `scripts/validate_preprint.py`).
+2. **Target Clean-Prose Metrics (`Dense` Systems-Paper Band):**
+   - **Flesch-Kincaid Grade (`flesch_kincaid_grade`):** **12.0 to 14.5** (warn if $> 16.0$).
+   - **Flesch Reading Ease (`flesch_reading_ease`):** **30.0 to 50.0**.
+   - **Average Sentence Length (`ASL`):** **15.0 to 19.0 words/sentence** (never exceed `22.0` w/s overall; avoid sentences $\ge 38$ words).
+   - **Average Syllables per Word (`ASW`):** **1.75 to 1.88 syllables/word**.
+   - **Axis B (`ai_tell_score` in `docstats`):** **$\ge 9.5 / 10.0$** (`0` em-dashes, `0` throat-clearing openers, `0` binary contrasts, `0` offender adverbs, `-ly` adverb rate $\le 1.0 / 100\text{w}$, sentence-length CV $\ge 0.25$).
+3. **Three Levers to Lower Technical Density Without Losing Rigor:**
+   - **Unpack Multi-Clause Sentences:** Do not pack a conceptual mechanism, 4 parenthetical metrics, and 3 CLI flags into a single 60-word sentence. State the mechanism in one crisp 12–16 word sentence, then report the numeric comparison in the next sentence.
+   - **Replace Polysyllabic Nominalizations with Plain Verbs and Short Nouns:** After defining a formal term once, prefer *"syntax checks"* over *"syntactic validity verification"*, *"token generation"* over *"autoregressive generation"*, *"rounding coordinates"* over *"coordinate canonicalization"*, and *"matching path commands"* over *"command-signature parity"*.
+   - **Paragraph Unity & Rhythm:** Open each paragraph with a direct 10–15 word topic sentence stating the claim, develop the formal or empirical mechanism in the middle sentences, and close with the quantitative consequence or table/figure reference.

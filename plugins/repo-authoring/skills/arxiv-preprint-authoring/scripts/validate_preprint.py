@@ -3,8 +3,8 @@
 
 Audits a preprint directory (e.g., docs/preprint/) across 6 formal pillars (100 points):
 1. Structural Completeness in paper.md (20 pts)
-2. House-Style & Clarity Gate: Zero Em-Dashes & Zero Throat-Clearing in Prose (20 pts)
-3. Quantitative Table Conventions & Ground-Truth CSV Presence (20 pts)
+2. House-Style & Clean-Prose Clarity Gate: Zero Em-Dashes, Zero Throat-Clearing, & Readability Band (20 pts)
+3. Quantitative Table Conventions, Main-Body Table Economy, & Ground-Truth CSV Presence (20 pts)
 4. Luminous Graphviz Semantic Class Conformance & Rendered Assets (15 pts)
 5. Typst (@preview/arkheion:0.1.2) Math & Booktabs Table Hygiene (15 pts)
 6. End-to-End Typst PDF Compilation Verification (10 pts)
@@ -35,13 +35,78 @@ LATEX_IN_TYPST_PATTERNS = [
     (r"\\mathcal\b", "LaTeX '\\mathcal' in Typst (use 'cal(...)')"),
     (r"\\mathbb\b", "LaTeX '\\mathbb' in Typst (use 'bb(...)')"),
     (r"\\frac\b", "LaTeX '\\frac' in Typst (use 'frac(a, b)')"),
+    (r"\bplus\.circle\b", "Invalid Typst symbol 'plus.circle' (use 'plus.o')"),
+    (r"\bsect\b", "Invalid Typst symbol 'sect' (use 'inter')"),
 ]
+
+
+def _count_syllables_word(word: str) -> int:
+    w = re.sub(r"[^a-z]", "", word.lower())
+    if not w:
+        return 0
+    if len(w) <= 3:
+        return 1
+    w = re.sub(r"(?:[^laeiouy]es|ed|[^laeiouy]e)$", "", w)
+    w = re.sub(r"^y", "", w)
+    vowel_groups = re.findall(r"[aeiouy]{1,2}", w)
+    return max(1, len(vowel_groups))
+
+
+def compute_clean_prose_metrics(md_text: str) -> dict:
+    """Strips Markdown tables, code blocks, and LaTeX math to measure true prose readability."""
+    text = re.sub(r"```[\s\S]*?```", " ", md_text)
+    text = re.sub(r"\$\$[\s\S]*?\$\$", " ", text)
+    text = re.sub(r"\$[^$\n]+\$", "math_expr", text)
+    text = re.sub(r"`[^`\n]+`", "code_token", text)
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    prose_lines = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or (s.startswith("|") and s.endswith("|")) or s.startswith("---"):
+            continue
+        if s.startswith("#"):
+            continue
+        prose_lines.append(re.sub(r"\*\*([^*]+)\*\*|\*([^*]+)\*", r"\1\2", s))
+
+    clean = " ".join(prose_lines)
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if len(s.split()) >= 3]
+    words = re.findall(r"[A-Za-z0-9_'-]+", clean)
+    word_count = max(1, len(words))
+    sent_count = max(1, len(sentences))
+    syllables = sum(_count_syllables_word(w) for w in words)
+
+    asl = word_count / sent_count
+    asw = syllables / word_count
+    fk_grade = 0.39 * asl + 11.8 * asw - 15.59
+    fre = 206.835 - 1.015 * asl - 84.6 * asw
+
+    if fk_grade < 10.0:
+        band = "Accessible (6-10)"
+    elif fk_grade <= 16.0:
+        band = "Dense (10-16)"
+    elif fk_grade <= 22.0:
+        band = "Very Dense (16-22)"
+    else:
+        band = "Impenetrable (>22)"
+
+    return {
+        "word_count": word_count,
+        "sentence_count": sent_count,
+        "avg_words_per_sentence": round(asl, 2),
+        "avg_syllables_per_word": round(asw, 2),
+        "flesch_kincaid_grade": round(fk_grade, 2),
+        "flesch_reading_ease": round(fre, 2),
+        "band": band,
+    }
 
 
 def check_preprint(preprint_dir: Path) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
     pillar_scores: dict[str, int] = {}
+    clean_prose_metrics: dict = {}
 
     paper_md = preprint_dir / "paper.md"
     paper_typ = preprint_dir / "paper.typ"
@@ -79,7 +144,7 @@ def check_preprint(preprint_dir: Path) -> dict:
     pillar_scores["pillar_1_structure"] = p1_score
 
     # -------------------------------------------------------------------------
-    # Pillar 2: House-Style & Clarity Gate (20 pts)
+    # Pillar 2: House-Style & Clean-Prose Clarity Gate (20 pts)
     # -------------------------------------------------------------------------
     p2_score = 20
     if md_text:
@@ -91,18 +156,25 @@ def check_preprint(preprint_dir: Path) -> dict:
                 continue
             if in_code_block:
                 continue
-            # Check for prohibited em-dashes in prose
             if "—" in line:
                 errors.append(
                     f"[Pillar 2: House Style] paper.md:{lineno} contains prohibited em-dash ('—'). "
                     "Use a colon, semicolon, or parentheses instead."
                 )
                 p2_score = max(0, p2_score - 5)
-            # Check for throat-clearing clichés
             for pat, desc in THROAT_CLEARING_PATTERNS:
                 if re.search(pat, line, flags=re.IGNORECASE):
                     errors.append(f"[Pillar 2: House Style] paper.md:{lineno} {desc}.")
                     p2_score = max(0, p2_score - 5)
+
+        clean_prose_metrics = compute_clean_prose_metrics(md_text)
+        if clean_prose_metrics["flesch_kincaid_grade"] > 16.5:
+            warnings.append(
+                f"[Pillar 2: Clean-Prose Density] Clean-prose Flesch-Kincaid grade is "
+                f"{clean_prose_metrics['flesch_kincaid_grade']} ({clean_prose_metrics['band']}, "
+                f"ASL={clean_prose_metrics['avg_words_per_sentence']} w/s). "
+                "Target the 'Dense' band (FK 12.0-14.5, ASL 15-19 w/s)."
+            )
 
     pillar_scores["pillar_2_house_style"] = p2_score
 
@@ -131,6 +203,16 @@ def check_preprint(preprint_dir: Path) -> dict:
             p3_score = max(0, p3_score - 5)
         if "**Cross-Domain**" not in md_text and "Cross-Domain Mean" not in md_text and "**Mean**" not in md_text:
             warnings.append("[Pillar 3: Data & Tables] Main scoreboard table should include a Cross-Domain Mean summary block.")
+
+        # Check Section 4.2 table economy (warn if > 1 table in Section 4.2 instead of moving breakdowns to Appendix C)
+        sec42_match = re.search(r"^###\s+4\.2\s+Main Results\b([\s\S]*?)(?=^##\s+|\Z)", md_text, flags=re.MULTILINE)
+        if sec42_match:
+            sec42_tables = re.findall(r"^\|\s*:?---", sec42_match.group(1), flags=re.MULTILINE)
+            if len(sec42_tables) > 1:
+                warnings.append(
+                    f"[Pillar 3: Table Economy] Section 4.2 contains {len(sec42_tables)} tables. "
+                    "Keep only the Cross-Domain Mean summary table in Section 4.2 and move per-domain breakdowns to Appendix C."
+                )
 
     pillar_scores["pillar_3_tables_and_csv"] = p3_score
 
@@ -179,7 +261,6 @@ def check_preprint(preprint_dir: Path) -> dict:
             if re.search(pat, typ_text):
                 errors.append(f"[Pillar 5: Typst Hygiene] paper.typ contains {desc}.")
                 p5_score = max(0, p5_score - 5)
-        # Check for alignment keywords accidentally placed in columns: (...)
         bad_cols = re.findall(r"columns:\s*\([^)]*\b(?:left|right|center)\b[^)]*\)", typ_text)
         if bad_cols:
             errors.append(
@@ -220,6 +301,7 @@ def check_preprint(preprint_dir: Path) -> dict:
         "passed": passed,
         "score": total_score,
         "pillar_scores": pillar_scores,
+        "clean_prose_metrics": clean_prose_metrics,
         "errors": errors,
         "warnings": warnings,
     }
@@ -240,6 +322,13 @@ def main() -> int:
         print(f"[{status}] Preprint Audit Score: {result['score']}/100")
         for k, v in result["pillar_scores"].items():
             print(f"  - {k}: {v}")
+        if result.get("clean_prose_metrics"):
+            m = result["clean_prose_metrics"]
+            print(
+                f"  - clean_prose: FK={m['flesch_kincaid_grade']} ({m['band']}), "
+                f"FRE={m['flesch_reading_ease']}, ASL={m['avg_words_per_sentence']} w/s, "
+                f"ASW={m['avg_syllables_per_word']} syl/w"
+            )
         for err in result["errors"]:
             print(f"! {err}")
         for warn in result["warnings"]:
