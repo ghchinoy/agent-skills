@@ -45,7 +45,7 @@ Run `scripts/audit-repo.mjs` against a single repository or across all discovere
 
 ```bash
 # Audit a single repository (human-readable Markdown table + details)
-./scripts/audit-repo.mjs ~/projects/agent-skills
+./scripts/audit-repo.mjs ~/projects/my-target-repo
 
 # Audit all local repositories in ~/projects and emit JSON
 ./scripts/audit-repo.mjs ~/projects --all --json

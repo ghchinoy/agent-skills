@@ -106,10 +106,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          # site/package.json declares engines.node ">=22.19.0"; "22" resolves
-          # to the current 22.x, which satisfies it. tests/workflows.test.mjs
-          # pins the two to each other so they cannot drift apart.
-          node-version: '22'
+          # site/package.json declares engines.node ">=22.23.4"; "22.23.4" with
+          # check-latest: true ensures the runner satisfies the security floor
+          # rather than falling back to an older cached patch release (e.g. 22.23.3).
+          # tests/workflows.test.mjs pins the two to each other so they cannot drift apart.
+          node-version: '22.23.4'
+          check-latest: true
           cache: npm
           # site/ is a self-contained npm project, NOT a workspace member, so
           # both the cache key and `npm ci` are scoped to site/ (proposal §10.4).
@@ -196,7 +198,8 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.4'
+          check-latest: true
 
       - name: Download the deployed dist
         uses: actions/download-artifact@v4

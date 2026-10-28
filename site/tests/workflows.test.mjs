@@ -512,11 +512,14 @@ test("action-pin control: the detector rejects the unpinned forms", () => {
 });
 
 test("the Node the workflows install satisfies engines.node", async () => {
-  // §10.4 sets the floor at 22.19.0 and both workflows say `node-version: 22`.
-  // Two numbers in two files that must agree; asserted rather than assumed.
+  // package.json declares engines.node ">=22.23.4" due to October 2026 security CVEs.
+  // Workflows must pin node-version to satisfy the full MAJOR.MINOR.PATCH floor and set
+  // check-latest: true so runner images with older pre-cached releases (e.g. 22.23.3)
+  // do not bypass the security floor.
   const manifest = JSON.parse(await readFile(join(siteRoot, "package.json"), "utf8"));
-  const floor = manifest.engines.node.match(/^>=\s*(\d+)\./);
-  assert.ok(floor, `engines.node is "${manifest.engines.node}" — expected a >=MAJOR.x floor`);
+  const floorMatch = manifest.engines.node.match(/^>=\s*(\d+)\.(\d+)\.(\d+)$/);
+  assert.ok(floorMatch, `engines.node is "${manifest.engines.node}" — expected a >=MAJOR.MINOR.PATCH floor`);
+  const floor = [Number(floorMatch[1]), Number(floorMatch[2]), Number(floorMatch[3])];
 
   const { applies, reason } = APPLICABILITY["node floor"];
   const all = await allWorkflows();
@@ -526,20 +529,33 @@ test("the Node the workflows install satisfies engines.node", async () => {
   assert.ok(reason.length > 40, "the skip has no stated reason");
   assert.ok(subject.length >= 2, `only ${subject.length} workflow(s) are in scope: ${skipped.join(", ")}`);
   for (const { name, wf } of subject) {
-    const versions = [];
+    const steps = [];
     for (const job of Object.values(wf.jobs)) {
       for (const step of job.steps ?? []) {
         if (String(step.uses ?? "").startsWith("actions/setup-node@")) {
-          versions.push(String(step.with?.["node-version"] ?? ""));
+          steps.push({
+            version: String(step.with?.["node-version"] ?? ""),
+            checkLatest: step.with?.["check-latest"],
+          });
         }
       }
     }
-    assert.ok(versions.length > 0, `${name} never sets up Node`);
-    for (const v of versions) {
-      assert.match(v, /^\d+/, `${name} requests node-version "${v}"`);
+    assert.ok(steps.length > 0, `${name} never sets up Node`);
+    for (const { version: v, checkLatest } of steps) {
+      assert.match(v, /^\d+\.\d+\.\d+$/, `${name} requests node-version "${v}" — expected MAJOR.MINOR.PATCH`);
+      const parts = v.split(".").map(Number);
+      const satisfies =
+        parts[0] > floor[0] ||
+        (parts[0] === floor[0] &&
+          (parts[1] > floor[1] || (parts[1] === floor[1] && parts[2] >= floor[2])));
       assert.ok(
-        Number(v.split(".")[0]) >= Number(floor[1]),
+        satisfies,
         `${name} installs Node ${v}, below the declared floor ${manifest.engines.node}`,
+      );
+      assert.equal(
+        checkLatest,
+        true,
+        `${name} must set check-latest: true to avoid stale runner cache`,
       );
     }
   }

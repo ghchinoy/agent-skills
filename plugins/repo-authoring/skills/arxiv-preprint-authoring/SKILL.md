@@ -93,7 +93,7 @@ Consult [`references/house-style-and-clarity-gate.md`](references/house-style-an
 Always run the deterministic validator before concluding your turn:
 
 ```bash
-python3 /Users/ghchinoy/projects/agent-skills/plugins/repo-authoring/skills/arxiv-preprint-authoring/scripts/validate_preprint.py \
+python3 scripts/validate_preprint.py \
   /path/to/docs/preprint --json
 ```
 
