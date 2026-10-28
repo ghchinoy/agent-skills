@@ -59,8 +59,9 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`okf-validate`**: Checks §11 conformance and trust-signal well-formedness, reporting everything as advisories and never rejecting a bundle for optional, unknown, or broken content. Works fully by hand; opportunistically shells to `okfcli`/`binder`/`factile`/`openknowledge` when installed.
 
 ### 9. ⚖️ Automation Governance (`plugins/automation-governance`)
-*Framework and tooling for evaluating workflow, skill, and process automation readiness based on Google DeepMind research.*
+*Frameworks and tooling for evaluating AI automation readiness (Google DeepMind Intelligent AI Delegation) and auditing AI agents against W3C User Agent fiduciary duties (Protection, Honesty, Loyalty).*
 - **`automation-readiness`**: Evaluates candidates against Google DeepMind's *Intelligent AI Delegation* framework (arXiv:2602.11865) using an 11-axis diagnostic scorecard, hard gate veto overrides, 4 automation tiers (Full Autonomy, Monitored, HITL, Human-Led), and an operational guardrail matrix. Includes scoring engine (`scripts/score.py`), scorecard rubric, and comprehensive framework reference.
+- **`user-agent-duties`**: Evaluates AI agents, coding harnesses, MCP integrations, and web-connected applications against the [W3C TAG User Agents specification](https://www.w3.org/TR/user-agents/) across 12 diagnostic axes under the three W3C fiduciary duties (**Protection § 3.1**, **Honesty § 3.2**, and **Loyalty § 3.3**) and 5 hard gates. Includes live W3C specification update checker and deterministic scoring engine (`scripts/score_agent.py`), scorecard rubric, and W3C reference guide (`references/W3C_USER_AGENTS.md`).
 
 ### 10. ☁️ GCP Management (`plugins/gcp-management`)
 *Google Cloud Platform & Firebase portfolio assessment, itemized BigQuery cost analysis, quota governance, and project consolidation.*

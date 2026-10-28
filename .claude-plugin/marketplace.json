@@ -87,9 +87,10 @@
     {
       "name": "automation-governance",
       "source": "./plugins/automation-governance",
-      "description": "Framework and tooling for evaluating workflow, skill, and process automation readiness based on the Google DeepMind Intelligent AI Delegation framework.",
+      "description": "Frameworks and tooling for evaluating AI automation readiness (Google DeepMind Intelligent AI Delegation) and auditing AI agents against W3C User Agent fiduciary duties (Protection, Honesty, Loyalty).",
       "skills": [
-        "./plugins/automation-governance/skills/automation-readiness"
+        "./plugins/automation-governance/skills/automation-readiness",
+        "./plugins/automation-governance/skills/user-agent-duties"
       ]
     },
     {
