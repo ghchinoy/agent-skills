@@ -69,7 +69,8 @@ export const PINNED_FIELDS = ["version", "status", "commit"];
 /** Fields that may never be absent: without these there is no pin at all. */
 export const REQUIRED_FIELDS = ["id", "name", "home", "repository", "commit"];
 
-const SHA1 = /^[0-9a-f]{40}$/;
+const SHA1_HEX_LEN = 20 * 2;
+const SHA1 = new RegExp(`^[0-9a-f]{${SHA1_HEX_LEN}}$`);
 
 /**
  * Validates one specification entry. Throws on anything that would let a stale
@@ -98,7 +99,7 @@ export function validateSpec(spec, index) {
   if (!SHA1.test(spec.commit)) {
     throw new Error(
       `${where} (${spec.id}) has commit ${JSON.stringify(spec.commit)}, which is ` +
-        `not a 40-character hex sha. An abbreviated or symbolic commit is not a ` +
+        `not a ${SHA1_HEX_LEN}-character hex sha. An abbreviated or symbolic commit is not a ` +
         `pin: it can resolve to different objects at different times.`,
     );
   }

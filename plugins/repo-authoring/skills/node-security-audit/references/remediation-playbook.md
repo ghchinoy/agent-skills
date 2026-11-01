@@ -85,8 +85,20 @@ Several repositories enforce strict dependency reproducibility via `tests/pins.t
 7. **Sync `overrides.<pkg>` When Updating Direct Dependencies (`EOVERRIDE`)**:
    - If `package.json` already declares `"overrides": { "vite": "..." }` (common in `rolldown-vite` or beta Vite projects), updating `devDependencies.vite` without updating `overrides.vite` to the exact same version string causes `npm install` to fail with `EOVERRIDE`. Always update both together.
 8. **Targeted Overrides for False-Downgrade Chains (`firebase`, `gts`, `lit-audio-ui`)**:
-   - **`firebase@12.x` / `@firebase/rules-unit-testing@4.x`**: `npm audit` recommends downgrading to `firebase@9.14.0` or `@firebase/rules-unit-testing@2.0.7` due to transitive `@grpc/grpc-js <=1.13.5`. Fix cleanly with `"overrides": { "@grpc/grpc-js": "^1.13.6" }`.
+   - **`firebase@12.x` / `firebase@13.x` / `@firebase/rules-unit-testing@4.x`**: Even in `firebase@13.1.0` (`@firebase/firestore@4.19.0`), upstream pins `@grpc/grpc-js` to `~1.9.0` and pulls vulnerable `re2js` (`GHSA-gg6h-894w-4m9c`), causing `npm audit` to recommend a breaking downgrade to `firebase@9.14.0` or `@firebase/rules-unit-testing@2.0.7`. Fix both cleanly in `package.json`:
+     ```json
+     "overrides": {
+       "@grpc/grpc-js": "^1.14.7",
+       "re2js": "^2.8.7"
+     }
+     ```
+     *Note*: `firebase@13.x` subpackages (`@firebase/app`, `@firebase/auth`, `@firebase/firestore`) declare `engines: { "node": ">=24.12.0" }`, which emits non-fatal `npm warn EBADENGINE` warnings when building on Node 22 LTS.
    - **`gts@7.x` (`tmp <=0.2.5`)**: Fix via `"overrides": { "tmp": "^0.2.6" }`.
    - **`@ghchinoy/lit-audio-ui` (`@chenglou/pretext <=0.0.4`)**: Fix via `"overrides": { "@chenglou/pretext": "^1.0.0" }`.
-9. **Fast Remote Fleet Remediation via Blobless Clones**:
-   - When remediating uncloned remote repositories discovered by `scripts/scan-remote-repos.mjs`, clone with `git clone --depth=1 --filter=blob:none` into `/tmp/opencode/remote-audit`, apply lockfile-only fixes, verify `0` vulnerabilities with `scripts/audit-repo.mjs`, push, and remove `/tmp/opencode/remote-audit`.
+9. **TypeScript 7 (`typescript@7.x`) Side-Effect CSS Imports (`TS2882`)**:
+   - Upgrading `typescript` from `5.9.x` to `7.0.x` enables `noUncheckedSideEffectImports` by default. In Vite/Lit projects that import stylesheets directly (`import './styles/theme.css'`), `tsc` will fail with `error TS2882: Cannot find module or type declarations for side-effect import of './styles/theme.css'` unless `"types": ["vite/client"]` is added to `compilerOptions` in `tsconfig.json`.
+10. **Vite 8 (Rolldown) `manualChunks` Function Syntax & Firebase Code Splitting**:
+    - Upgrading from Vite 6 to Vite 8 (`^8.3.5`, powered by Rolldown) requires `build.rollupOptions.output.manualChunks` in `vite.config.ts` to use the function form `manualChunks(id)` rather than an object map.
+    - To prevent monolithic bundles exceeding 500 kB, split `@firebase/firestore` (`vendor-firestore`) separately from `@firebase/app` + `@firebase/auth` (`vendor-firebase`), `lit` (`vendor-lit`), and `marked` (`vendor-marked`).
+11. **Fast Remote Fleet Remediation via Blobless Clones**:
+    - When remediating uncloned remote repositories discovered by `scripts/scan-remote-repos.mjs`, clone with `git clone --depth=1 --filter=blob:none` into `/tmp/opencode/remote-audit`, apply lockfile-only fixes, verify `0` vulnerabilities with `scripts/audit-repo.mjs`, push, and remove `/tmp/opencode/remote-audit`.

@@ -52,7 +52,8 @@ Run `scripts/audit-repo.mjs` against a single repository or across all discovere
 ```
 
 For each discovered Node subproject (`package.json`), `scripts/audit-repo.mjs` inspects:
-- **Pin Style**: Whether `dependencies` and `devDependencies` use exact pins (`7.4.2`) or semver ranges (`^7.4.2`).
+- **Git Remote Parity**: Checks whether the repository's tracking branch is behind `origin` before lockfiles are modified.
+- **Pin Style & Overrides**: Whether `dependencies` and `devDependencies` use exact pins (`7.4.2`) or semver ranges (`^7.4.2`), and lists active `"overrides"` / `"pnpm.overrides"` security pins (e.g., `@grpc/grpc-js`, `re2js`).
 - **Node Floor**: `engines.node`, `.nvmrc`, `.node-version`, and `.github/workflows/*.yml` `node-version` entries vs. minimum patched Node security floors (`22.23.4`, `24.22.1`, `26.12.1`).
 - **Guardrail Coupling**: Any test files under `tests/` or `test/` that assert exact version strings, `PINNED` maps, `engines.node` floors, or lockfile invariants.
 - **Vulnerability Triage**: Direct and transitive vulnerabilities from `npm audit --json`, grouped by severity (`critical`, `high`, `moderate`, `low`) and whether a non-breaking semver fix is available.

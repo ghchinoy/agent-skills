@@ -233,6 +233,7 @@ async function auditSubproject(pkgPath, workspaceRoot) {
 
   const enginesNode = manifest.engines?.node ?? null;
   const enginesCheck = enginesNode ? meetsSecurityFloor(parseSemver(enginesNode)) : null;
+  const overrides = manifest.overrides ?? manifest.pnpm?.overrides ?? {};
 
   const guardrails = await detectGuardrails(subprojectDir);
   const audit = await runPackageAudit(subprojectDir);
@@ -242,6 +243,7 @@ async function auditSubproject(pkgPath, workspaceRoot) {
     path: subprojectDir,
     name: manifest.name ?? basename(subprojectDir),
     pinPolicy,
+    overrides,
     enginesNode,
     enginesFloorOk: enginesCheck ? enginesCheck.ok : null,
     enginesFloorNote: enginesCheck ? enginesCheck.reason : "no engines.node declared",
