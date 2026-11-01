@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * audit-go-repo.mjs — Audits one or more Go repositories for go.mod toolchain floors,
- * Dockerfile builder/runtime alignment, .gitignore/.gcloudignore hygiene, and git sync status.
+ * stdlib security patch floors (go >= 1.26.10), Dockerfile builder/runtime alignment,
+ * .gitignore/.gcloudignore hygiene, git sync status, and optional govulncheck summaries.
  *
  * Usage:
- *   ./scripts/audit-go-repo.mjs <path> [--json]
+ *   ./scripts/audit-go-repo.mjs <path> [--vulncheck] [--json]
  */
 
 import { execFile } from "node:child_process";
@@ -16,6 +17,7 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 
 const RECOMMENDED_GO_FLOOR = [1, 26, 0];
+const RECOMMENDED_GO_PATCH_FLOOR = [1, 26, 10];
 const RECOMMENDED_IGNORES = [".serena", ".beads", ".dolt"];
 
 async function exists(p) {
@@ -135,6 +137,14 @@ async function inspectDockerfile(modDir, goVersionTuple) {
   };
 }
 
+function hasIgnoreEntry(raw, token, allowSubpath = false) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = allowSubpath
+    ? new RegExp(`^\\s*\\/?${escaped}(?:\\/|$)`, "m")
+    : new RegExp(`^\\s*\\/?${escaped}\\/?\\s*$`, "m");
+  return pattern.test(raw);
+}
+
 async function inspectIgnoreFiles(modDir) {
   const gitignorePath = join(modDir, ".gitignore");
   const gcloudignorePath = join(modDir, ".gcloudignore");
@@ -146,10 +156,12 @@ async function inspectIgnoreFiles(modDir) {
   const gcloudRaw = hasGcloudignore ? await readFile(gcloudignorePath, "utf8") : "";
 
   const missingGitignore = hasGitignore
-    ? RECOMMENDED_IGNORES.filter((item) => !gitRaw.includes(item))
+    ? RECOMMENDED_IGNORES.filter(
+        (item) => !hasIgnoreEntry(gitRaw, item, item === ".beads"),
+      )
     : [];
   const missingGcloudignore = hasGcloudignore
-    ? RECOMMENDED_IGNORES.filter((item) => !gcloudRaw.includes(item))
+    ? RECOMMENDED_IGNORES.filter((item) => !hasIgnoreEntry(gcloudRaw, item, false))
     : [];
 
   return {
@@ -171,17 +183,86 @@ async function checkGitStatus(modDir) {
   }
 }
 
-async function auditGoModule(modPath, workspaceRoot) {
+async function runGovulncheck(modDir) {
+  let rawOut = "";
+  try {
+    const { stdout } = await run(
+      "go",
+      ["run", "golang.org/x/vuln/cmd/govulncheck@latest", "-json", "./..."],
+      { cwd: modDir, maxBuffer: 64 * 1024 * 1024 },
+    );
+    rawOut = stdout;
+  } catch (err) {
+    rawOut = err.stdout ?? "";
+    if (!rawOut) {
+      return { error: err.message };
+    }
+  }
+
+  const symbolOsvs = new Set();
+  const packageOsvs = new Set();
+  const moduleOsvs = new Set();
+
+  // Stream of concatenated JSON objects emitted by govulncheck -json
+  const decoder = rawOut.split(/\n(?=\{)/);
+  let buf = "";
+  for (const chunk of decoder) {
+    buf += (buf ? "\n" : "") + chunk;
+    try {
+      const msg = JSON.parse(buf);
+      buf = "";
+      if (msg.finding && msg.finding.osv) {
+        const id = msg.finding.osv;
+        const firstTrace = (msg.finding.trace ?? [])[0] ?? {};
+        if (firstTrace.function) {
+          symbolOsvs.add(id);
+        } else if (firstTrace.package) {
+          packageOsvs.add(id);
+        } else {
+          moduleOsvs.add(id);
+        }
+      }
+    } catch {
+      // wait for complete JSON object
+    }
+  }
+
+  for (const id of symbolOsvs) {
+    packageOsvs.delete(id);
+    moduleOsvs.delete(id);
+  }
+  for (const id of packageOsvs) {
+    moduleOsvs.delete(id);
+  }
+
+  const uncalledNotices = [...moduleOsvs].filter((id) => id === "GO-2026-5932");
+
+  return {
+    symbolCount: symbolOsvs.size,
+    packageCount: packageOsvs.size,
+    moduleCount: moduleOsvs.size,
+    symbolIds: [...symbolOsvs].sort(),
+    packageIds: [...packageOsvs].sort(),
+    moduleIds: [...moduleOsvs].sort(),
+    uncalledDeprecationNotices: uncalledNotices,
+  };
+}
+
+async function auditGoModule(modPath, workspaceRoot, withVulncheck = false) {
   const modDir = dirname(modPath);
   const relDir = relative(workspaceRoot, modDir) || basename(modDir);
   const raw = await readFile(modPath, "utf8");
   const parsed = parseGoMod(raw);
   const goTuple = parseSemver(parsed.goVersion);
   const meetsFloor = goTuple ? compareSemver(goTuple, RECOMMENDED_GO_FLOOR) >= 0 : false;
+  const meetsPatchFloor = goTuple
+    ? compareSemver(goTuple, RECOMMENDED_GO_PATCH_FLOOR) >= 0
+    : false;
 
   const dockerfile = await inspectDockerfile(modDir, goTuple);
   const ignores = await inspectIgnoreFiles(modDir);
   const git = await checkGitStatus(modDir);
+  const vulncheck = withVulncheck ? await runGovulncheck(modDir) : null;
 
   return {
     subproject: relDir,
@@ -190,24 +271,27 @@ async function auditGoModule(modPath, workspaceRoot) {
     goVersion: parsed.goVersion,
     toolchain: parsed.toolchain,
     meetsGo126Floor: meetsFloor,
+    meetsGo126PatchFloor: meetsPatchFloor,
     directDependencyCount: parsed.directDeps.length,
     directDependencies: parsed.directDeps,
     dockerfile,
     ignores,
     git,
+    ...(vulncheck ? { vulncheck } : {}),
   };
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const jsonFlag = args.includes("--json");
+  const vulncheckFlag = args.includes("--vulncheck");
   const targetArg = args.find((a) => !a.startsWith("--")) ?? process.cwd();
   const targetPath = resolve(targetArg);
 
   const modPaths = await findGoMods(targetPath, 5);
   const reports = [];
   for (const modPath of modPaths) {
-    reports.push(await auditGoModule(modPath, targetPath));
+    reports.push(await auditGoModule(modPath, targetPath, vulncheckFlag));
   }
 
   const summary = {
@@ -215,6 +299,7 @@ async function main() {
     targetPath,
     modulesScanned: reports.length,
     belowGoFloor: reports.filter((r) => !r.meetsGo126Floor).length,
+    belowGoPatchFloor: reports.filter((r) => !r.meetsGo126PatchFloor).length,
     dockerfileDrift: reports.filter((r) => r.dockerfile.present && r.dockerfile.builderAligned === false).length,
     reports,
   };
@@ -227,13 +312,15 @@ async function main() {
   console.log(`# Go & Container Security Audit Report`);
   console.log(`- **Target**: \`${targetPath}\``);
   console.log(
-    `- **Go Modules Scanned**: ${summary.modulesScanned} (${summary.belowGoFloor} below \`go 1.26.0\` floor, ${summary.dockerfileDrift} with Dockerfile toolchain drift)\n`,
+    `- **Go Modules Scanned**: ${summary.modulesScanned} (${summary.belowGoFloor} below \`go 1.26.0\` module floor, ${summary.belowGoPatchFloor} below \`go 1.26.10\` stdlib security floor, ${summary.dockerfileDrift} with Dockerfile toolchain drift)\n`,
   );
 
+  const vulnHeader = vulncheckFlag ? " `govulncheck` (Sym/Pkg/Mod) |" : "";
+  const vulnSep = vulncheckFlag ? " :--- |" : "";
   console.log(
-    `| Subproject | Module | \`go.mod\` | Floor (\`>=1.26\`) | Direct Deps | Dockerfile Builder | \`apt-get upgrade\` | Git Sync |`,
+    `| Subproject | Module | \`go.mod\` | Floor (\`>=1.26.10\`) | Direct Deps | Dockerfile Builder | \`apt-get upgrade\` |${vulnHeader} Git Sync |`,
   );
-  console.log(`| :--- | :--- | :--- | :--- | ---: | :--- | :--- | :--- |`);
+  console.log(`| :--- | :--- | :--- | :--- | ---: | :--- | :--- |${vulnSep} :--- |`);
 
   for (const r of reports) {
     const dfBuilder = !r.dockerfile.present
@@ -247,8 +334,18 @@ async function main() {
         ? "OK"
         : "MISSING";
     const gitState = r.git.behind ? `BEHIND (${r.git.branchStatus})` : "OK";
+    const floorStatus = r.meetsGo126PatchFloor
+      ? "OK"
+      : r.meetsGo126Floor
+        ? "STDLIB-PATCH (`<1.26.10`)"
+        : "UPGRADE (`<1.26.0`)";
+    const vulnCol = vulncheckFlag
+      ? r.vulncheck?.error
+        ? ` ERROR |`
+        : ` **${r.vulncheck.symbolCount}** / ${r.vulncheck.packageCount} / ${r.vulncheck.moduleCount} |`
+      : "";
     console.log(
-      `| \`${r.subproject}\` | \`${r.moduleName ?? "—"}\` | \`${r.goVersion ?? "—"}\` | ${r.meetsGo126Floor ? "OK" : "UPGRADE"} | ${r.directDependencyCount} | ${dfBuilder} | ${dfUpgrade} | ${gitState} |`,
+      `| \`${r.subproject}\` | \`${r.moduleName ?? "—"}\` | \`${r.goVersion ?? "—"}\` | ${floorStatus} | ${r.directDependencyCount} | ${dfBuilder} | ${dfUpgrade} |${vulnCol} ${gitState} |`,
     );
   }
 }

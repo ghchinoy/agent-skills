@@ -14,10 +14,12 @@ When a project's `go.mod` specifies `go 1.25.5` (even with `GOTOOLCHAIN=auto`), 
 go: cloud.google.com/go/auth@v0.24.2 requires go >= 1.26.0 (running go 1.25.5; GOTOOLCHAIN=go1.25.5+auto)
 ```
 
-### The Fix Sequence
-1. Update the `go` directive in `go.mod` **first** (e.g., `go 1.26.10`) so `GOTOOLCHAIN=auto` activates the `go1.26.x` toolchain immediately.
+### The Fix Sequence & The `GOTOOLCHAIN=auto` Patch-Pin Trap
+1. Update the `go` directive in `go.mod` **first** to **`go 1.26.10`** (`go get go@1.26.10`) so `GOTOOLCHAIN=auto` activates the patched `go1.26.10` toolchain immediately.
+   - **Beware `go 1.26.0`**: If the host's base binary is `go1.25.5` with `GOTOOLCHAIN=go1.25.5+auto` and `go.mod` declares `go 1.26.0` (with no `toolchain` directive), Go downloads and compiles against `go1.26.0` rather than `go1.26.10`, leaving **36 reachable standard-library vulnerabilities** (`GO-2026-4599` through `GO-2026-6809` in `net/http`, `crypto/tls`, `crypto/x509`, `html/template`, `mime/multipart`, and `os`) unpatched.
 2. Run the full upgrade and tidy pass:
    ```bash
+   go get go@1.26.10
    go get -u ./...
    go mod tidy
    ```

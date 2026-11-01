@@ -780,6 +780,98 @@ def format_markdown_report(
     return "\n".join(md) + "\n"
 
 
+def scan_repository_signals(repo_dir: str) -> Dict[str, Any]:
+    """Scans a repository for objective W3C User Agent (§§ 2.1, 3.1-3.3) signals."""
+    root = os.path.abspath(repo_dir)
+    skip_dirs = {".git", "node_modules", "vendor", "dist", ".astro", ".serena", ".beads", ".dolt"}
+    source_exts = {".go", ".ts", ".js", ".mjs", ".py", ".rs"}
+
+    wildcard_cors_hits: List[str] = []
+    origin_guard_hits: List[str] = []
+    path_guard_hits: List[str] = []
+    user_agent_header_hits: List[str] = []
+    bare_http_get_hits: List[str] = []
+    dry_run_hits: List[str] = []
+    signal_cancel_hits: List[str] = []
+
+    files_scanned = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames if d not in skip_dirs and not d.startswith(".site-e2e-")
+        ]
+        for fname in sorted(filenames):
+            _, ext = os.path.splitext(fname)
+            if ext not in source_exts or fname.endswith("_test.go") or fname.endswith(".test.mjs"):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            rel = os.path.relpath(fpath, root)
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+            except OSError:
+                continue
+            files_scanned += 1
+            for lineno, line in enumerate(lines, start=1):
+                loc = f"{rel}:{lineno}"
+                if re.search(r'Access-Control-Allow-Origin["\']?\s*,\s*["\']\*["\']', line):
+                    wildcard_cors_hits.append(loc)
+                if re.search(r"isAllowedLocalOrigin|Access-Control-Allow-Origin", line) and "*" not in line:
+                    origin_guard_hits.append(loc)
+                if re.search(r"EvalSymlinks|IsPathWithinProjects|realpath", line):
+                    path_guard_hits.append(loc)
+                if re.search(r'["\']User-Agent["\']', line):
+                    user_agent_header_hits.append(loc)
+                if re.search(r"\b(?:http|Client)\.Get\(", line):
+                    bare_http_get_hits.append(loc)
+                if re.search(r'["\']dry-run["\']|--dry-run', line):
+                    dry_run_hits.append(loc)
+                if re.search(r"signal\.NotifyContext|CancelProjectExecution|WithCancel", line):
+                    signal_cancel_hits.append(loc)
+
+    return {
+        "target_repo": root,
+        "files_scanned": files_scanned,
+        "protection_p2_user_agent": {
+            "explicit_user_agent_headers": user_agent_header_hits,
+            "bare_http_get_calls": bare_http_get_hits,
+            "status": "PASS" if user_agent_header_hits and not bare_http_get_hits else "REVIEW",
+        },
+        "protection_p4_origin_and_file_isolation": {
+            "wildcard_cors_hits": wildcard_cors_hits,
+            "scoped_origin_guards": origin_guard_hits,
+            "symlink_path_guards": path_guard_hits,
+            "status": "FAIL_GATE_1" if wildcard_cors_hits else ("PASS" if path_guard_hits else "REVIEW"),
+        },
+        "honesty_h1_consent_and_dry_run": {
+            "dry_run_flags": dry_run_hits,
+            "status": "PASS" if dry_run_hits else "REVIEW",
+        },
+        "loyalty_l4_contestability_and_cancellation": {
+            "cancellation_hooks": signal_cancel_hits,
+            "status": "PASS" if signal_cancel_hits else "REVIEW",
+        },
+    }
+
+
+def format_repo_scan_markdown(scan: Dict[str, Any]) -> str:
+    p2 = scan["protection_p2_user_agent"]
+    p4 = scan["protection_p4_origin_and_file_isolation"]
+    h1 = scan["honesty_h1_consent_and_dry_run"]
+    l4 = scan["loyalty_l4_contestability_and_cancellation"]
+    md = [
+        f"# W3C User Agent Codebase Pre-Scan: `{scan['target_repo']}`\n",
+        f"- **Source Files Scanned:** {scan['files_scanned']}\n",
+        "| W3C Duty Axis | Signal Checked | Status | Evidence Locations |",
+        "| :--- | :--- | :---: | :--- |",
+        f"| **P2. Data Minimization (§ 3.1)** | Explicit `User-Agent` header vs. bare `http.Get` | `{p2['status']}` | UA: `{len(p2['explicit_user_agent_headers'])}`, Bare Get: `{len(p2['bare_http_get_calls'])}` |",
+        f"| **P4. Origin & File Isolation (§ 3.1)** | Localhost CORS guard & symlink traversal check | `{p4['status']}` | Wildcard CORS: `{len(p4['wildcard_cors_hits'])}`, Path guards: `{len(p4['symlink_path_guards'])}` |",
+        f"| **H1/P3. Consent & Mutative Safety (§ 3.2)** | `--dry-run` preview flags | `{h1['status']}` | `{len(h1['dry_run_flags'])}` location(s) |",
+        f"| **L4. Contestability & Override (§ 3.3)** | Signal & in-flight context cancellation | `{l4['status']}` | `{len(l4['cancellation_hooks'])}` location(s) |",
+        "",
+    ]
+    return "\n".join(md)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate AI agents against the W3C User Agents specification (Protection, Honesty, Loyalty) and check for spec updates."
@@ -788,6 +880,10 @@ def main() -> None:
         "--check-updates",
         action="store_true",
         help="Fetch https://www.w3.org/TR/user-agents/ and compare against the pinned baseline.",
+    )
+    parser.add_argument(
+        "--scan-repo",
+        help="Scan a source repository directory for objective W3C User Agent (§§ 3.1-3.3) code signals.",
     )
     parser.add_argument(
         "--input",
@@ -807,12 +903,16 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if not args.check_updates and not args.input:
-        parser.error("Provide --input <file>, --check-updates, or both.")
+    if not args.check_updates and not args.input and not args.scan_repo:
+        parser.error("Provide --input <file>, --scan-repo <dir>, --check-updates, or a combination.")
 
     update_res: Optional[Dict[str, Any]] = None
     if args.check_updates:
         update_res = check_spec_updates()
+
+    scan_res: Optional[Dict[str, Any]] = None
+    if args.scan_repo:
+        scan_res = scan_repository_signals(args.scan_repo)
 
     eval_res: Optional[Dict[str, Any]] = None
     if args.input:
@@ -820,23 +920,30 @@ def main() -> None:
         eval_res = evaluate_agent_duties(data)
         if update_res:
             eval_res["live_spec_check"] = update_res
+        if scan_res:
+            eval_res["repo_scan"] = scan_res
 
     if args.json:
-        if eval_res and update_res:
+        if eval_res:
             output_str = json.dumps(eval_res, indent=2)
-        elif eval_res:
-            output_str = json.dumps(eval_res, indent=2)
+        elif scan_res and update_res:
+            output_str = json.dumps({"repo_scan": scan_res, "live_spec_check": update_res}, indent=2)
+        elif scan_res:
+            output_str = json.dumps(scan_res, indent=2)
         else:
             output_str = json.dumps(update_res, indent=2)
     else:
         parts: List[str] = []
-        if update_res and not eval_res:
-            parts.append(format_update_check_markdown(update_res))
-        elif eval_res:
-            parts.append(format_markdown_report(eval_res, update_res))
-            if update_res:
+        if eval_res:
+            parts.append(format_markdown_report(eval_res, update_check=update_res))
+        if scan_res:
+            if parts:
                 parts.append("---\n")
-                parts.append(format_update_check_markdown(update_res))
+            parts.append(format_repo_scan_markdown(scan_res))
+        if update_res and not eval_res:
+            if parts:
+                parts.append("---\n")
+            parts.append(format_update_check_markdown(update_res))
         output_str = "\n".join(parts)
 
     if args.output:

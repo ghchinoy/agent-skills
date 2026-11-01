@@ -118,11 +118,14 @@ Check whether any non-negotiable fiduciary failure caps the agent's tier:
 - **Gate 4 (Data Hostage / Anti-Portability)**: `L3 <= 2` $\rightarrow$ Caps at **Tier 3**.
 - **Gate 5 (Unmarked External Boundary, § 2.1)**: External web content is blended with internal UI without clear origin/tool indicators $\rightarrow$ Caps at **Tier 3**.
 
-### Step 5: Run the Scorer & Emit the Fiduciary Assessment Report
+### Step 5: Run the Codebase Pre-Scanner & Scorer to Emit the Fiduciary Report
 
-Create an assessment YAML/JSON file (modeled on `assets/assessment.example.yaml`) and run the scoring engine with `--check-updates`:
+Before or alongside scoring, you can run `--scan-repo <dir>` to automatically inspect a Go, TypeScript, or Python repository for objective W3C §§ 3.1–3.3 evidence signals (such as wildcard CORS `Access-Control-Allow-Origin: *`, symlink path-traversal guards, outbound `User-Agent` headers vs. bare `http.Get`, `--dry-run` flags, and signal/context cancellation hooks):
 
 ```bash
+python3 plugins/automation-governance/skills/user-agent-duties/scripts/score_agent.py \
+  --scan-repo /path/to/repo
+
 python3 plugins/automation-governance/skills/user-agent-duties/scripts/score_agent.py \
   --check-updates \
   --input plugins/automation-governance/skills/user-agent-duties/assets/assessment.example.yaml

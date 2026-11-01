@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * audit-repo.mjs — Audits one or more repositories for Node.js runtime floors,
- * npm dependency vulnerabilities, exact-pin policies, and coupled guardrail tests.
+ * .nvmrc / .node-version / GitHub Actions workflow pins, npm/pnpm dependency
+ * vulnerabilities, exact-pin policies, and coupled guardrail tests.
  *
  * Usage:
  *   ./scripts/audit-repo.mjs <path> [--all] [--json]
@@ -9,7 +10,7 @@
 
 import { execFile } from "node:child_process";
 import { access, readdir, readFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -36,7 +37,22 @@ function parseSemver(v) {
   return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
 }
 
-function meetsSecurityFloor(verTuple) {
+function meetsSecurityFloor(verTupleOrSpec) {
+  if (typeof verTupleOrSpec === "string" && verTupleOrSpec.includes("||")) {
+    const clauses = verTupleOrSpec
+      .split("||")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const checks = clauses.map((c) => meetsSecurityFloor(parseSemver(c)));
+    const allOk = checks.length > 0 && checks.every((c) => c.ok);
+    return {
+      ok: allOk,
+      reason: checks.map((c) => c.reason).join(" ; "),
+    };
+  }
+  const verTuple = Array.isArray(verTupleOrSpec)
+    ? verTupleOrSpec
+    : parseSemver(verTupleOrSpec);
   if (!verTuple) return { ok: false, reason: "unparseable version" };
   const [maj, min, pat] = verTuple;
   const floor = SECURITY_FLOORS[maj];
@@ -80,6 +96,52 @@ async function findPackageJsons(root, maxDepth = 5, depth = 0) {
     }
   }
   return results.sort();
+}
+
+async function detectRuntimeAndCiFiles(subprojectDir, workspaceRoot) {
+  const dirsToCheck = [...new Set([subprojectDir, workspaceRoot])];
+  const findings = [];
+
+  for (const d of dirsToCheck) {
+    for (const rcName of [".nvmrc", ".node-version"]) {
+      const p = join(d, rcName);
+      if (await exists(p)) {
+        const raw = (await readFile(p, "utf8")).trim();
+        const check = meetsSecurityFloor(raw);
+        findings.push({
+          file: relative(workspaceRoot, p) || rcName,
+          version: raw,
+          ok: check.ok,
+          note: check.reason,
+        });
+      }
+    }
+    const wfDir = join(d, ".github", "workflows");
+    if (await exists(wfDir)) {
+      let wfFiles = [];
+      try {
+        wfFiles = await readdir(wfDir);
+      } catch {
+        wfFiles = [];
+      }
+      for (const wf of wfFiles) {
+        if (!/\.(yml|yaml)$/.test(wf)) continue;
+        const wfPath = join(wfDir, wf);
+        const content = await readFile(wfPath, "utf8");
+        for (const m of content.matchAll(/node-version\s*:\s*['"]?([0-9]+\.[0-9]+(?:\.[0-9]+)?|[0-9]+)['"]?/g)) {
+          const ver = m[1];
+          const check = meetsSecurityFloor(ver);
+          findings.push({
+            file: relative(workspaceRoot, wfPath) || `.github/workflows/${wf}`,
+            version: ver,
+            ok: check.ok,
+            note: check.reason,
+          });
+        }
+      }
+    }
+  }
+  return findings;
 }
 
 async function detectGuardrails(subprojectDir) {
@@ -232,9 +294,10 @@ async function auditSubproject(pkgPath, workspaceRoot) {
   const pinPolicy = depEntries.length === 0 ? "none" : allExact ? "exact" : "range";
 
   const enginesNode = manifest.engines?.node ?? null;
-  const enginesCheck = enginesNode ? meetsSecurityFloor(parseSemver(enginesNode)) : null;
+  const enginesCheck = enginesNode ? meetsSecurityFloor(enginesNode) : null;
   const overrides = manifest.overrides ?? manifest.pnpm?.overrides ?? {};
 
+  const runtimePins = await detectRuntimeAndCiFiles(subprojectDir, workspaceRoot);
   const guardrails = await detectGuardrails(subprojectDir);
   const audit = await runPackageAudit(subprojectDir);
 
@@ -247,6 +310,7 @@ async function auditSubproject(pkgPath, workspaceRoot) {
     enginesNode,
     enginesFloorOk: enginesCheck ? enginesCheck.ok : null,
     enginesFloorNote: enginesCheck ? enginesCheck.reason : "no engines.node declared",
+    runtimePins,
     directDependencies: manifest.dependencies ?? {},
     devDependencies: manifest.devDependencies ?? {},
     guardrails,
@@ -262,6 +326,12 @@ async function main() {
 
   const localNodeVer = process.versions.node;
   const localNodeCheck = meetsSecurityFloor(parseSemver(localNodeVer));
+  let realExecPath = process.execPath;
+  try {
+    realExecPath = realpathSync(process.execPath);
+  } catch {
+    // keep process.execPath
+  }
 
   const pkgPaths = await findPackageJsons(targetPath, 5);
   const reports = [];
@@ -274,6 +344,8 @@ async function main() {
     targetPath,
     localRuntime: {
       node: `v${localNodeVer}`,
+      execPath: process.execPath,
+      realpath: realExecPath,
       meetsOct2026Floor: localNodeCheck.ok,
       note: localNodeCheck.reason,
     },
@@ -288,10 +360,14 @@ async function main() {
     return;
   }
 
+  const binPathNote =
+    process.execPath !== realExecPath
+      ? ` [\`${process.execPath}\` -> \`${realExecPath}\`]`
+      : ` [\`${process.execPath}\`]`;
   console.log(`# Node Security Audit Report`);
   console.log(`- **Target**: \`${targetPath}\``);
   console.log(
-    `- **Local Runtime**: \`v${localNodeVer}\` (${localNodeCheck.ok ? "PASS" : "VULNERABLE"}: ${localNodeCheck.reason})`,
+    `- **Local Runtime**: \`v${localNodeVer}\` (${localNodeCheck.ok ? "PASS" : "VULNERABLE"}: ${localNodeCheck.reason})${binPathNote}`,
   );
   console.log(
     `- **Subprojects Scanned**: ${summary.subprojectsScanned} (${summary.vulnerableSubprojects} with npm audit vulnerabilities, ${summary.totalVulnerabilities} total findings)\n`,
@@ -305,7 +381,7 @@ async function main() {
     const c = r.audit?.counts;
     const eng = r.enginesNode
       ? `${r.enginesNode} (${r.enginesFloorOk ? "OK" : "OLD"})`
-      : "—";
+      : "*(missing)*";
     const g =
       r.guardrails.length > 0
         ? r.guardrails.map((x) => `${x.file}`).join(", ")
@@ -326,7 +402,10 @@ async function main() {
   }
 
   const actionable = reports.filter(
-    (r) => (r.audit?.counts?.total ?? 0) > 0 || r.enginesFloorOk === false,
+    (r) =>
+      (r.audit?.counts?.total ?? 0) > 0 ||
+      r.enginesFloorOk !== true ||
+      (r.runtimePins ?? []).some((p) => !p.ok),
   );
   if (actionable.length > 0) {
     console.log(`\n## Actionable Findings`);
@@ -335,6 +414,15 @@ async function main() {
       console.log(`- **Pin Policy**: \`${r.pinPolicy}\``);
       if (r.enginesNode) {
         console.log(`- **Engines Floor**: \`${r.enginesNode}\` -> ${r.enginesFloorNote}`);
+      } else {
+        console.log(
+          `- **Engines Floor**: *(missing)* -> add \`"engines": { "node": ">=22.23.4" }\` to \`package.json\``,
+        );
+      }
+      for (const p of r.runtimePins ?? []) {
+        if (!p.ok) {
+          console.log(`- **CI / Runtime Pin**: \`${p.file}\` (\`${p.version}\`) -> ${p.note}`);
+        }
       }
       if (r.guardrails.length > 0) {
         console.log(

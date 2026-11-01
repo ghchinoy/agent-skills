@@ -31,14 +31,15 @@ Always fetch and verify git tracking status before modifying `go.mod` or `go.sum
 
 ```bash
 git fetch origin
-./scripts/audit-go-repo.mjs ~/projects/my-go-repo
-./scripts/audit-go-repo.mjs ~/projects --json
+./scripts/audit-go-repo.mjs ~/projects/my-go-repo --vulncheck
+./scripts/audit-go-repo.mjs ~/projects --vulncheck --json
 ```
 
 For each discovered Go module (`go.mod`), `scripts/audit-go-repo.mjs` inspects:
-- **Go Directive Floor**: Checks whether `go` in `go.mod` meets `>= 1.26.0` so `GOTOOLCHAIN=auto` can resolve late-2026 `cloud.google.com/go` and `golang.org/x/*` releases cleanly.
+- **Go Directive & Stdlib Security Floor**: Checks both whether `go` in `go.mod` meets `>= 1.26.0` (required for late-2026 module resolution) and whether it meets `>= 1.26.10` (preventing `GOTOOLCHAIN=auto` from pinning to an unpatched `go1.26.0`–`1.26.9` stdlib with 36 reachable CVEs).
+- **Optional `govulncheck` Call-Graph Triage (`--vulncheck`)**: Runs `govulncheck -json ./...` and separates reachable **Symbol**, **Package**, and **Module** advisories while auto-identifying `GO-2026-5932` (`x/crypto/openpgp`) as an uncalled deprecation notice.
 - **Dockerfile Alignment**: Compares `FROM golang:<ver>` in any repository `Dockerfile` against `go.mod`'s `go` major.minor version, and checks whether `apt-get upgrade -y` is present in Debian/Ubuntu stages.
-- **Ignore File Parity**: Checks `.gitignore` and `.gcloudignore` for `.serena`, `.beads`, `.dolt`, and `docs-bundle`.
+- **Ignore File Parity**: Checks `.gitignore` and `.gcloudignore` for line-anchored `.serena`, `.beads`, and `.dolt` rules.
 - **Git Sync Status**: Warns if the local branch is behind `origin` before dependency files are edited.
 
 ### Step 2: Upgrade Go Modules Without Toolchain Deadlock

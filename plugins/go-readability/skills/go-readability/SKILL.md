@@ -317,7 +317,8 @@ For more detail on specific topics, see these reference files:
 -   `references/testing_failures.md` — Authoritative deep-dive on the 9 sub-decisions under `decisions#useful-test-failures`.
 -   `references/decisions_index.md` — One-line-per-rule index of style decisions mapping to rules and examples.
 -   `references/standard_go_patterns.md` — Reference for standard modern Go patterns (modules, logging with `slog`, flags, testing with `cmp.Diff`, contexts)
--   `references/self_audit_checklist.md` — Mechanical greps for catching common style violations before submitting code.
+-   `references/self_audit_checklist.md` — Mechanical recursive greps for catching common style violations before submitting code.
+-   `scripts/audit-go-readability.sh` — Executable recursive scanner that runs the self-audit checklist across an entire Go repository (`./scripts/audit-go-readability.sh /path/to/repo`).
 -   `references/cli_review_checklist.md` — Comprehensive Go CLI review checklist covering 12 categories of issues.
 -   `references/cobra_cli_patterns.md` — Cobra-specific patterns (package doc scope, `ctx` naming, inlining timeouts, testing `package main`).
 -   `references/before_after_examples.md` — Before/after code transformations showing common fixes reviewers request.

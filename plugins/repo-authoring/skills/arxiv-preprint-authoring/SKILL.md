@@ -95,6 +95,10 @@ Always run the deterministic validator before concluding your turn:
 ```bash
 python3 scripts/validate_preprint.py \
   /path/to/docs/preprint --json
+
+# Optional: verify that a Syntaxis checkout's writer.md and reviewer.md prompts are in sync
+python3 scripts/validate_preprint.py \
+  --check-syntaxis-prompts ~/projects/syntaxis
 ```
 
 If any check reports an error or warning (such as a stray em-dash, a hardcoded hex color in `.dot`, an unquoted Typst math token, or a `typst compile` failure), fix the exact line and re-run `validate_preprint.py` until it exits with code `0` (`"passed": true, "score": 100`).

@@ -307,13 +307,80 @@ def check_preprint(preprint_dir: Path) -> dict:
     }
 
 
+def check_syntaxis_prompts(syntaxis_dir: Path) -> dict:
+    """Verifies that a Syntaxis repo's pkg/prompts/{writer,reviewer}.md stay aligned with this skill."""
+    writer_md = syntaxis_dir / "pkg" / "prompts" / "writer.md"
+    reviewer_md = syntaxis_dir / "pkg" / "prompts" / "reviewer.md"
+    errors: list[str] = []
+
+    required_writer = [
+        ("table.hline", "Booktabs table.hline rule"),
+        ("Cross-Domain Mean", "Table Economy rule (Cross-Domain Mean)"),
+        ("plus.o", "Valid Typst symbol guard (plus.o / inter)"),
+        ("ASL", "Clean-Prose Readability target (ASL 15-19, ASW 1.75-1.88)"),
+        ("em-dashes", "Zero em-dashes house-style rule"),
+    ]
+    required_reviewer = [
+        ("ASL", "Clean-Prose Readability check (ASL / ASW)"),
+        ("Cross-Domain Mean", "Table Economy check"),
+        ("plus.circle", "Invalid Typst symbol check (plus.circle / sect)"),
+        ("Luminous", "Luminous Graphviz semantic class check"),
+    ]
+
+    if not writer_md.exists():
+        errors.append(f"Missing {writer_md}")
+    else:
+        w_text = writer_md.read_text(encoding="utf-8")
+        for token, desc in required_writer:
+            if token not in w_text:
+                errors.append(f"writer.md missing {desc} ('{token}')")
+
+    if not reviewer_md.exists():
+        errors.append(f"Missing {reviewer_md}")
+    else:
+        r_text = reviewer_md.read_text(encoding="utf-8")
+        for token, desc in required_reviewer:
+            if token not in r_text:
+                errors.append(f"reviewer.md missing {desc} ('{token}')")
+
+    return {
+        "passed": len(errors) == 0,
+        "syntaxis_dir": str(syntaxis_dir),
+        "errors": errors,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an arXiv / Syntaxis preprint directory.")
-    parser.add_argument("preprint_dir", type=Path, help="Path to preprint directory (e.g. docs/preprint)")
+    parser.add_argument("preprint_dir", nargs="?", type=Path, help="Path to preprint directory (e.g. docs/preprint)")
+    parser.add_argument(
+        "--check-syntaxis-prompts",
+        type=Path,
+        help="Verify that a Syntaxis repository's pkg/prompts/{writer,reviewer}.md match this skill's rules",
+    )
     parser.add_argument("--json", action="store_true", help="Emit structured JSON output")
     args = parser.parse_args()
 
+    if args.check_syntaxis_prompts and not args.preprint_dir:
+        res = check_syntaxis_prompts(args.check_syntaxis_prompts.resolve())
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            status = "PASS" if res["passed"] else "FAIL"
+            print(f"[{status}] Syntaxis Prompt Alignment ({res['syntaxis_dir']})")
+            for err in res["errors"]:
+                print(f"! {err}")
+        return 0 if res["passed"] else 1
+
+    if not args.preprint_dir:
+        parser.error("Provide preprint_dir or --check-syntaxis-prompts <syntaxis_repo_dir>.")
+
     result = check_preprint(args.preprint_dir.resolve())
+    if args.check_syntaxis_prompts:
+        result["syntaxis_prompt_alignment"] = check_syntaxis_prompts(args.check_syntaxis_prompts.resolve())
+        if not result["syntaxis_prompt_alignment"]["passed"]:
+            result["passed"] = False
+            result["errors"].extend(result["syntaxis_prompt_alignment"]["errors"])
 
     if args.json:
         print(json.dumps(result, indent=2))
