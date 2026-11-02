@@ -55,9 +55,10 @@
     {
       "name": "mcp-security",
       "source": "./plugins/mcp-security",
-      "description": "Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.",
+      "description": "Security auditing for MCP servers (RCE, STDIO injection, supply chain) and for GitHub Actions workflows that run Gemini CLI (untrusted-input routing, tool allowlists, credential exposure).",
       "skills": [
-        "./plugins/mcp-security/skills/mcp-auditor"
+        "./plugins/mcp-security/skills/mcp-auditor",
+        "./plugins/mcp-security/skills/geminicli-github-action-review"
       ]
     },
     {
