@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 15 thematic plugins under `plugins/`:
+The repository is organized into 16 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -94,9 +94,37 @@ The repository is organized into 15 thematic plugins under `plugins/`:
 - **`scion-agent-models`**: Audits fleet model and Vertex AI region (`global`) configurations across Hub projects, detects static environment overrides (`ANTHROPIC_MODEL`) and unpinned fallback drift, and live-switches running agent models (`PATCH` or live `/model` with optional `--restart-containers`). Includes fleet auditing script (`scripts/hub-model-audit.sh`) and live-switching CLI (`scripts/hub-model-patch.sh`).
 - **`scion-hub-setup`**: Bootstraps, upgrades, and reconciles self-hosted Scion Hub deployments on GCE, including clean database resets, selective container image builds (`claude`, `antigravity`, `opencode`), headless `super-admin` JWT derivation, Vertex AI `global` region configuration, broker quota ceilings, and global `agent-team` template imports. Includes idempotent reconciler (`scripts/hub-reconcile.py`).
 
+### 16. 🐍 Python Readability (`plugins/python-readability`)
+*Google and modern Python readability standards, Ruff/Mypy linter automation, and code review checklists.*
+- **`python-readability`**: Write, review, and refactor Python code to meet Google Python Style Guide standards, covering naming, imports, docstrings, typing, testing, and automated `pyproject.toml` linter configuration (`scripts/setup-linters.py`).
+
 ---
 
 ## Installation & Usage
+
+### Using via OpenCode
+
+Register the local `plugins/` directory in `~/.config/opencode/opencode.jsonc` so OpenCode discovers all skills across every project with live reload:
+
+```bash
+git clone https://github.com/ghchinoy/agent-skills.git ~/projects/agent-skills
+```
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "~/projects/agent-skills/plugins"
+  ]
+}
+```
+
+Then invoke any skill by ID in your prompt (for example, `@go-security-audit`, `@node-security-audit`, `@go-readability`, `@agent-aware-cli`, or `@user-agent-duties`), or vendor a specific skill into a project's `.opencode/skills/` directory:
+
+```bash
+mkdir -p .opencode/skills
+cp -R ~/projects/agent-skills/plugins/repo-authoring/skills/go-security-audit .opencode/skills/
+```
 
 ### Installing via Open Agent Skills CLI (`npx skills`)
 
