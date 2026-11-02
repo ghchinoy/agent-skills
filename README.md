@@ -43,8 +43,9 @@ The repository is organized into 16 thematic plugins under `plugins/`:
 - **`arxiv-preprint-authoring`**: Outlines, writes, packages, and deterministically validates arXiv-style academic preprints (`paper.md`, `@preview/arkheion:0.1.2` `paper.typ`, `data/*.csv`, and semantic Luminous Graphviz `.dot` diagrams) following the `arXiv:2610.28380` empirical narrative blueprint and Syntaxis house-style clarity rules (`scripts/validate_preprint.py`).
 
 ### 5. 🛡️ MCP Security (`plugins/mcp-security`)
-*Model Context Protocol (MCP) security auditing for RCE, STDIO injection, and supply chain vulnerabilities.*
+*Security auditing for MCP servers (RCE, STDIO injection, supply chain) and for GitHub Actions workflows that run Gemini CLI (untrusted-input routing, tool allowlists, credential exposure).*
 - **`mcp-auditor`**: Audits local MCP server configurations (Gemini CLI, Claude Desktop, Cursor) and custom-built MCP servers for Remote Command Execution (RCE) and STDIO transport injection as detailed in the OX Security Advisory. *(Includes sample reports in `references/`)*.
+- **`geminicli-github-action-review`**: Reviews and hardens GitHub Actions workflows that run Gemini CLI (`google-github-actions/run-gemini-cli`) against prompt injection from untrusted issue/comment/PR text, ungated dispatch routing, ineffective (legacy `coreTools`) tool allowlists, subagent bypass, and over-privileged GCP/GitHub credentials. *(Includes a static workflow scanner, a run-history scanner, a routing regression-test template, and an anonymized case study)*.
 
 ### 6. ⚙️ Agent-Aware CLI (`plugins/agent-aware-cli`)
 *Best practices for CLI tools optimized for both human users and AI agents.*
