@@ -52,9 +52,9 @@ def _count_syllables_word(word: str) -> int:
     return max(1, len(vowel_groups))
 
 
-def compute_clean_prose_metrics(md_text: str) -> dict:
-    """Strips Markdown tables, code blocks, and LaTeX math to measure true prose readability."""
-    text = re.sub(r"```[\s\S]*?```", " ", md_text)
+def _compute_text_prose_metrics(text_block: str) -> dict:
+    """Computes clean-prose metrics on a Markdown block with tables, code, and math stripped."""
+    text = re.sub(r"```[\s\S]*?```", " ", text_block)
     text = re.sub(r"\$\$[\s\S]*?\$\$", " ", text)
     text = re.sub(r"\$[^$\n]+\$", "math_expr", text)
     text = re.sub(r"`[^`\n]+`", "code_token", text)
@@ -68,6 +68,8 @@ def compute_clean_prose_metrics(md_text: str) -> dict:
             continue
         if s.startswith("#"):
             continue
+        s = re.sub(r"^[-*+]\s+", "", s)
+        s = re.sub(r"^\d+\.\s+", "", s)
         prose_lines.append(re.sub(r"\*\*([^*]+)\*\*|\*([^*]+)\*", r"\1\2", s))
 
     clean = " ".join(prose_lines)
@@ -100,6 +102,63 @@ def compute_clean_prose_metrics(md_text: str) -> dict:
         "flesch_reading_ease": round(fre, 2),
         "band": band,
     }
+
+
+def compute_clean_prose_metrics(md_text: str) -> dict:
+    """Strips Markdown tables, code blocks, LaTeX math, and References to measure true prose readability
+    both document-wide and per '## ' section, plus detects overlong (>=42 word) sentences.
+    """
+    # Exclude ## References from narrative prose readability
+    narrative_md = re.sub(r"^##\s+References\b[\s\S]*?(?=^##\s+|\Z)", "", md_text, flags=re.MULTILINE)
+    overall = _compute_text_prose_metrics(narrative_md)
+
+    # Per-section clean-prose heatmap
+    sections_heatmap = []
+    raw_sections = re.split(r"(?=^##\s+)", md_text, flags=re.MULTILINE)
+    for sec in raw_sections:
+        lines = sec.strip().splitlines()
+        if not lines or not lines[0].startswith("## "):
+            continue
+        sec_title = lines[0].strip()
+        if re.match(r"^##\s+(References|Author Contributions)\b", sec_title, flags=re.IGNORECASE):
+            continue
+        sec_m = _compute_text_prose_metrics(sec)
+        if sec_m["word_count"] >= 25:
+            sections_heatmap.append({"section": sec_title, **sec_m})
+
+    # Detect overlong sentences (>= 42 words) with line numbers
+    overlong_sentences = []
+    in_code = False
+    in_refs = False
+    for lineno, line in enumerate(md_text.splitlines(), start=1):
+        s = line.strip()
+        if s.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if re.match(r"^##\s+References\b", s, flags=re.IGNORECASE):
+            in_refs = True
+            continue
+        if in_refs and s.startswith("## "):
+            in_refs = False
+        if in_refs or not s or s.startswith("#") or s.startswith("|") or s.startswith("![") or s.startswith("$$"):
+            continue
+        stripped_line = re.sub(r"\$[^$\n]+\$", "math_expr", s)
+        stripped_line = re.sub(r"`[^`\n]+`", "code_token", stripped_line)
+        for sent in re.split(r"(?<=[.!?])\s+", stripped_line):
+            w_list = re.findall(r"[A-Za-z0-9_'-]+", sent)
+            if len(w_list) >= 42:
+                overlong_sentences.append({
+                    "line": lineno,
+                    "word_count": len(w_list),
+                    "preview": sent[:90] + ("..." if len(sent) > 90 else ""),
+                })
+
+    overall["sections"] = sections_heatmap
+    overall["overlong_sentence_count"] = len(overlong_sentences)
+    overall["overlong_sentences"] = overlong_sentences[:10]
+    return overall
 
 
 def check_preprint(preprint_dir: Path) -> dict:
@@ -174,6 +233,28 @@ def check_preprint(preprint_dir: Path) -> dict:
                 f"{clean_prose_metrics['flesch_kincaid_grade']} ({clean_prose_metrics['band']}, "
                 f"ASL={clean_prose_metrics['avg_words_per_sentence']} w/s). "
                 "Target the 'Dense' band (FK 12.0-14.5, ASL 15-19 w/s)."
+            )
+        for sec_info in clean_prose_metrics.get("sections", []):
+            if sec_info["flesch_kincaid_grade"] > 16.5 or sec_info["avg_words_per_sentence"] > 24.0:
+                warnings.append(
+                    f"[Pillar 2: Section Clean-Prose Hotspot] '{sec_info['section']}' has "
+                    f"FK={sec_info['flesch_kincaid_grade']} ({sec_info['band']}, "
+                    f"ASL={sec_info['avg_words_per_sentence']} w/s). "
+                    "Split 40+ word sentences and unpack stacked parentheticals."
+                )
+
+        # Check for main-body table semver soup (e.g., v0.2.0 / v0.4.0 in main tables instead of Appendix B crosswalk)
+        main_body_md = re.split(r"^##\s+Appendix\b", md_text, maxsplit=1, flags=re.MULTILINE)[0]
+        semver_in_tables = []
+        for lineno, line in enumerate(main_body_md.splitlines(), start=1):
+            s = line.strip()
+            if s.startswith("|") and re.search(r"\bv0\.\d+\.\d+\b", s):
+                semver_in_tables.append(lineno)
+        if semver_in_tables:
+            warnings.append(
+                f"[Pillar 2: Mechanism Naming] Main-body table rows on lines {semver_in_tables[:5]} contain "
+                "software version tags (v0.x.y). Use timeless architectural mechanism names in main tables "
+                "and move release history to a Release Crosswalk table in Appendix B."
             )
 
     pillar_scores["pillar_2_house_style"] = p2_score
@@ -266,6 +347,13 @@ def check_preprint(preprint_dir: Path) -> dict:
             errors.append(
                 f"[Pillar 5: Typst Hygiene] paper.typ places alignment tokens inside columns: (...): {bad_cols[0]}. "
                 "Use columns: (auto, ...) and align: (left, right, ...)."
+            )
+            p5_score = max(0, p5_score - 5)
+        bullet_in_table = re.findall(r"\[\s+-\s+\(", typ_text)
+        if bullet_in_table:
+            errors.append(
+                "[Pillar 5: Typst Hygiene] paper.typ contains unescaped '[ - (...)' inside a table cell, "
+                "which Typst renders as an unordered bullet dot ('•'). Escape the hyphen as '[\\- (...)'."
             )
             p5_score = max(0, p5_score - 5)
 

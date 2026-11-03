@@ -22,14 +22,15 @@ Description:
   `arxiv-preprint-authoring`, and `technical-post-editorial` skills.
 
 Options:
-  --project-id <id>        Run `syntaxis review <id> -o json` and count open suggestions
-  --render-figures         Render `figures/*.dot` to `.webp` and 288 DPI `.png` via luminous.gvpr
-  --docstats-dir <path>    Path to local `docstats` checkout (default: $DOCSTATS_DIR or ~/projects/docstats)
-  --syntaxis-dir <path>    Path to local `syntaxis` checkout (default: $SYNTAXIS_DIR or ~/projects/syntaxis)
-  --graphviz-theme <path>  Path to `luminous.gvpr` (default: $LUMINOUS_GVPR or ~/projects/graphviz-style/theme/luminous.gvpr)
-  --validator <path>       Explicit path to `validate_preprint.py`
-  --json                   Emit a single machine-readable JSON report to stdout
-  -h, --help               Show this help message and exit
+  --project-id <id>          Run `syntaxis review <id> -o json` and count open suggestions
+  --render-figures           Render `figures/*.dot` to `.webp` and 288 DPI `.png` via luminous.gvpr
+  --check-syntaxis-prompts   Also verify Syntaxis repo `pkg/prompts/{writer,reviewer}.md` parity
+  --docstats-dir <path>      Path to local `docstats` checkout (default: $DOCSTATS_DIR or ~/projects/docstats)
+  --syntaxis-dir <path>      Path to local `syntaxis` checkout (default: $SYNTAXIS_DIR or ~/projects/syntaxis)
+  --graphviz-theme <path>    Path to `luminous.gvpr` (default: $LUMINOUS_GVPR or ~/projects/graphviz-style/theme/luminous.gvpr)
+  --validator <path>         Explicit path to `validate_preprint.py`
+  --json                     Emit a single machine-readable JSON report to stdout
+  -h, --help                 Show this help message and exit
 
 Examples:
   # Audit a preprint directory with human-readable output
@@ -43,6 +44,7 @@ EOF
 PREPRINT_DIR=""
 PROJECT_ID=""
 RENDER_FIGURES=0
+CHECK_SYNTAXIS_PROMPTS=0
 JSON_OUT=0
 DOCSTATS_DIR="${DOCSTATS_DIR:-$HOME/projects/docstats}"
 SYNTAXIS_DIR="${SYNTAXIS_DIR:-$HOME/projects/syntaxis}"
@@ -66,6 +68,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --render-figures)
       RENDER_FIGURES=1
+      shift
+      ;;
+    --check-syntaxis-prompts)
+      CHECK_SYNTAXIS_PROMPTS=1
       shift
       ;;
     --docstats-dir)
@@ -186,25 +192,34 @@ from pathlib import Path
 from ai_patterns import strip_code_and_tables
 from metrics import _sync_analyze_document, _sync_calculate_metrics
 
+def _prepare_clean_prose(md_block: str) -> str:
+    clean = strip_code_and_tables(md_block)
+    clean = re.sub(r"\$\$[\s\S]*?\$\$", " ", clean)
+    clean = re.sub(r"\$[^$\n]+\$", "math_token", clean)
+    clean = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", clean)
+    clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)
+    lines = []
+    for line in clean.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith("---"):
+            continue
+        s = re.sub(r"^[-*+]\s+", "", s)
+        s = re.sub(r"^\d+\.\s+", "", s)
+        s = re.sub(r"\*\*([^*]+)\*\*|\*([^*]+)\*", r"\1\2", s)
+        # Prevent textstat's naive sentence regex from splitting decimal points (e.g. 1.78%, 91.6x)
+        # and common scholarly abbreviations (et al., Fig., Eq., Sec., Tab.)
+        s = re.sub(r"(?<=\d)\.(?=\d)", "_", s)
+        s = re.sub(r"\b(et al|Fig|Figs|Eq|Eqs|Sec|Secs|Tab|Tabs|vs|cf|e\.g|i\.e)\.", r"\1", s)
+        lines.append(s)
+    return "\n".join(lines)
+
 md_path = Path(sys.argv[1])
 raw = md_path.read_text(encoding="utf-8")
-full = _sync_analyze_document(raw, md_path.name)
+# Exclude ## References and ## Author Contributions from narrative prose readability
+narrative_raw = re.sub(r"^##\s+(References|Author Contributions)\b[\s\S]*?(?=^##\s+|\Z)", "", raw, flags=re.MULTILINE)
+full = _sync_analyze_document(narrative_raw, md_path.name)
 
-clean = strip_code_and_tables(raw)
-clean = re.sub(r"\$\$[\s\S]*?\$\$", " ", clean)
-clean = re.sub(r"\$[^$\n]+\$", "math_token", clean)
-clean = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", clean)
-clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)
-lines = []
-for line in clean.splitlines():
-    s = line.strip()
-    if not s or s.startswith("#") or s.startswith("---"):
-        continue
-    s = re.sub(r"^[-*+]\s+", "", s)
-    s = re.sub(r"^\d+\.\s+", "", s)
-    s = re.sub(r"\*\*([^*]+)\*\*|\*([^*]+)\*", r"\1\2", s)
-    lines.append(s)
-clean_prose = "\n".join(lines)
+clean_prose = _prepare_clean_prose(narrative_raw)
 clean_r = _sync_calculate_metrics(clean_prose, f"{md_path.name}:clean")
 asl = round(clean_r.word_count / max(1, clean_r.sentence_count), 2)
 asw = round(clean_r.syllable_count / max(1, clean_r.word_count), 2)
@@ -212,7 +227,38 @@ fk = round(clean_r.flesch_kincaid_grade, 2)
 fre = round(clean_r.flesch_reading_ease, 2)
 ap = full.ai_patterns
 
-axis_a_pass = 10.0 <= fk <= 16.0 and asl <= 22.0
+# Compute per-section clean-prose heatmap to catch localized hotspots (e.g., Impenetrable Limitations/Appendices)
+section_heatmap = []
+hotspot_sections = []
+for sec in re.split(r"(?=^##\s+)", raw, flags=re.MULTILINE):
+    sec_lines = sec.strip().splitlines()
+    if not sec_lines or not sec_lines[0].startswith("## "):
+        continue
+    title = sec_lines[0].strip()
+    if re.match(r"^##\s+(References|Author Contributions)\b", title, flags=re.IGNORECASE):
+        continue
+    sec_clean = _prepare_clean_prose(sec)
+    if len(sec_clean.split()) < 25:
+        continue
+    try:
+        sr = _sync_calculate_metrics(sec_clean, f"{md_path.name}:{title}")
+        s_asl = round(sr.word_count / max(1, sr.sentence_count), 2)
+        s_fk = round(sr.flesch_kincaid_grade, 2)
+        entry = {
+            "section": title,
+            "word_count": sr.word_count,
+            "asl": s_asl,
+            "flesch_kincaid_grade": s_fk,
+            "flesch_reading_ease": round(sr.flesch_reading_ease, 2),
+        }
+        section_heatmap.append(entry)
+        if s_fk > 16.5 or s_asl > 24.0:
+            hotspot_sections.append(f"{title} (FK={s_fk}, ASL={s_asl} w/s)")
+    except Exception:
+        pass
+
+max_section_fk = max((x["flesch_kincaid_grade"] for x in section_heatmap), default=fk)
+axis_a_pass = (10.0 <= fk <= 16.0) and (asl <= 22.0) and (len(hotspot_sections) == 0)
 axis_b_pass = (
     ap.ai_tell_score >= 9.5
     and ap.em_dash_count == 0
@@ -231,6 +277,9 @@ print(json.dumps({
         "word_count": clean_r.word_count,
         "asl": asl,
         "asw": asw,
+        "max_section_fk": max_section_fk,
+        "hotspot_sections": hotspot_sections,
+        "section_heatmap": section_heatmap,
     },
     "axis_b": {
         "passed": bool(axis_b_pass),
@@ -294,7 +343,7 @@ fi
 ORACLE_JSON="$WORK_TMP/oracle.json"
 if [ -n "$VALIDATOR_PATH" ] && [ -f "$VALIDATOR_PATH" ]; then
   PROMPT_ARGS=()
-  if [ -f "$SYNTAXIS_DIR/pkg/prompts/writer.md" ] && [ -f "$SYNTAXIS_DIR/pkg/prompts/reviewer.md" ]; then
+  if [ "$CHECK_SYNTAXIS_PROMPTS" -eq 1 ] && [ -f "$SYNTAXIS_DIR/pkg/prompts/writer.md" ] && [ -f "$SYNTAXIS_DIR/pkg/prompts/reviewer.md" ]; then
     PROMPT_ARGS=(--check-syntaxis-prompts "$SYNTAXIS_DIR")
   fi
   python3 "$VALIDATOR_PATH" "$PREPRINT_DIR" "${PROMPT_ARGS[@]+"${PROMPT_ARGS[@]}"}" --json >"$ORACLE_JSON" || true
@@ -324,13 +373,19 @@ if render_errs:
     hints.append("Check Graphviz/luminous.gvpr setup and run `make -C ~/projects/graphviz-style fonts`.")
 if docstats.get("available") and not docstats.get("passed"):
     if not docstats["axis_a"]["passed"]:
-        hints.append("Axis A off-band: split 35+ word sentences and replace stacked nominalizations (`technical-post-editorial`).")
+        hotspots = docstats["axis_a"].get("hotspot_sections", [])
+        if hotspots:
+            hints.append(f"Section readability hotspot(s) exceeding FK 16.5 or ASL 24 w/s: {', '.join(hotspots)}.")
+        else:
+            hints.append("Axis A off-band: split 35+ word sentences and replace stacked nominalizations (`technical-post-editorial`).")
     if not docstats["axis_b"]["passed"]:
         hints.append("Axis B below 9.5 or prose tells > 0: cut em-dashes, throat-clearing openers, and binary contrasts (`technical-post-editorial`).")
 if syntaxis.get("available") and not syntaxis.get("passed"):
     hints.append("Resolve `major` suggestions from `syntaxis review` in paper.md before final Typst compilation.")
 if not oracle.get("passed", False):
     hints.append("Fix each line-level error reported by `validate_preprint.py` (`arxiv-preprint-authoring`) until score == 100.")
+for w in oracle.get("warnings", []):
+    hints.append(w)
 
 report = {
     "passed": overall_pass,
@@ -372,7 +427,10 @@ else:
     if docstats.get("available"):
         st = f"{c_pass}PASS{c_rst}" if docstats["passed"] else f"{c_warn}REVISE{c_rst}"
         aa, ab = docstats["axis_a"], docstats["axis_b"]
-        print(f"  2. docstats 2-Axis:   {st} (FK={aa['flesch_kincaid_grade']}, FRE={aa['flesch_reading_ease']}, ASL={aa['asl']} | Axis B={ab['ai_tell_score']}/10, em_dash={ab['em_dash_count']})")
+        max_sfk = aa.get("max_section_fk", aa["flesch_kincaid_grade"])
+        print(f"  2. docstats 2-Axis:   {st} (FK={aa['flesch_kincaid_grade']}, max_sec_FK={max_sfk}, FRE={aa['flesch_reading_ease']}, ASL={aa['asl']} | Axis B={ab['ai_tell_score']}/10, em_dash={ab['em_dash_count']})")
+        for hs in aa.get("hotspot_sections", []):
+            print(f"     {c_warn}*{c_rst} Hotspot section: {hs}")
     else:
         print(f"  2. docstats 2-Axis:   {c_mut}SKIP ({docstats.get('reason', 'unavailable')}){c_rst}")
 
@@ -387,6 +445,8 @@ else:
     print(f"  4. Preprint Oracle:   {st} ({oracle.get('score', 0)}/100 pts)")
     for err in oracle.get("errors", []):
         print(f"     {c_fail}!{c_rst} {err}")
+    for warn in oracle.get("warnings", []):
+        print(f"     {c_warn}*{c_rst} {warn}")
 
     if hints:
         print(f"\n{c_acc}Actionable Hints:{c_rst}")
