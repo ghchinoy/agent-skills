@@ -19,6 +19,7 @@ Coordinate the sibling skills in `repo-authoring` (`arxiv-preprint-authoring` an
 ## Resource, Asset & Script Files (Progressive Disclosure)
 
 - [`scripts/run-preprint-gates.sh`](scripts/run-preprint-gates.sh): Single-command deterministic gate runner chaining Luminous `.dot` figure rendering, `docstats` clean-prose Axis A + Axis B scoring (with decimal-point protection and **per-section `max_sec_FK` hotspot detection**), optional `syntaxis review` JSON inspection, and the 100-point `validate_preprint.py` oracle (`--json` supported).
+- [`references/human-agent-quickstart.md`](references/human-agent-quickstart.md): Human operator guide covering branch installation, host prerequisites, expected user inputs across greenfield/draft/iterative scenarios, and copy-paste agent prompts.
 - [`references/howto-and-scorecard.md`](references/howto-and-scorecard.md): Practitioner preflight checklist, clean-prose Two-Axis calibration table, Typst visual/syntax traps, `revision-plan-vX.Y.md` & `editorial-scorecard.md` templates, and troubleshooting matrix.
 - [`assets/01-preprint-lifecycle-light.webp`](assets/01-preprint-lifecycle-light.webp): Five-stage end-to-end preprint lifecycle diagram.
 - [`assets/02-editorial-acceptance-gate-light.webp`](assets/02-editorial-acceptance-gate-light.webp): Clean-prose extraction, `docstats` Two-Axis gate, and `technical-post-editorial` human rubric loop.
@@ -36,6 +37,21 @@ Coordinate the sibling skills in `repo-authoring` (`arxiv-preprint-authoring` an
 | **3. Structural Peer Review** | `syntaxis review` + Editorial Reviewer | Emits non-destructive `Suggestion[]` JSON (`major`, `minor`, `info`) and versioned `revision-plan-vX.Y.md` checklists (`REV-vX.Y-NN`) without modifying source files. |
 | **4. Two-Axis Prose Gate** | `docstats` + `technical-post-editorial` ([docs](https://ghchinoy.github.io/agent-skills/plugins/repo-authoring/technical-post-editorial/)) | Scores clean prose document-wide (`FK 12.0–14.5`, `ASL 15–19 w/s`) and per-section (`max_sec_FK <= 16.5`), enforces Axis B (`ai_tell_score >= 9.5`, zero prose em-dashes), and applies the 5D human rubric. |
 | **5. Synthesis & Audit** | `syntaxis execute` + `arxiv-preprint-authoring` | Compiles `@preview/arkheion:0.1.2` Typst to `paper.pdf` (plus optional 4-page `@preview/reprobe:0.1.0` supplement), visually inspects PDF pages, and records `100/100 PASS` in `editorial-scorecard.md`. |
+
+---
+
+## Branch Installation & Expected Human Inputs
+
+Install all three sibling skills together so `validate_preprint.py` and the editorial rubric sit beside `run-preprint-gates.sh`:
+
+```bash
+npx skills add https://github.com/ghchinoy/agent-skills/tree/feat/preprint-workflow \
+  --skill preprint-workflow \
+  --skill arxiv-preprint-authoring \
+  --skill technical-post-editorial
+```
+
+Before starting a run, confirm the human user has supplied: (1) ground-truth telemetry or `data/*.csv` (never invent numbers), (2) a target repository or rough draft path, (3) author/affiliation metadata and a 2–3 sentence thesis, and (4) a reference `.bib` list or explicit permission to query live arXiv metadata. See [`references/human-agent-quickstart.md`](references/human-agent-quickstart.md) for the full prerequisite matrix and copy-paste prompts.
 
 ---
 

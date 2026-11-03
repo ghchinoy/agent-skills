@@ -146,6 +146,11 @@ PREPRINT_DIR="$(cd "$PREPRINT_DIR" && pwd)"
 if [ -z "$VALIDATOR_PATH" ]; then
   for candidate in \
     "$SCRIPT_DIR/../../arxiv-preprint-authoring/scripts/validate_preprint.py" \
+    "$PWD/.agents/skills/arxiv-preprint-authoring/scripts/validate_preprint.py" \
+    "$PWD/.claude/skills/arxiv-preprint-authoring/scripts/validate_preprint.py" \
+    "$PWD/.opencode/skills/arxiv-preprint-authoring/scripts/validate_preprint.py" \
+    "$HOME/.gemini/skills/arxiv-preprint-authoring/scripts/validate_preprint.py" \
+    "/tmp/agent-skills/plugins/repo-authoring/skills/arxiv-preprint-authoring/scripts/validate_preprint.py" \
     "$HOME/projects/agent-skills/plugins/repo-authoring/skills/arxiv-preprint-authoring/scripts/validate_preprint.py"; do
     if [ -f "$candidate" ]; then
       VALIDATOR_PATH="$candidate"
@@ -348,7 +353,7 @@ if [ -n "$VALIDATOR_PATH" ] && [ -f "$VALIDATOR_PATH" ]; then
   fi
   python3 "$VALIDATOR_PATH" "$PREPRINT_DIR" "${PROMPT_ARGS[@]+"${PROMPT_ARGS[@]}"}" --json >"$ORACLE_JSON" || true
 else
-  echo '{"passed": false, "score": 0, "errors": ["validate_preprint.py not found; pass --validator <path>"]}' >"$ORACLE_JSON"
+  echo '{"passed": false, "score": 0, "errors": ["validate_preprint.py not found; install sibling skill via: npx skills add https://github.com/ghchinoy/agent-skills/tree/feat/preprint-workflow --skill arxiv-preprint-authoring (or pass --validator <path>)"]}' >"$ORACLE_JSON"
 fi
 
 # Aggregate unified report & exit code
