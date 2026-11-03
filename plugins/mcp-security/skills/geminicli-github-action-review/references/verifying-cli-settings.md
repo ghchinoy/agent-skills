@@ -42,4 +42,4 @@ Interpretation is fragile; treat it as a lead to confirm with the behavioural te
 
 ## 4. Confirm live
 
-After merging, canary each workflow once (triage on an issue, review on a PR, invoke behind its approval gate) and read the job log for tool-denied or settings warnings. Pay particular attention to empty allowlists (`"core": []`): confirm for your version that empty means "no tools" and not "no restriction".
+After merging, canary each workflow once (triage on an issue, review on a PR, invoke behind its approval gate) and read the job log for tool-denied or settings warnings. Never ship an empty allowlist (`"core": []`): with CLI 0.66.0 an enforced empty list made the API request fail with HTTP 400 (`tools[0].tool_type ... must have one initialized field`). It was invisible while the legacy key was ignored. Use a minimal non-empty list such as `run_shell_command(echo)`.

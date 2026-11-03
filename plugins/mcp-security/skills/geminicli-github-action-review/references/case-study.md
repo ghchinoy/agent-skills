@@ -31,5 +31,5 @@ An outside account opened issues with a generic task title, and the runs succeed
 
 - Review the whole chain: caller trigger -> routing script -> reusable workflow -> credentials. No single file looked dangerous.
 - Test negative controls: run your regression test against the old workflow and confirm it fails.
-- A skipped step is not a passing step. Canary every agent step on real input after changes.
+- A skipped step is not a passing step. Canary every agent step on real input after changes: once the allowlists became enforced, a scheduled job with an empty allowlist failed with an API 400, but only when it had work, so it stayed green on every earlier run.
 - Capability and credential limits, not prompt wording, are the defence once injection succeeds.

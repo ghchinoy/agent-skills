@@ -233,7 +233,9 @@ def main():
                     if core is None:
                         add("HIGH", "G3", loc, "no `tools.core` allowlist: built-in tools incl. shell may be available under --yolo")
                     elif not core:
-                        add("MEDIUM", "G3", loc, "`tools.core` is empty; confirm that means 'no tools' for the pinned CLI version")
+                        add("HIGH", "G3", loc,
+                            "`tools.core` is empty: with Gemini CLI 0.66.0 this made the model request fail with HTTP 400 "
+                            "(`tools[0].tool_type ... must have one initialized field`). Use a minimal non-empty allowlist such as run_shell_command(echo)")
                     else:
                         for entry in map(str, core):
                             e = entry.strip()
