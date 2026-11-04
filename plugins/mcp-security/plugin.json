@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-security",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Security auditing for MCP servers (RCE, STDIO injection, supply chain) and for GitHub Actions workflows that run Gemini CLI (untrusted-input routing, tool allowlists, credential exposure).",
   "author": {
     "name": "ghchinoy",
