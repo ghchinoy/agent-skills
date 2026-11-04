@@ -26,6 +26,7 @@
 ### B. Capability inside the agent
 - [G2] Allowlist uses `"tools": {"core": [...]}`. The flat `"coreTools"`, `"excludeTools"`, `"allowedTools"` keys are legacy and may not be enforced; confirm per CLI version.
 - [G3] An allowlist exists at all (otherwise shell tools are available under `--yolo`).
+- [G13] MCP servers: with a non-empty `tools.core`, MCP tools are denied unless listed as `mcp_<server>_<tool>` (e.g. `mcp_github_add_issue_comment`); the run still "succeeds" but cannot act. Keep `includeTools` and the `mcp_<server>_*` core entries identical, list only the tools the job needs (no delete/push/fork for an agent that only plans), and pin the server image to a version tag or digest, since upstream renames tools between releases and an `includeTools` name that no longer exists silently hides that tool.
 - [G4] `"experimental": {"enableAgents": false}`; subagents (e.g. a generalist) have their own tool surface and the main agent's shell allowlist is not a guarantee about them.
 - Exclude `web_fetch` and `google_web_search` unless needed; keep shell to `echo` (or `printenv` for env-var-based prompts).
 - Triage that reads issue text from environment variables needs `printenv`/`echo` only, `GITHUB_TOKEN: ''`, `issues: read`, and label validation against an allowlist downstream.

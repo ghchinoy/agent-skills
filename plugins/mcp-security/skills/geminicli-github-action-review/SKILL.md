@@ -18,7 +18,7 @@ This skill packages a repeatable review, a static scanner, a run-history scanner
 
 ## Bundled Resources
 
-- `scripts/audit-gemini-workflows.py` — Static scanner. Point it at a repo (or a workflows directory); it reports findings G1–G12, indexed in the checklist. Exit 1 on HIGH/CRITICAL, 2 on unparsed files; `--json` for machines. It is a heuristic (a `trusted` mention in a job `if:` is not proof the condition is right) and never replaces the routing test.
+- `scripts/audit-gemini-workflows.py` — Static scanner. Point it at a repo (or a workflows directory); it reports findings G1–G13, indexed in the checklist. Exit 1 on HIGH/CRITICAL, 2 on unparsed files; `--json` for machines. It is a heuristic (a `trusted` mention in a job `if:` is not proof the condition is right) and never replaces the routing test.
 - `scripts/scan-run-history.sh` — Read-only `gh` sweep of past runs: finds privileged Gemini jobs (invoke/review) that succeeded for event types outsiders can trigger, and shows the triggering account's repo permission. Use to answer "has this already been exploited?". It only covers the most recent `LIMIT` runs, makes a few API calls per run, and exits 2 if any lookup failed (incomplete result).
 - `assets/dispatch-routing-test.py` — Template harness that extracts a dispatch workflow's command-routing script and asserts a matrix of events x author associations x bodies. Adapt the CONFIG block; always run it against the *old* workflow as a negative control.
 - [Threat Model & Checklist](references/threat-model-and-checklist.md) (`references/threat-model-and-checklist.md`) — The full review checklist with rationale and fix snippets.

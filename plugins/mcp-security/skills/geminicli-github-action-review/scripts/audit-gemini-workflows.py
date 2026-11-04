@@ -250,6 +250,33 @@ def main():
                         add("MEDIUM", "G4", loc,
                             "subagents not disabled (`experimental.enableAgents` != false): subagents may have a tool surface the main allowlist was meant to deny")
 
+                    # G13: MCP servers vs. the tools.core allowlist, plus image pinning.
+                    servers = settings.get("mcpServers") if isinstance(settings.get("mcpServers"), dict) else {}
+                    core_s = [str(c).strip() for c in (core or [])]
+                    for sname, sconf in servers.items():
+                        sconf = sconf if isinstance(sconf, dict) else {}
+                        inc = sconf.get("includeTools")
+                        if not inc:
+                            add("MEDIUM", "G13", loc,
+                                f"MCP server `{sname}` has no `includeTools`: every tool the server exposes (incl. write/delete tools) is available")
+                        elif core_s:
+                            wild = {f"mcp_{sname}_*", "mcp_*"}
+                            if not wild & set(core_s):
+                                missing = [t for t in inc if f"mcp_{sname}_{t}" not in core_s]
+                                if missing:
+                                    add("HIGH", "G13", loc,
+                                        f"MCP tools {missing} are in `includeTools` but not in `tools.core` as `mcp_{sname}_<tool>`: with a non-empty "
+                                        "`tools.core` the CLI adds a catch-all deny, so these calls are silently denied (the run still succeeds but "
+                                        "cannot post). Verify with a canary")
+                        cargs = [str(a) for a in (sconf.get("args") or [])]
+                        if sconf.get("command") == "docker" and cargs:
+                            image = cargs[-1]
+                            last = image.rsplit("/", 1)[-1]
+                            if "@sha256:" not in image and (":" not in last or last.endswith(":latest")):
+                                add("MEDIUM", "G13", loc,
+                                    f"MCP server `{sname}` image `{image}` is unpinned (floating tag): upstream tool renames/changes can break or widen "
+                                    "the tool surface; includeTools names that no longer exist silently hide tools. Pin a version tag or digest")
+
                 ver = str(w.get("gemini_cli_version", "")).strip()
                 if not ver or ver.lower() in ("latest", "preview", "nightly"):
                     add("MEDIUM", "G5", loc, "gemini_cli_version unset or floating: CLI behaviour can change between runs")
