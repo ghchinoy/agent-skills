@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, and schema version skew (remote-backed migration blocks or client behind DB). Use when bd won't start, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "refusing to auto-apply pending schema migrations".
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, disabled GCS federation remotes, and schema version skew (remote-backed migration blocks, missing storage_class columns, or client behind DB). Use when bd won't start, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "refusing to auto-apply pending schema migrations" or "does not have column storage_class".
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.9.1"
+  version: "1.9.2"
 ---
 
 # bd / Dolt Troubleshooter
@@ -23,14 +23,19 @@ from a mismatch between four layers:
 
 ## Fast-Triage: Schema Skew & "Refusing to auto-apply migrations"
 
-When `bd` refuses to open with `refusing to auto-apply N pending schema migrations to a remote-backed database (vX -> vY)`:
+When `bd` refuses to open with `refusing to auto-apply N pending schema migrations to a remote-backed database (vX -> vY)` — or when `.beads/.local_version` was already stamped with the new CLI version so `bd list` skips the gate prompt and fails directly with `Error: search count issues: Error 1105 (HY000): table "i" does not have column "storage_class"`:
 
 1. **Check with the human operator**: Confirm whether another clone has already migrated and pushed.
 2. **Run `bd dolt pull`**: Check if the remote already has the migrated schema.
 3. **If this machine is the single designated migrator**:
    ```bash
+   cp -R .beads/dolt /tmp/bd-raw-snapshot-$(date +%s)
    cp .beads/issues.jsonl /tmp/beads-backup.jsonl
+   # In bd v1.3.x+, run `bd migrate schema --force` FIRST to apply SQL table
+   # migrations (0054-0066), then `bd migrate --force` to update metadata:
+   bd migrate schema --force
    bd migrate --force
+   bd vc commit -m "chore(bd): commit config working set" 2>/dev/null || true
    bd migrate --inspect
    bd doctor
    bd dolt push
@@ -307,9 +312,12 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
     Interactive prompts will time out or cancel in non-interactive agent sessions:
     - `bd doctor --fix --yes` (auto-applies all fixable doctor issues)
     - `echo y | bd migrate --update-repo-id` (bypasses interactive confirmation for repo ID updates)
-    - `bd migrate --force` / `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate` (overrides remote schema gate on designated migrator)
-12. **Resolve "Dolt Remote vs Git Origin" endpoint conflicts using config.**
-    When `bd doctor` warns that a Dolt remote shares the same URL as git origin, run `bd config set dolt.local-only true` or remove the conflicting Dolt remote (`bd dolt remote remove origin`).
+    - `bd migrate schema --force && bd migrate --force` (overrides remote schema gate on designated migrator and applies both SQL table and metadata migrations in `bd v1.3.x+`)
+12. **Resolve "Dolt Remote vs Git Origin" endpoint conflicts without breaking GCS federation.**
+    Running `bd init` in a repository with a git `origin` remote (`git+ssh://...`) often auto-populates `.beads/config.yaml` (`sync.remote`) and Dolt's `origin` remote with the git SSH URL, causing `bd doctor` to warn `Dolt Remote vs Git Origin: 1 Dolt remote(s) match the git origin URL: origin`. **Never blindly run `bd config set dolt.local-only true`** when remote viewers (such as `beads-run` / Beads Explorer) rely on GCS bucket federation — `dolt.local-only: true` globally disables all Dolt remote sync (`Remote sync: disabled (dolt.local-only=true)`). Instead:
+    - Check `git log -p -- .beads/config.yaml` and sibling project configs (`grep -h -A1 "^sync:" ~/projects/*/.beads/config.yaml`) to see if the project uses a GCS federation bucket (`gs://<bucket>/<project-id>`).
+    - If federated via GCS: remove `dolt.local-only: true` from `.beads/config.yaml`, set `sync.remote: "gs://<bucket>/<project-id>"`, replace the Dolt `origin` remote (`bd dolt remote remove origin && bd dolt remote add origin gs://<bucket>/<project-id>`), and run `bd dolt push --no-adopt && bd sync`.
+    - Only set `dolt.local-only: true` if confirmed with the user that no remote viewers or federated buckets exist.
 
 ## Manual Verification Snippet
 

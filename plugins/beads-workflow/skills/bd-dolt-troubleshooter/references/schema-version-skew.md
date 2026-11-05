@@ -17,6 +17,10 @@ Simultaneously, `dolt-server.log` fills with recurring errors like:
 ```
 error running query ... error="column "content_hash" could not be found in any table in scope"
 ```
+Or, if `.beads/.local_version` was already stamped with the new CLI version (e.g. `1.3.1`), `bd list` skips the migration prompt and fails directly with a SQL column error:
+```
+Error: search count issues: Error 1105 (HY000): table "i" does not have column "storage_class"
+```
 
 **Root-cause:**
 
@@ -29,7 +33,7 @@ schema, so any other clone pulling from the remote would get mismatched data —
 a schema fork.
 
 The old server (the running `dolt sql-server`) continues serving the old schema.
-Any client querying for columns from the new schema (like `content_hash`) gets
+Any client querying for columns from the new schema (like `content_hash` or `storage_class`) gets
 SQL errors on every poll.
 
 **Before touching anything, take a filesystem-level backup.** During an active
@@ -46,18 +50,15 @@ cp -R .beads/dolt /tmp/bd-raw-snapshot-$(date +%Y%m%d-%H%M%S)
 
 ```bash
 # 1. On the machine with the running bd server (primary):
-#    The exact gate-bypass flag/subcommand has moved between bd versions —
-#    check `bd migrate --help` for your build. As of bd 1.1.x it's a
-#    top-level flag: `bd migrate --force` (equivalent to setting
-#    BD_ALLOW_REMOTE_MIGRATE=1). Older builds instead required
-#    `BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema`. Without one of these,
-#    the gate fires first and reports "Schema already at vX" even though
-#    nothing was applied. Note `--force` cannot be combined with `--dry-run`
-#    (opening the store with the gate overridden applies the migration
-#    before any preview could run).
-bd migrate --force                            # applies vX → vY (bd 1.1.x+)
-# BD_ALLOW_REMOTE_MIGRATE=1 bd migrate schema # equivalent on older builds
-bd migrate --inspect       # confirm Schema Version is now vY
+#    In bd 1.3.x+, `bd migrate --force` alone updates the Dolt metadata version
+#    (e.g. 1.1.0 -> 1.3.1) WITHOUT executing pending SQL table migrations
+#    (such as 0054-0066, including 0060_add_storage_class.up.sql). Always run
+#    `bd migrate schema --force` FIRST to apply the SQL table migrations, and
+#    then `bd migrate --force` to update the metadata stamp.
+bd migrate schema --force                     # applies SQL table migrations (vX → vY)
+bd migrate --force                            # updates Dolt metadata version stamp
+bd vc commit -m "chore(bd): commit config working set" 2>/dev/null || true
+bd migrate --inspect       # confirm Schema Version is now vY and Registered Migrations: 0
 bd dolt push               # push migrated schema + data to remote
 
 # 2. On every other clone (including the machine running the watcher):
