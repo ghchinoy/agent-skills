@@ -41,7 +41,7 @@ function compareSemver(a, b) {
   return 0;
 }
 
-async function findGoMods(root, maxDepth = 5, depth = 0) {
+async function findGoMods(root, maxDepth = 5, depth = 0, includeFixtures = false) {
   if (depth > maxDepth) return [];
   const results = [];
   let entries = [];
@@ -57,7 +57,8 @@ async function findGoMods(root, maxDepth = 5, depth = 0) {
       e.name === "vendor" ||
       e.name === "dist" ||
       e.name === ".astro" ||
-      e.name.startsWith(".site-e2e-")
+      e.name.startsWith(".site-e2e-") ||
+      (!includeFixtures && (e.name === "fixtures" || e.name === "testdata"))
     ) {
       continue;
     }
@@ -65,7 +66,7 @@ async function findGoMods(root, maxDepth = 5, depth = 0) {
     if (e.isFile() && e.name === "go.mod") {
       results.push(full);
     } else if (e.isDirectory()) {
-      results.push(...(await findGoMods(full, maxDepth, depth + 1)));
+      results.push(...(await findGoMods(full, maxDepth, depth + 1, includeFixtures)));
     }
   }
   return results.sort();
@@ -285,14 +286,18 @@ async function main() {
   const args = process.argv.slice(2);
   const jsonFlag = args.includes("--json");
   const vulncheckFlag = args.includes("--vulncheck");
+  const strictFlag = args.includes("--strict");
+  const includeFixtures = args.includes("--include-fixtures");
   const targetArg = args.find((a) => !a.startsWith("--")) ?? process.cwd();
   const targetPath = resolve(targetArg);
 
-  const modPaths = await findGoMods(targetPath, 5);
+  const modPaths = await findGoMods(targetPath, 5, 0, includeFixtures);
   const reports = [];
   for (const modPath of modPaths) {
     reports.push(await auditGoModule(modPath, targetPath, vulncheckFlag));
   }
+  const rootIgnores = await inspectIgnoreFiles(targetPath);
+  const reachableVulns = reports.reduce((acc, r) => acc + (r.vulncheck?.symbolCount ?? 0), 0);
 
   const summary = {
     scannedAt: new Date().toISOString(),
@@ -301,19 +306,39 @@ async function main() {
     belowGoFloor: reports.filter((r) => !r.meetsGo126Floor).length,
     belowGoPatchFloor: reports.filter((r) => !r.meetsGo126PatchFloor).length,
     dockerfileDrift: reports.filter((r) => r.dockerfile.present && r.dockerfile.builderAligned === false).length,
+    reachableSymbolVulns: reachableVulns,
+    rootIgnores,
     reports,
   };
 
+  const hasStrictFailure =
+    summary.belowGoFloor > 0 ||
+    summary.dockerfileDrift > 0 ||
+    summary.reachableSymbolVulns > 0 ||
+    rootIgnores.missingGitignore.length > 0;
+
   if (jsonFlag) {
     console.log(JSON.stringify(summary, null, 2));
+    if (strictFlag && hasStrictFailure) {
+      process.exit(1);
+    }
     return;
   }
 
   console.log(`# Go & Container Security Audit Report`);
   console.log(`- **Target**: \`${targetPath}\``);
   console.log(
-    `- **Go Modules Scanned**: ${summary.modulesScanned} (${summary.belowGoFloor} below \`go 1.26.0\` module floor, ${summary.belowGoPatchFloor} below \`go 1.26.10\` stdlib security floor, ${summary.dockerfileDrift} with Dockerfile toolchain drift)\n`,
+    `- **Go Modules Scanned**: ${summary.modulesScanned} (${summary.belowGoFloor} below \`go 1.26.0\` module floor, ${summary.belowGoPatchFloor} below \`go 1.26.10\` stdlib security floor, ${summary.dockerfileDrift} with Dockerfile toolchain drift)`,
   );
+  if (rootIgnores.hasGitignore) {
+    const igMsg =
+      rootIgnores.missingGitignore.length === 0
+        ? "OK (`.serena`, `.beads`, `.dolt` excluded)"
+        : `MISSING: ${rootIgnores.missingGitignore.map((x) => `\`${x}\``).join(", ")}`;
+    console.log(`- **Root \`.gitignore\` Hygiene**: ${igMsg}\n`);
+  } else {
+    console.log("");
+  }
 
   const vulnHeader = vulncheckFlag ? " `govulncheck` (Sym/Pkg/Mod) |" : "";
   const vulnSep = vulncheckFlag ? " :--- |" : "";
@@ -347,6 +372,9 @@ async function main() {
     console.log(
       `| \`${r.subproject}\` | \`${r.moduleName ?? "—"}\` | \`${r.goVersion ?? "—"}\` | ${floorStatus} | ${r.directDependencyCount} | ${dfBuilder} | ${dfUpgrade} |${vulnCol} ${gitState} |`,
     );
+  }
+  if (strictFlag && hasStrictFailure) {
+    process.exit(1);
   }
 }
 

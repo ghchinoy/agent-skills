@@ -30,7 +30,8 @@ This skill packages a repeatable review, a static scanner, a run-history scanner
 ### Step 1: Inventory
 
 ```bash
-./scripts/audit-gemini-workflows.py /path/to/repo
+uv run ./scripts/audit-gemini-workflows.py /path/to/repo
+./scripts/audit-gemini-workflows.py /path/to/repo --json
 ```
 
 List every workflow that uses `run-gemini-cli` and every workflow that calls it via `uses: ./.github/workflows/...`. The *triggers of the caller* decide who can reach the agent.

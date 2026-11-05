@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
 """Routing regression test for a Gemini CLI dispatch workflow (template).
 
 Extracts the github-script step that parses `@gemini-cli ...` commands out of event

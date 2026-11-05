@@ -44,8 +44,8 @@ Always run `git fetch && git pull --rebase` in each target repository **before**
 Run `scripts/audit-repo.mjs` against a single repository or across all discovered projects in `~/projects`:
 
 ```bash
-# Audit a single repository (human-readable Markdown table + details)
-./scripts/audit-repo.mjs ~/projects/my-target-repo
+# Audit a single repository (human-readable Markdown table + details, exit 1 on findings with --strict)
+./scripts/audit-repo.mjs ~/projects/my-target-repo --strict
 
 # Audit all local repositories in ~/projects and emit JSON
 ./scripts/audit-repo.mjs ~/projects --all --json

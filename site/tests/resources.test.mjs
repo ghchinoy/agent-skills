@@ -260,29 +260,31 @@ test("AC3: the embedded image renders inline, from the site's own asset path", a
   );
   const served = imgs.filter((i) => i.src.startsWith(`${BASE}/skill-assets/`));
 
+  const skills = await declaredSkills();
+  const expectedEmbeds = skills.flatMap((s) =>
+    [...s.raw.matchAll(/!\[[^\]]*\]\(assets\/([^)]+)\)/g)].map((m) => ({
+      route: s.route,
+      src: `${BASE}/skill-assets/${s.plugin}/${s.skill}/${m[1]}`,
+    })),
+  );
+  assert.ok(expectedEmbeds.length > 0, "expected at least one embedded skill asset image");
   assert.equal(
     served.length,
-    1,
-    `expected one image served from ${BASE}/skill-assets/, found ${served.length}: ` +
+    expectedEmbeds.length,
+    `expected ${expectedEmbeds.length} image(s) served from ${BASE}/skill-assets/, found ${served.length}: ` +
       JSON.stringify(served.map((i) => i.src)),
   );
-  // An <img>, not a link that happens to point at an image: AC3 says "renders
-  // as a working inline image".
-  assert.match(served[0].src, /\.webp$/);
-  // It is the ONLY image on the site, so there is no second one whose presence
-  // could make this one look fine.
   assert.equal(imgs.length, served.length, `an image is served from somewhere else: ${JSON.stringify(imgs.map(i => i.src))}`);
 
-  // WORKING: the file it names is really in dist, at that path, non-empty.
-  const file = join(siteRoot, "dist", served[0].src.slice(BASE.length + 1));
-  assert.ok((await stat(file)).size > 0, `${served[0].src} maps to an empty or missing file`);
-
-  // And the image is on the page of the skill whose SKILL.md embeds it — not
-  // merely somewhere on the site.
-  const skills = await declaredSkills();
-  const embedding = skills.filter((s) => /!\[[^\]]*\]\(assets\//.test(s.raw));
-  assert.equal(embedding.length, 1, `${embedding.length} skills embed an asset image`);
-  assert.equal(served[0].route, embedding[0].route);
+  for (const s of served) {
+    assert.match(s.src, /\.webp$/);
+    const file = join(siteRoot, "dist", s.src.slice(BASE.length + 1));
+    assert.ok((await stat(file)).size > 0, `${s.src} maps to an empty or missing file`);
+  }
+  assert.deepEqual(
+    served.map((s) => `${s.route}|${s.src}`).sort(),
+    expectedEmbeds.map((e) => `${e.route}|${e.src}`).sort(),
+  );
 });
 
 test("AC3 control: a blob URL is not an image source, and would be caught", async () => {
@@ -327,8 +329,23 @@ test("AC4: public/ holds the copied image and one named scaffold file, nothing e
     PUBLIC_EXEMPTIONS,
     `public/ holds a file that is neither a copied asset nor the one declared exemption`,
   );
-  assert.equal(copied.length, 1, `public/skill-assets/ holds ${copied.length} files: ${copied}`);
-  assert.match(copied[0], /\.webp$/);
+  const skills = await declaredSkills();
+  const expectedCopied = skills
+    .flatMap((s) =>
+      [...s.raw.matchAll(/!\[[^\]]*\]\(assets\/([^)]+)\)/g)].map(
+        (m) => `skill-assets/${s.plugin}/${s.skill}/${m[1]}`,
+      ),
+    )
+    .sort();
+  assert.ok(expectedCopied.length > 0, "expected at least one copied skill asset image");
+  assert.deepEqual(
+    copied.slice().sort(),
+    expectedCopied,
+    `public/skill-assets/ mismatch: ${copied}`,
+  );
+  for (const c of copied) {
+    assert.match(c, /\.webp$/);
+  }
 
   // ── The four things AC4 says must NOT be there, each checked by its own
   // predicate rather than by the count above. A single wrong total would hide

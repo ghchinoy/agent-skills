@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
 """Static review of GitHub Actions workflows that run Gemini CLI (run-gemini-cli).
 
 Heuristic scanner: it reads workflow YAML only. A clean result is NOT proof of safety
@@ -7,7 +13,7 @@ are not scanned.
 
 Exit status: 0 = no HIGH/CRITICAL findings, 1 = at least one, 2 = usage/tooling error
 or at least one workflow file could not be parsed (unless --allow-unparsed).
-Requires PyYAML (python3 -m pip install pyyaml, or run in a venv).
+Requires PyYAML (run via `uv run ./scripts/audit-gemini-workflows.py` or in a venv).
 """
 import argparse
 import json
@@ -18,7 +24,11 @@ import sys
 try:
     import yaml
 except ImportError:
-    print("PyYAML is required: python3 -m pip install pyyaml", file=sys.stderr)
+    print(
+        "PyYAML is required. Run with `uv run ./scripts/audit-gemini-workflows.py` "
+        "or install pyyaml in a virtual environment.",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 ACTION = "google-github-actions/run-gemini-cli"

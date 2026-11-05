@@ -69,7 +69,7 @@ function meetsSecurityFloor(verTupleOrSpec) {
   };
 }
 
-async function findPackageJsons(root, maxDepth = 5, depth = 0) {
+async function findPackageJsons(root, maxDepth = 5, depth = 0, includeFixtures = false) {
   if (depth > maxDepth) return [];
   const results = [];
   let entries = [];
@@ -84,7 +84,8 @@ async function findPackageJsons(root, maxDepth = 5, depth = 0) {
       e.name === ".git" ||
       e.name === "dist" ||
       e.name === ".astro" ||
-      e.name.startsWith(".site-e2e-")
+      e.name.startsWith(".site-e2e-") ||
+      (!includeFixtures && (e.name === "fixtures" || e.name === "testdata"))
     ) {
       continue;
     }
@@ -92,7 +93,7 @@ async function findPackageJsons(root, maxDepth = 5, depth = 0) {
     if (e.isFile() && e.name === "package.json") {
       results.push(full);
     } else if (e.isDirectory()) {
-      results.push(...(await findPackageJsons(full, maxDepth, depth + 1)));
+      results.push(...(await findPackageJsons(full, maxDepth, depth + 1, includeFixtures)));
     }
   }
   return results.sort();
@@ -321,6 +322,8 @@ async function auditSubproject(pkgPath, workspaceRoot) {
 async function main() {
   const args = process.argv.slice(2);
   const jsonFlag = args.includes("--json");
+  const strictFlag = args.includes("--strict");
+  const includeFixtures = args.includes("--include-fixtures");
   const targetArg = args.find((a) => !a.startsWith("--")) ?? process.cwd();
   const targetPath = resolve(targetArg);
 
@@ -333,7 +336,7 @@ async function main() {
     // keep process.execPath
   }
 
-  const pkgPaths = await findPackageJsons(targetPath, 5);
+  const pkgPaths = await findPackageJsons(targetPath, 5, 0, includeFixtures);
   const reports = [];
   for (const pkgPath of pkgPaths) {
     reports.push(await auditSubproject(pkgPath, targetPath));
@@ -355,8 +358,16 @@ async function main() {
     reports,
   };
 
+  const hasStrictFailure =
+    !localNodeCheck.ok ||
+    summary.totalVulnerabilities > 0 ||
+    reports.some((r) => r.enginesFloorOk === false || (r.runtimePins ?? []).some((p) => !p.ok));
+
   if (jsonFlag) {
     console.log(JSON.stringify(summary, null, 2));
+    if (strictFlag && hasStrictFailure) {
+      process.exit(1);
+    }
     return;
   }
 
@@ -443,6 +454,9 @@ async function main() {
         );
       }
     }
+  }
+  if (strictFlag && hasStrictFailure) {
+    process.exit(1);
   }
 }
 

@@ -31,7 +31,7 @@ Always fetch and verify git tracking status before modifying `go.mod` or `go.sum
 
 ```bash
 git fetch origin
-./scripts/audit-go-repo.mjs ~/projects/my-go-repo --vulncheck
+./scripts/audit-go-repo.mjs ~/projects/my-go-repo --vulncheck --strict
 ./scripts/audit-go-repo.mjs ~/projects --vulncheck --json
 ```
 

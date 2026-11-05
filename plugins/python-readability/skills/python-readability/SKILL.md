@@ -45,9 +45,11 @@ ruff format .         # formats files with 80-character limit
 mypy .                # verifies strict static typing
 ```
 
-To audit or bootstrap linter configuration automatically in any repository, use the included CLI script:
+To audit Python source files with zero external dependencies (AST checks for relative imports, legacy `typing` generics, symbol imports, bare/broad `except` blocks, mutable defaults, and missing docstrings) or bootstrap linter configurations automatically, use `scripts/setup-linters.py`:
 
 ```bash
+./scripts/setup-linters.py --audit .
+./scripts/setup-linters.py --audit . --json
 ./scripts/setup-linters.py --check
 ./scripts/setup-linters.py --apply --line-length 80
 ```
