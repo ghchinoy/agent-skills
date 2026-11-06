@@ -577,6 +577,8 @@ const EXEMPT_EXTENSIONS = {
     "than a defect; a reader cannot resolve an import",
   ".css": "CSS cannot import a JavaScript binding, so a URL in a stylesheet has no " +
     "in-language fix and would be a finding about the design rather than the file",
+  ".woff2": "binary self-hosted webfont asset under src/assets/fonts/, which has " +
+    "no import syntax and carries glyph outlines rather than site configuration",
 };
 
 /**
@@ -922,7 +924,7 @@ test("CONTROL: the extension bound is a partition, and it reaches .ts and .astro
   for (const f of ["mut10.ts", "EntryMeta.astro", "x.mjs", "y.js"]) {
     assert.ok(isScannedSource(f), `${f} is not read by the constant scan`);
   }
-  for (const f of ["a.json", "b.md", "c.css"]) {
+  for (const f of ["a.json", "b.md", "c.css", "d.woff2"]) {
     assert.ok(!isScannedSource(f), `${f} is scanned by an instrument that cannot be right for it`);
   }
 
