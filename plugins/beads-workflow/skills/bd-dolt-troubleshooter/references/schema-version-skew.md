@@ -225,25 +225,29 @@ When `bd` hits schema skew, its terminal error prompt instructs you to run `CGO_
 2. **`CGO_ENABLED=0` Trap:** Rebuilding in pure-Go mode bypasses native ICU header linking (`unicode/regex.h`), but silently disables embedded database inspection engines, causing 15+ checks in `bd doctor` to degrade with `Skipped: requires CGO`.
 
 1. **Identify what the installed binary actually is** — `bd --version` is not
-   enough. A dev build shows the same version string as a published tag but may
-   be commits ahead. `(dev)` in the version string is a red flag. Use:
+   enough. Note that `go install …/cmd/bd@vX.Y.Z` always prints `(dev)` in
+   `bd --version` because Go module zips omit `.git` VCS metadata; conversely, a
+   local source build may show a tag version string while being commits ahead. Use:
    ```bash
    go version -m "$(which bd)"
-   # Look for the `mod` line — a pseudo-version
-   # (v1.x.x-0.YYYYMMDDHHMMSS-<hash>) means it was built from an untagged commit.
+   # Look for the `mod` line — a clean tag (e.g. v1.3.4) means an official release;
+   # a pseudo-version (v1.x.x-0.YYYYMMDDHHMMSS-<hash>) means an untagged commit.
    ```
    Then find the target (the version that migrated the DB) by checking `go version -m`
-   on the binary that triggered the migration, or the latest tag/pseudo-version:
+   on the binary that triggered the migration, or comparing `@latest` vs `@main`:
    ```bash
-   go list -m -versions github.com/steveyegge/beads   # tagged releases
-   go list -m github.com/steveyegge/beads@main         # main-tip pseudo-version
+   go list -m -json github.com/steveyegge/beads@latest   # latest tagged release + timestamp
+   go list -m -json github.com/steveyegge/beads@main     # main-tip pseudo-version + timestamp
    ```
-2. Reinstall bd from source at that version, or run the automated restoration script:
+2. Reinstall bd at `@latest` (default) — or `--main` / `<commit>` ONLY if the DB is already ahead of `@latest`:
    ```bash
-   # Automated rebuild against @main with CGO + ICU support, disk check, and auto-sync PATH:
+   # Safe default: rebuild against @latest with CGO + ICU support and symlink PATH copies:
    scripts/restore-bd.sh --migrate
 
-   # Or inspect module revisions across multiple installed binaries:
+   # Only if DB was migrated past @latest by an unreleased main build:
+   scripts/restore-bd.sh --main --migrate
+
+   # Inspect module revisions across multiple installed binaries:
    scripts/inspect-binary.sh
    ```
    If building manually:
@@ -289,16 +293,11 @@ below), `@latest` resolves to the same old tag you already have and changes
 nothing:
 
 ```bash
-go list -m -versions github.com/steveyegge/beads   # highest tagged release
-go list -m github.com/steveyegge/beads@main         # main-tip pseudo-version
+go list -m -json github.com/steveyegge/beads@latest   # highest tagged release + commit timestamp
+go list -m -json github.com/steveyegge/beads@main     # main-tip pseudo-version + commit timestamp
 ```
 
-Compare the two. Pseudo-versions sort as `vX.Y.Z-0.<timestamp>-<hash>`; if the
-`@main` pseudo-version's base (`vX.Y.Z`) is *lower than or equal to* the
-highest tag, `main` has not yet been released — a plain `@latest` install
-will **not** advance your schema knowledge past the tag's max version. If
-your binary is already on the latest tag and the DB is still ahead, skip
-straight to the next section.
+Compare the `"Time"` timestamps and migration files (`internal/storage/schema/migrations/`), **not** the `vX.Y.Z` prefix of `@main`'s pseudo-version! When patch releases (e.g. `v1.3.2`–`v1.3.4`) are cut on a release branch while `main` continues toward `v1.4.0`, Go's `@main` pseudo-version retains the older branch-point tag prefix (`v1.3.1-0.20261113...`) even though `main` is newer in commit time and several schema migrations ahead (`0074` vs `0066`). Conversely, if you are already on `@latest` and the DB is still ahead, skip straight to the next section (and do **not** install `@main` on machines where `@latest` already satisfies the DB, or you will advance sibling repos onto unreleased migrations).
 
 ---
 

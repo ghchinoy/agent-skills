@@ -5,12 +5,16 @@
 #
 set -euo pipefail
 
-TARGET="main"
+TARGET="latest"
 AUTO_MIGRATE=0
 AUTO_CLEAN=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --main)
+            TARGET="main"
+            shift
+            ;;
         --migrate)
             AUTO_MIGRATE=1
             shift
@@ -20,17 +24,18 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --help|-h)
-            echo "Usage: restore-bd.sh [--migrate] [--clean-cache] [revision/tag]"
+            echo "Usage: restore-bd.sh [--main] [--migrate] [--clean-cache] [revision/tag]"
             echo ""
             echo "Options:"
+            echo "  --main         Build against @main instead of @latest (use only when DB is ahead of all release tags)"
             echo "  --migrate      Automatically apply pending schema migrations (--force) and update repo ID"
             echo "  --clean-cache  Automatically run 'go clean -cache' if disk space is low (<1500 MB)"
-            echo "  revision/tag   Target Git branch, tag, or commit on beads repo (default: main)"
+            echo "  revision/tag   Target Git branch, tag, or commit on beads repo (default: latest)"
             exit 0
             ;;
         -*)
             echo "Unknown flag: $1"
-            echo "Usage: restore-bd.sh [--migrate] [--clean-cache] [revision/tag]"
+            echo "Usage: restore-bd.sh [--main] [--migrate] [--clean-cache] [revision/tag]"
             exit 1
             ;;
         *)
@@ -147,12 +152,12 @@ for bin in $ALL_BINS; do
             echo "    Symlink to primary binary: $bin (up-to-date)"
             continue
         fi
-        echo "    Synchronizing shadowed binary: $bin <- $COMPILED_BIN"
+        echo "    Symlinking shadowed binary: $bin -> $COMPILED_BIN"
         if [ -w "$bin" ] || [ -w "$(dirname "$bin")" ]; then
-            cp -f "$COMPILED_BIN" "$bin"
+            ln -sf "$COMPILED_BIN" "$bin" || cp -f "$COMPILED_BIN" "$bin"
         else
-            echo "    [INFO] Root/sudo permission required to overwrite $bin"
-            sudo cp -f "$COMPILED_BIN" "$bin"
+            echo "    [INFO] Root/sudo permission required to update $bin"
+            sudo ln -sf "$COMPILED_BIN" "$bin" || sudo cp -f "$COMPILED_BIN" "$bin"
         fi
     else
         echo "    Primary Go install directory binary: $bin (up-to-date)"
@@ -176,12 +181,14 @@ if [ -d .beads ] && command -v "$FINAL_BIN" >/dev/null 2>&1; then
 
     if echo "$SKEW_OR_MIG" | grep -qi -E "refusing to auto-apply|pending schema migration|schema version mismatch"; then
         if [ "$AUTO_MIGRATE" -eq 1 ]; then
-            echo "    Pending schema migrations detected. Applying with --force (--migrate active)..."
+            echo "    Pending schema migrations detected. Applying schema + metadata migrations with --force (--migrate active)..."
+            "$FINAL_BIN" migrate schema --force || true
             "$FINAL_BIN" migrate --force || true
+            "$FINAL_BIN" vc commit -m "chore(bd): commit config working set" 2>/dev/null || true
         else
             echo "    [NOTE] Pending schema migrations detected."
             echo "    To apply migrations as the designated migrator, run:"
-            echo "      bd migrate --force"
+            echo "      bd migrate schema --force && bd migrate --force"
             echo "    (Or re-run: $0 --migrate ${TARGET})"
         fi
     fi

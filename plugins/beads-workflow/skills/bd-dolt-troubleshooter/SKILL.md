@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, disabled GCS federation remotes, and schema version skew (remote-backed migration blocks, missing storage_class columns, or client behind DB). Use when bd won't start, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "refusing to auto-apply pending schema migrations" or "does not have column storage_class".
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including fresh-clone missing server-mode databases and bootstrap directory misplacement, engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, disabled GCS federation remotes, and schema version skew (remote-backed migration blocks, missing storage_class columns, or client behind DB). Use when bd won't start, database "<name>" is not found on Dolt server, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "refusing to auto-apply pending schema migrations" or "does not have column storage_class".
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.9.2"
+  version: "1.10.0"
 ---
 
 # bd / Dolt Troubleshooter
@@ -289,17 +289,22 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
 7. **Disable hooks in repos where beads is unused.** An empty beads repo (no
    issues, no JSONL, no remote) with active hooks is a net liability. Detect with
    `bd list` and `bd dolt show`; disable as shown above.
-8. **`bd --version` lies when the binary is a dev build.** A binary built from
-   local source shows the same version string as the published tag it was branched
-   from, but may be many commits — and schema migrations — ahead. `(dev)` in the
-   output is a red flag. Always verify with `go version -m "$(which bd)"` and
-   compare the `mod` pseudo-version hash across all machines sharing a database.
-9. **"Upgrade to latest" assumes a newer release exists — verify first.** Before
-   prescribing `go install …@latest` for a schema-skew fix, run
-   `go list -m -versions github.com/steveyegge/beads` and compare against the
-   installed tag. If you're already on the latest tag and the DB is still ahead,
-   the DB was migrated by an unreleased/`main` build — you need that specific
-   commit (`go install …@<commit>`), not a repeat of the same tag.
+8. **`bd --version` can be misleading — always inspect module metadata.** First,
+   installing a clean tagged release via `go install …/cmd/bd@vX.Y.Z` always prints
+   `(dev)` in `bd --version` because Go module zips omit `.git` VCS metadata — that
+   alone is benign. Conversely, a binary built from local source may show a tag
+   version string while being commits and schema migrations ahead. Always verify
+   with `go version -m "$(which bd)"` (or `scripts/inspect-binary.sh`): a clean
+   `mod github.com/steveyegge/beads v1.3.4` line confirms a tagged release, whereas
+   a `vX.Y.Z-0.YYYYMMDDHHMMSS-<hash>` pseudo-version means an untagged commit.
+9. **Default upgrades to the latest stable tag (`@latest`), NOT `@main` — unless a DB is already ahead of all tags.**
+   `@main` frequently carries unreleased `vNext` SQL migrations (e.g. `0067`–`0074`
+   while stable `v1.3.4` is at `0066`); blindly installing `@main` will advance
+   local/shared databases forward and schema-skew sibling repos or other machines
+   running stable tags. `scripts/restore-bd.sh` defaults to `@latest` (with `CGO_ENABLED=1`
+   and symlinked PATH sync). Only pass `./scripts/restore-bd.sh --main` or a specific
+   `<commit>` after `go list -m -json github.com/steveyegge/beads@latest` confirms
+   you're already on the latest tag and the database schema is still ahead.
 10. **A repo-fingerprint mismatch after adding a remote late is expected, not
     corruption.** `bd init` computes `repo_id` from `git config remote.origin.url`
     when available, falling back to `sha256(realpath(repo_root))` when no remote
@@ -367,11 +372,11 @@ project `AGENTS.md`.
   multi-server lock contention in Case F)
 - `references/cgo-and-schema-drift.md` — detailed runbook on CGO ICU dependencies,
   pure-Go degraded test warnings, multi-agent `@main` schema drift, and cross-platform compilation
-- `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
-- `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes`, and exports clean JSONL
+- `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, missing/misplaced server-mode databases, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
+- `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, bootstraps/relocates missing server-mode databases, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes` + `bd vc commit`, refreshes active git hooks, and exports clean JSONL
 - `scripts/repair-corrupt-backup.sh` — targeted repair for corrupt backup write-rollback loops
-- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@main` with full CGO/ICU support,
-  disk-space preflight checks, optional automated schema migration (`--migrate`), and automatic synchronization of shadowed PATH binaries across macOS and Linux
+- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@latest` (or `--main` / `<commit>`) with full CGO/ICU support,
+  disk-space preflight checks, optional automated schema migration (`--migrate`), and automatic symlinking of shadowed PATH binaries across macOS and Linux
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`
 - `scripts/inspect-binary.sh` — read-only: scan PATH for installed `bd` binaries,

@@ -62,6 +62,12 @@ if [ -f .beads/daemon-error ]; then
   ISSUES=$((ISSUES+1))
 else
   DOLT_SHOW=$(bd dolt show 2>/dev/null || true)
+  META_MODE=""
+  META_DB=""
+  if [ -f .beads/metadata.json ]; then
+    META_MODE=$(sed -n 's/.*"dolt_mode"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
+    META_DB=$(sed -n 's/.*"dolt_database"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
+  fi
   if echo "$DOLT_SHOW" | grep -qi "Server not reachable" && [ -f .beads/dolt-server.lock ]; then
     red "    PROBLEM: Dolt server is unreachable but .beads/dolt-server.lock exists (lock contention / orphaned process)."
     red "    Fix: Run scripts/find-dolt-server.sh to isolate and stop the orphan, then clear stale runtime files."
@@ -69,13 +75,26 @@ else
     SKIP_DB_CALLS=1
   else
     # Check bd doctor output directly even if daemon-error file is missing
-    REPO_MISMATCH=$(bd doctor 2>&1 | grep -i "Database belongs to different repository" || true)
-    if [ -n "$REPO_MISMATCH" ]; then
-      red "    PROBLEM: Repo Fingerprint mismatch (Database belongs to different repository)."
-      red "    Fix: bd migrate --update-repo-id --yes"
+    DOCTOR_INITIAL=$(bd doctor 2>&1 || true)
+    if echo "$DOCTOR_INITIAL" | grep -qi "database \".*\" not found on Dolt server" || { [ "$META_MODE" = "server" ] && [ -n "$META_DB" ] && [ ! -d ".beads/dolt/$META_DB" ]; }; then
+      if [ -n "$META_DB" ] && [ -d ".beads/embeddeddolt/$META_DB" ]; then
+        red "    PROBLEM: Server-mode database '$META_DB' was bootstrapped into .beads/embeddeddolt/$META_DB instead of .beads/dolt/$META_DB."
+        red "    Fix: Run scripts/repair.sh (or stop scoped server, move .beads/embeddeddolt/$META_DB -> .beads/dolt/$META_DB, restart server; see Case I)."
+      else
+        red "    PROBLEM: Fresh clone / missing server-mode database '${META_DB:-<unknown>}' on running Dolt server (.beads/dolt/${META_DB:-<db>} missing)."
+        red "    Fix: Run scripts/repair.sh (runs 'bd bootstrap --yes' and relocates .beads/embeddeddolt/<db> if needed; see Case I)."
+      fi
       ISSUES=$((ISSUES+1))
+      SKIP_DB_CALLS=1
     else
-      green "    No daemon-error or repo fingerprint mismatch. Good."
+      REPO_MISMATCH=$(echo "$DOCTOR_INITIAL" | grep -i "Database belongs to different repository" || true)
+      if [ -n "$REPO_MISMATCH" ]; then
+        red "    PROBLEM: Repo Fingerprint mismatch (Database belongs to different repository)."
+        red "    Fix: bd migrate --update-repo-id --yes"
+        ISSUES=$((ISSUES+1))
+      else
+        green "    No daemon-error or repo fingerprint mismatch. Good."
+      fi
     fi
   fi
 fi
@@ -101,7 +120,7 @@ else
     if echo "$SKEW" | grep -qi -E "binary knows up to|is ahead of binary"; then
       red "    Your bd binary is BEHIND the database (another agent/machine migrated it forward)."
       red "    Reads warn; writes FAIL (\"Field 'id' doesn't have a default value\" or unexpected schema errors)."
-      red "    Fix: UPGRADE the client to match — scripts/restore-bd.sh (or go install github.com/steveyegge/beads/cmd/bd@main)"
+      red "    Fix: UPGRADE the client to match — scripts/restore-bd.sh (defaults to @latest; pass --main if DB was migrated by an unreleased main build)"
       red "         (CGO/ICU + PATH-copy caveats: SKILL.md 'Client BEHIND the Database')."
       red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
     else
@@ -210,8 +229,8 @@ for l in open('.beads/issues.jsonl'):
     if [ "$DOLT" = "$JSONL" ]; then
       green "    $id: dolt=$DOLT jsonl=$JSONL OK"
     elif [ "$DOLT" = "?" ]; then
-      if echo "$DOLT_RAW" | grep -qi -E "refusing to auto-apply|Database belongs to different repository|schema version"; then
-        red "    $id: dolt=? (bd query failed due to schema skew / repo-id mismatch; see checks 0 & 0b)"
+      if echo "$DOLT_RAW" | grep -qi -E "refusing to auto-apply|Database belongs to different repository|schema version|not found on Dolt server"; then
+        red "    $id: dolt=? (bd query failed due to missing server DB / schema skew / repo-id mismatch; see checks 0 & 0b)"
       else
         red "    $id: dolt=? jsonl=$JSONL MISMATCH (query failed)"
         MISMATCH=1

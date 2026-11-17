@@ -179,15 +179,18 @@ Re-run the PID+path loop to confirm no remaining process points at this repo's
 > only if it persists). After killing, `pgrep`'s own command line may match the
 > pattern — confirm you're not seeing a false positive from the grep/pgrep itself.
 
-### 3. Clear stale runtime files and start the single owner
+### 3. Clear stale runtime files and start the single owner immediately
 
-These are machine-local and never committed (safe to remove):
+These are machine-local and never committed (safe to remove). Include `dolt-server-config.yaml` when resetting ephemeral port state:
 ```bash
 rm -f .beads/dolt-server.lock .beads/dolt-server.port \
-      .beads/dolt-server.info .beads/dolt-server.pid
+      .beads/dolt-server.info .beads/dolt-server.pid \
+      .beads/dolt-server-config.yaml
 bd dolt start
 bd dolt status
 ```
+
+> **Trap: Auto-start race with other `bd` commands.** Almost every `bd` subcommand (even `bd hooks install --force`) silently auto-starts a background `dolt sql-server` if `.beads/dolt-server.port` is missing. **Always run `bd dolt start` FIRST immediately after `rm -f .beads/dolt-server*`** — never chain another `bd` command ahead of `bd dolt start`, or the first command will spawn a background server and `bd dolt start` will immediately collide with `database "dolt" is locked by another dolt process`.
 
 ### Cross-machine coordination (bind-mount case)
 
@@ -305,12 +308,13 @@ binary can't read the newer schema).
 
 **Recovery — upgrade the stranded client to match the DB (never downgrade the DB):**
 
-> **THE CLI RECOMMENDATION TRAP:** When `bd` encounters schema version skew, its terminal error output instructs you to run `CGO_ENABLED=0 go install ...@latest`. **Do NOT follow this advice.** Installing `@latest` fetches an older tagged release (e.g., `v1.1.0`) rather than the active `@main` development branch that migrated your database, leaving you stranded behind the schema. Furthermore, setting `CGO_ENABLED=0` cripples embedded database inspection engines, causing 15+ tests in `bd doctor` to degrade with `Skipped: requires CGO`.
+> **THE CLI RECOMMENDATION TRAP:** When `bd` encounters schema version skew, its terminal error output instructs you to run `CGO_ENABLED=0 go install ...@latest`. **Do NOT set `CGO_ENABLED=0`** — pure-Go mode cripples embedded database inspection engines, causing 15+ tests in `bd doctor` to degrade with `Skipped: requires CGO`. In addition, if another agent migrated the database using an unreleased `@main` build, `@latest` will only fetch the latest published tag and leave you behind; verify first whether `@latest` or `--main` is needed.
 
 1. **Automated Restoration (Recommended):**
-   Execute the bundled restoration script from the skill directory. It automatically handles macOS/Linux ICU dependency discovery, compiles with `CGO_ENABLED=1` against `@main` (or a specified pseudo-version), and synchronizes all shadowed binary installations in your PATH:
+   Execute the bundled restoration script from the skill directory. It automatically handles macOS/Linux ICU dependency discovery, compiles with `CGO_ENABLED=1`, and symlinks shadowed binary installations in your PATH:
    ```bash
-   scripts/restore-bd.sh           # Rebuild against @main and sync PATH binaries
+   scripts/restore-bd.sh           # Rebuild against @latest (safe default across sibling repos)
+   scripts/restore-bd.sh --main    # Use ONLY when DB was migrated past all published tags
    ```
 
 2. **Manual Investigation & Compilation:**
@@ -337,6 +341,51 @@ preflight so the skew surfaces before you rely on writes.
 
 ---
 
+## Case I: Fresh clone in server mode — `database "<name>" not found on Dolt server` & `bd bootstrap` `embeddeddolt/` quirk
+
+**Symptom.** On a fresh git clone (or new machine) of a repo whose `.beads/metadata.json` configures `"dolt_mode": "server"` and `"dolt_database": "<name>"`, every `bd` command fails:
+```
+Error: failed to open database: database "<name>" not found on Dolt server at 127.0.0.1:<port>
+```
+Simultaneously, `bd doctor` reports 3 errors and 6 cascading Federation warnings (`Federation remotesapi: remotesapi port 8080 not accessible`, `Peer Connectivity`, `Sync Staleness`, etc.) even when the project does not use federation.
+
+**Root cause (two-part):**
+1. `.beads/dolt/` is gitignored runtime state. On first invocation on a new clone, `bd` auto-starts `dolt sql-server` against an empty `.beads/dolt/` directory (which exposes only a default empty `dolt` database, not `<name>`).
+2. In `bd v1.3.x`, running `bd bootstrap --yes` when importing from git-tracked `.beads/issues.jsonl` first retries 3 times against the running server (`10s + 20s + 40s` = **70s wait**) and then **imports the JSONL into `.beads/embeddeddolt/<name>` instead of `.beads/dolt/<name>`**. Because `dolt sql-server` serves `.beads/dolt/`, subsequent `bd` commands *still* fail with `database "<name>" not found` immediately after `Imported N issues`!
+
+**Recovery (automated via `scripts/repair.sh`, or step-by-step):**
+
+```bash
+# 1. Configure local role if unset (prevents beads.role warning in bd doctor)
+git config beads.role maintainer
+
+# 2. Bootstrap from .beads/issues.jsonl (allow >=180s timeout for the 70s retry backoff)
+bd bootstrap --yes
+
+# 3. If bd placed the database under .beads/embeddeddolt/<name>, relocate it into .beads/dolt/<name>:
+DB=$(sed -n 's/.*"dolt_database"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json)
+if [ -d ".beads/embeddeddolt/$DB" ] && [ ! -d ".beads/dolt/$DB" ]; then
+  bd dolt stop
+  # Verify no orphan dolt sql-server remains bound to this repo (Case F)
+  scripts/find-dolt-server.sh
+  mkdir -p .beads/dolt
+  mv ".beads/embeddeddolt/$DB" ".beads/dolt/$DB"
+  rm -rf .beads/embeddeddolt
+  rm -f .beads/dolt-server.lock .beads/dolt-server.port \
+        .beads/dolt-server.info .beads/dolt-server.pid \
+        .beads/dolt-server-config.yaml
+  # Start server FIRST before any other bd command (avoids auto-start lock race)
+  bd dolt start
+fi
+
+# 4. Backfill local repo fingerprint & project_id metadata, commit Dolt working set, and verify
+bd doctor --fix --yes
+bd vc commit -m "chore(bd): commit metadata after bootstrap"
+bd doctor          # should pass with 0 warnings, 0 errors
+```
+
+---
+
 ## Prevention checklist
 
 - [ ] `.beads/backup/` is **not** in `git ls-files`
@@ -351,9 +400,10 @@ preflight so the skew surfaces before you rely on writes.
       the lock. Set it explicitly: `export BEADS_DOLT_AUTO_START=false` before
       running `bd`, and prefer reading state from `.beads/issues.jsonl` directly.
 - [ ] All agents/machines sharing one bd database run compatible bd versions —
-      "compatible" means the same module pseudo-version hash, verified with
-      `go version -m "$(which bd)"`, not just `bd --version` (which is unreliable
-      for dev/local builds that show a tag version string but are commits ahead)
-- [ ] `(dev)` in `bd --version` output triggers a `go version -m "$(which bd)"`
-      check before any operation that could migrate a shared database
+      "compatible" means the same release tag (`v1.3.4`) or module pseudo-version hash,
+      verified with `go version -m "$(which bd)"` (note: `go install …@vX.Y.Z` always
+      prints `(dev)` in `bd --version` because module zips omit `.git` metadata; check
+      the `mod` line in `go version -m` instead)
+- [ ] Routine client upgrades target `@latest` (`scripts/restore-bd.sh`), reserving
+      `--main` for databases already migrated past all published tags
 - [ ] `bd doctor` is run as a session preflight (catches schema skew before writes)

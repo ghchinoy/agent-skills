@@ -36,6 +36,49 @@ else
   yellow "    No .beads/dolt directory found to snapshot."
 fi
 
+info "1b. Checking for missing or misplaced server-mode database"
+META_MODE=""
+META_DB=""
+if [ -f .beads/metadata.json ]; then
+  META_MODE=$(sed -n 's/.*"dolt_mode"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
+  META_DB=$(sed -n 's/.*"dolt_database"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
+fi
+if [ -z "$(git config --get beads.role 2>/dev/null || true)" ]; then
+  git config beads.role maintainer 2>/dev/null || true
+fi
+if [ "$META_MODE" = "server" ] && [ -n "$META_DB" ] && [ ! -d ".beads/dolt/$META_DB" ]; then
+  if [ ! -d ".beads/embeddeddolt/$META_DB" ]; then
+    yellow "    Server-mode database '$META_DB' missing locally; running 'bd bootstrap --yes' (may retry up to ~70s)..."
+    bd bootstrap --yes 2>&1 | sed 's/^/    /' || true
+  fi
+  if [ -d ".beads/embeddeddolt/$META_DB" ] && [ ! -d ".beads/dolt/$META_DB" ]; then
+    yellow "    Relocating bootstrapped database from .beads/embeddeddolt/$META_DB -> .beads/dolt/$META_DB..."
+    bd dolt stop >/dev/null 2>&1 || true
+    BEADS_ABS=$(cd .beads 2>/dev/null && pwd || true)
+    if [ -n "$BEADS_ABS" ] && command -v pgrep >/dev/null 2>&1; then
+      for pid in $(pgrep -f "dolt sql-server" 2>/dev/null || true); do
+        pcwd=""
+        if [ -r "/proc/$pid/cwd" ]; then
+          pcwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+        elif command -v lsof >/dev/null 2>&1; then
+          pcwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)
+        fi
+        case "$pcwd" in
+          "$BEADS_ABS"*) kill -TERM "$pid" 2>/dev/null || true; sleep 1 ;;
+        esac
+      done
+    fi
+    mkdir -p .beads/dolt
+    mv ".beads/embeddeddolt/$META_DB" ".beads/dolt/$META_DB"
+    rm -rf .beads/embeddeddolt
+    rm -f .beads/dolt-server.lock .beads/dolt-server.port .beads/dolt-server.info .beads/dolt-server.pid .beads/dolt-server-config.yaml
+    bd dolt start 2>&1 | sed 's/^/    /' || true
+    green "    Server-mode database '$META_DB' restored and Dolt server started."
+  fi
+else
+  green "    Server-mode database directory present (or not in server mode)."
+fi
+
 info "2. Checking for corrupt backup directory"
 if [ -d .beads/backup ]; then
   # Stop server temporarily before moving backup
@@ -81,8 +124,12 @@ for f in $(git ls-files .beads/ 2>/dev/null); do
 done
 [ "$UNTRACKED_ANY" -eq 0 ] && green "    No local runtime files tracked in git."
 
-info "6. Running bd doctor --fix"
+info "6. Running bd doctor --fix and committing metadata changes"
 bd doctor --fix --yes 2>&1 | sed 's/^/    /' || true
+bd vc commit -m "chore(bd): commit doctor metadata fixes" >/dev/null 2>&1 || true
+if [ -f .git/hooks/pre-commit ] && [ ! -f .git/hooks/pre-commit.disabled ]; then
+  bd hooks install --force >/dev/null 2>&1 || true
+fi
 
 info "7. Exporting clean JSONL"
 bd export -o .beads/issues.jsonl 2>&1 | sed 's/^/    /'
