@@ -386,11 +386,83 @@ bd doctor          # should pass with 0 warnings, 0 errors
 
 ---
 
+## Case J: Cross-Era Legacy Dolt Server Workspace (`bd v0.55–v0.62` → `bd v1.3+`)
+
+**Symptom:** Every `bd` command (`bd dolt show`, `bd migrate --inspect`, `bd doctor`, `bd list`) immediately refuses with:
+```
+Error: legacy Dolt server workspace from bd 0.60.0 detected; explicit migration is required before this bd version can open or modify the workspace. Preserve .beads unchanged and follow docs/getting-started/upgrading.md#cross-era-upgrades
+```
+
+**Root cause:** `bd v1.3+` refuses workspaces whose `.beads/metadata.json` selects `dolt_mode: server` alongside a pre-v1 `.beads/.local_version` witness (`v0.55.4`–`v0.62.0`) or missing witness with `.beads/dolt/` present. Running `scripts/repair.sh` directly will fail because `bd migrate` and `bd export` are blocked by the cross-era guard.
+
+### 1. Inspect the legacy Dolt DB vs committed `.beads/issues.jsonl` first
+
+Before downloading an old `bd` binary, inspect the legacy Dolt DB directly with the raw `dolt` CLI (read-only) to see whether it holds any issues missing from `.beads/issues.jsonl`:
+
+```bash
+# Confirm no dolt sql-server is running for this repo
+scripts/find-dolt-server.sh
+
+# Check row count & commit history in the legacy Dolt DB
+DB=$(python3 -c "import json; print(json.load(open('.beads/metadata.json'))['dolt_database'])")
+dolt --data-dir .beads/dolt sql -q "use $DB; select count(*) from issues; select commit_hash, date, message from dolt_log limit 10;"
+wc -l .beads/issues.jsonl
+```
+
+- **If the legacy Dolt DB contains unexported issues** not in `.beads/issues.jsonl`: snapshot `.beads/`, copy it to a disposable workspace, export with the verified historical `bd` binary (`v0.60.x`), and import that export into a fresh `v1.3+` workspace (per upstream `docs/getting-started/upgrading.md#cross-era-upgrades`).
+- **Fast path (common on freshly synced clones):** If the legacy Dolt DB has **0 issues** (e.g., an empty initial `bd init` from months ago) or is strictly older than `.beads/issues.jsonl` committed in git, `.beads/issues.jsonl` is already your authoritative export.
+
+### 2. Snapshot, re-initialize in `v1.3+`, and import `.beads/issues.jsonl`
+
+Keep the git staging area clean first (both `bd init` and `bd dolt remote remove` auto-commit staged changes to git):
+
+```bash
+# 1. Full filesystem snapshot before touching anything
+cp -R .beads "/tmp/bd-cross-era-backup-$(date +%s)"
+
+# 2. Remove legacy untracked local DB and runtime state (preserves metadata.json & issues.jsonl)
+rm -rf .beads/dolt .beads/backup .beads/.local_version .beads/dolt-server.* .beads/dolt-monitor.pid.lock
+
+# 3. Re-initialize per-project server mode in bd v1.3+ (preserves existing project_id)
+bd init --server --reinit-local --prefix <prefix> --database <db> --non-interactive --skip-agents
+
+# 4. Import authoritative JSONL and repair blocked flags (bd v1.3.x #7037)
+bd import .beads/issues.jsonl
+bd recompute-blocked --json
+
+# 5. Upgrade legacy git hooks (v0.60 -> v1.3+)
+bd hooks install --force
+```
+
+### 3. Clean up post-init side effects and verify
+
+```bash
+# Untrack sensitive credential key if it was tracked in legacy commits
+git ls-files --error-unmatch .beads/.beads-credential-key >/dev/null 2>&1 \
+  && git rm --cached .beads/.beads-credential-key
+
+# Resolve auto-wired git-origin Dolt remote conflict (see Golden Rule 12 for GCS federation)
+# If local + git issues.jsonl only (no GCS federation):
+bd dolt remote remove origin
+# Then remove any leftover empty `sync:` block in .beads/config.yaml
+
+# Verify health and write persistence
+bd migrate --inspect
+bd doctor
+scripts/diagnose.sh --probe
+
+# Inspect git log — bd init and bd dolt remote remove create auto-commits;
+# squash into one clean commit before pushing.
+git log --oneline -n 5
+```
+
+---
+
 ## Prevention checklist
 
 - [ ] `.beads/backup/` is **not** in `git ls-files`
-- [ ] `.beads/dolt-server.*` are **not** in `git ls-files`
-- [ ] `.beads/.gitignore` contains `backup/`, `dolt-server.pid`, `dolt-server.port`, `dolt-server.lock`
+- [ ] `.beads/dolt-server.*` and `.beads/.beads-credential-key` are **not** in `git ls-files`
+- [ ] `.beads/.gitignore` contains `backup/`, `dolt-server.pid`, `dolt-server.port`, `dolt-server.lock`, `*.corrupt.backup/`, `.beads-credential-key`
 - [ ] CI/agents run `bd export -o .beads/issues.jsonl` before committing bd changes
 - [ ] After bulk bd operations, diff `issues.jsonl` before `git commit`
 - [ ] On any machine that must stay Dolt-free (the non-owning side of a

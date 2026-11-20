@@ -58,6 +58,8 @@ cp -R .beads/dolt /tmp/bd-raw-snapshot-$(date +%Y%m%d-%H%M%S)
 bd migrate schema --force                     # applies SQL table migrations (vX → vY)
 bd migrate --force                            # updates Dolt metadata version stamp
 bd vc commit -m "chore(bd): commit config working set" 2>/dev/null || true
+bd recompute-blocked --json                   # repairs false blocked flags from migration 0059 (#7037)
+bd hooks install --force                      # updates git hooks to match the new bd version
 bd migrate --inspect       # confirm Schema Version is now vY and Registered Migrations: 0
 bd dolt push               # push migrated schema + data to remote
 

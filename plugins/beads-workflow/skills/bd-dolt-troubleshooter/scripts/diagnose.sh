@@ -40,8 +40,17 @@ command -v bd >/dev/null 2>&1 || { red "bd not found in PATH."; exit 1; }
 ISSUES=0
 
 info "0. Engine mode and daemon-error (foundational check)"
-MODE_LINE=$(bd dolt show 2>/dev/null | grep "Mode:" || true)
+DOLT_SHOW_ALL=$(bd dolt show 2>&1 || true)
+MODE_LINE=$(echo "$DOLT_SHOW_ALL" | grep "Mode:" || true)
 printf "    %s\n" "$MODE_LINE"
+if echo "$DOLT_SHOW_ALL" | grep -qi -E "legacy Dolt server workspace|cross-era-upgrades|explicit migration is required"; then
+  red "    PROBLEM: Cross-era legacy Dolt workspace detected (bd v0.55–v0.62 -> v1.3+ guard):"
+  printf "%s\n" "$DOLT_SHOW_ALL" | sed 's/^/      /'
+  red "    Do NOT run scripts/repair.sh directly — bd migrate and bd export are blocked."
+  red "    Fix: Follow references/recovery-playbook.md Case J (inspect raw Dolt count vs issues.jsonl, snapshot, re-init, bd import)."
+  ISSUES=$((ISSUES+1))
+  SKIP_DB_CALLS=1
+fi
 if echo "$MODE_LINE" | grep -q "embedded"; then
   if [ -d .beads/dolt ] && [ "$(ls -A .beads/dolt 2>/dev/null)" ]; then
     red "    PROBLEM: Engine is in embedded mode but .beads/dolt/ contains server-mode data."
@@ -52,7 +61,9 @@ if echo "$MODE_LINE" | grep -q "embedded"; then
     yellow "    Engine is in embedded mode (no server-mode data found in .beads/dolt/)."
   fi
 fi
-if [ -f .beads/daemon-error ]; then
+if [ "${SKIP_DB_CALLS:-0}" -eq 1 ]; then
+  yellow "    Skipping live DB daemon/fingerprint checks until cross-era migration completes."
+elif [ -f .beads/daemon-error ]; then
   red "    PROBLEM: .beads/daemon-error exists — bd failed to start:"
   sed 's/^/      /' .beads/daemon-error
   if grep -q "DATABASE MISMATCH" .beads/daemon-error; then
@@ -61,14 +72,13 @@ if [ -f .beads/daemon-error ]; then
   fi
   ISSUES=$((ISSUES+1))
 else
-  DOLT_SHOW=$(bd dolt show 2>/dev/null || true)
   META_MODE=""
   META_DB=""
   if [ -f .beads/metadata.json ]; then
     META_MODE=$(sed -n 's/.*"dolt_mode"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
     META_DB=$(sed -n 's/.*"dolt_database"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .beads/metadata.json | head -1)
   fi
-  if echo "$DOLT_SHOW" | grep -qi "Server not reachable" && [ -f .beads/dolt-server.lock ]; then
+  if echo "$DOLT_SHOW_ALL" | grep -qi "Server not reachable" && [ -f .beads/dolt-server.lock ]; then
     red "    PROBLEM: Dolt server is unreachable but .beads/dolt-server.lock exists (lock contention / orphaned process)."
     red "    Fix: Run scripts/find-dolt-server.sh to isolate and stop the orphan, then clear stale runtime files."
     ISSUES=$((ISSUES+1))
@@ -102,7 +112,7 @@ fi
 info "0b. Schema version skew & pending migrations (client binary vs database)"
 SKEW=""
 if [ "${SKIP_DB_CALLS:-0}" -eq 1 ]; then
-  yellow "    Skipping schema checks (resolve lock contention / unreachable server first)."
+  yellow "    Skipping schema checks (resolve cross-era workspace or lock contention first)."
 else
   DOCTOR_OUT=$(bd doctor 2>&1 || true)
   SKEW=$(echo "$DOCTOR_OUT" | grep -i -E "schema version mismatch|schema skew|pending schema migration|refusing to auto-apply|Database: version .* \(CLI:" | head -1 || true)
@@ -125,11 +135,19 @@ else
       red "    Do NOT run 'bd migrate' on the old binary; it can't apply a schema it doesn't know."
     else
       red "    Database has pending migrations blocked by remote-sync gate (or .local_version skipped prompt)."
-      red "    Fix: bd migrate schema --force && bd migrate --force && bd vc commit -m 'chore(bd): commit config working set' && bd dolt push"
+      red "    Fix: bd migrate schema --force && bd migrate --force && bd vc commit -m 'chore(bd): commit config working set' && bd recompute-blocked --json && bd dolt push"
     fi
     ISSUES=$((ISSUES+1))
   else
     green "    No schema version skew or pending migrations."
+  fi
+
+  if echo "$DOCTOR_OUT" | grep -qi "Installed bd hooks are outdated"; then
+    yellow "    WARNING: Outdated bd git hooks detected. Fix: bd hooks install --force"
+  fi
+  if echo "$DOCTOR_OUT" | grep -qi "Dolt Remote vs Git Origin"; then
+    yellow "    WARNING: Dolt remote matches git origin URL (Dolt Remote vs Git Origin)."
+    yellow "    Fix: Check GCS federation first (Golden Rule 12); if local-only, run 'bd dolt remote remove origin'."
   fi
 fi
 
@@ -186,13 +204,13 @@ TRACKED_BAD=""
 TRACKED_COUNT=0
 for f in $(git ls-files .beads/ 2>/dev/null); do
   case "$f" in
-    .beads/backup/*|.beads/backup.*/*|.beads/dolt/*|.beads/dolt.*/*|.beads/dolt-server*|.beads/dolt-config.log)
+    .beads/backup/*|.beads/backup.*/*|.beads/dolt/*|.beads/dolt.*/*|.beads/dolt-server*|.beads/dolt-config.log|.beads/dolt-monitor.pid*|.beads/*.lock|.beads/.beads-credential-key)
       TRACKED_BAD="$TRACKED_BAD $f"
       TRACKED_COUNT=$((TRACKED_COUNT+1)) ;;
   esac
 done
 if [ -n "$TRACKED_BAD" ]; then
-  red "    These local files are committed to git ($TRACKED_COUNT file(s); corruption/bloat will spread to clones):"
+  red "    These local/sensitive files are committed to git ($TRACKED_COUNT file(s); corruption/bloat/key leak will spread to clones):"
   SHOWN=0
   for f in $TRACKED_BAD; do
     SHOWN=$((SHOWN+1))
@@ -201,15 +219,17 @@ if [ -n "$TRACKED_BAD" ]; then
     fi
   done
   if [ "$TRACKED_COUNT" -gt 10 ]; then
-    echo "      ... and $((TRACKED_COUNT-10)) more (run: git rm --cached -r .beads/backup* .beads/dolt* .beads/dolt-server* .beads/dolt-config.log)"
+    echo "      ... and $((TRACKED_COUNT-10)) more (run: git rm --cached -r .beads/backup* .beads/dolt* .beads/dolt-server* .beads/dolt-config.log .beads/.beads-credential-key)"
   fi
   ISSUES=$((ISSUES+1))
 else
-  green "    No backup/runtime files tracked. Good."
+  green "    No backup/runtime/credential files tracked. Good."
 fi
 
 info "3. PRIMARY: Dolt vs JSONL agreement (the real symptom)"
-if command -v python3 >/dev/null 2>&1 && [ -f .beads/issues.jsonl ]; then
+if [ "${SKIP_DB_CALLS:-0}" -eq 1 ]; then
+  yellow "    Skipped (resolve cross-era workspace or lock contention in check 0 first)."
+elif command -v python3 >/dev/null 2>&1 && [ -f .beads/issues.jsonl ]; then
   SAMPLE=$(python3 -c "
 import json
 ids=[json.loads(l, strict=False)['id'] for l in open('.beads/issues.jsonl') if l.strip()]
@@ -292,6 +312,7 @@ if [ "$ISSUES" -eq 0 ]; then
   fi
 else
   red "Detected $ISSUES problem area(s). See SKILL.md for fixes:"
+  red "  - Cross-era legacy workspace (v0.55–v0.62 -> v1.3+): references/recovery-playbook.md Case J"
   red "  - Automated multi-issue repair: scripts/repair.sh"
   red "  - Engine mode / daemon-error issues: references/recovery-playbook.md Case E"
   red "  - Corrupt backup / write-revert issues: scripts/repair-corrupt-backup.sh"

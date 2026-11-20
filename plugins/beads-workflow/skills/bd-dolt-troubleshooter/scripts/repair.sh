@@ -25,6 +25,15 @@ if ! command -v bd >/dev/null 2>&1; then
   exit 1
 fi
 
+CROSS_ERA_CHECK=$(bd dolt show 2>&1 || true)
+if echo "$CROSS_ERA_CHECK" | grep -qi -E "legacy Dolt server workspace|cross-era-upgrades|explicit migration is required"; then
+  red "Cross-era legacy Dolt workspace detected (bd v0.55–v0.62 -> v1.3+ guard):"
+  printf "%s\n" "$CROSS_ERA_CHECK" | sed 's/^/  /'
+  red "Aborting automated repair — bd migrate and bd export are blocked by the cross-era guard."
+  red "Follow references/recovery-playbook.md Case J (inspect raw Dolt count vs issues.jsonl, snapshot, re-init, bd import)."
+  exit 2
+fi
+
 TS=$(date +%s)
 BACKUP_SNAPSHOT="/tmp/bd-raw-snapshot-$TS"
 
@@ -101,6 +110,7 @@ if echo "$MIG_CHECK $DOCTOR_CHECK" | grep -qi -E "refusing to auto-apply|pending
   bd migrate schema --force 2>&1 | sed 's/^/    /' || true
   bd migrate --force 2>&1 | sed 's/^/    /' || true
   bd vc commit -m "chore(bd): commit config working set" >/dev/null 2>&1 || true
+  bd recompute-blocked --json 2>&1 | sed 's/^/    /' || true
 else
   green "    No pending schema migrations."
 fi
@@ -114,17 +124,17 @@ else
   green "    Repo fingerprint is up to date."
 fi
 
-info "5. Untracking local-only files from git"
+info "5. Untracking local-only and sensitive files from git"
 UNTRACKED_ANY=0
 for f in $(git ls-files .beads/ 2>/dev/null); do
   case "$f" in
-    .beads/backup/*|.beads/backup.*/*|.beads/dolt/*|.beads/dolt.*/*|.beads/dolt-server*|.beads/dolt-config.log)
+    .beads/backup/*|.beads/backup.*/*|.beads/dolt/*|.beads/dolt.*/*|.beads/dolt-server*|.beads/dolt-config.log|.beads/dolt-monitor.pid*|.beads/*.lock|.beads/.beads-credential-key)
       git rm --cached "$f" >/dev/null 2>&1 && { echo "    untracked $f"; UNTRACKED_ANY=1; } ;;
   esac
 done
-[ "$UNTRACKED_ANY" -eq 0 ] && green "    No local runtime files tracked in git."
+[ "$UNTRACKED_ANY" -eq 0 ] && green "    No local runtime or credential files tracked in git."
 
-info "6. Running bd doctor --fix and committing metadata changes"
+info "6. Running bd doctor --fix, committing metadata changes, and refreshing hooks"
 bd doctor --fix --yes 2>&1 | sed 's/^/    /' || true
 bd vc commit -m "chore(bd): commit doctor metadata fixes" >/dev/null 2>&1 || true
 if [ -f .git/hooks/pre-commit ] && [ ! -f .git/hooks/pre-commit.disabled ]; then

@@ -1,11 +1,11 @@
 ---
 name: bd-dolt-troubleshooter
-description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including fresh-clone missing server-mode databases and bootstrap directory misplacement, engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, disabled GCS federation remotes, and schema version skew (remote-backed migration blocks, missing storage_class columns, or client behind DB). Use when bd won't start, database "<name>" is not found on Dolt server, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "refusing to auto-apply pending schema migrations" or "does not have column storage_class".
+description: Diagnose and repair beads (bd) issue-tracker problems caused by its Dolt backend — including fresh-clone missing server-mode databases and bootstrap directory misplacement, cross-era legacy Dolt workspaces (v0.55–v0.62 to v1.3+), engine-mode mismatches, DATABASE MISMATCH repo-ID errors, corrupt auto-backups that revert writes, dolt sql-server lock contention, hook-timeout stash-wipes, orphaned server leaks, tracked credential keys, disabled GCS federation remotes, and schema version skew (remote-backed migration blocks, missing storage_class columns, or client behind DB). Use when bd won't start, database "<name>" is not found on Dolt server, daemon-error is present, bd writes revert, issues.jsonl is out of sync, untracked files vanish on commit, or bd fails with "legacy Dolt server workspace", "refusing to auto-apply pending schema migrations", or "does not have column storage_class".
 license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.10.0"
+  version: "1.10.1"
 ---
 
 # bd / Dolt Troubleshooter
@@ -36,11 +36,15 @@ When `bd` refuses to open with `refusing to auto-apply N pending schema migratio
    bd migrate schema --force
    bd migrate --force
    bd vc commit -m "chore(bd): commit config working set" 2>/dev/null || true
+   bd recompute-blocked --json
+   bd hooks install --force
    bd migrate --inspect
    bd doctor
    bd dolt push
    ```
 4. **If another clone already migrated**: Do NOT run `--force`. Run `bd bootstrap` to adopt the remote schema.
+
+If `bd` instead refuses with `legacy Dolt server workspace from bd 0.55–0.62 detected; explicit migration is required`, **do not run `scripts/repair.sh` directly** — check raw Dolt row count vs `.beads/issues.jsonl` and follow `references/recovery-playbook.md` → **Case J**.
 
 See `references/schema-version-skew.md` for full runbook, dirty working set recovery, and `unreadable-remote-state` handling.
 
@@ -274,8 +278,8 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
 
 1. **JSONL is the source of truth for git.** After any batch of bd writes, run
    `bd export -o .beads/issues.jsonl` and diff it before committing.
-2. **Never commit `.beads/backup/` or `.beads/dolt-server.*`.** They are
-   machine-local. If they show in `git ls-files`, untrack them.
+2. **Never commit `.beads/backup/`, `.beads/dolt-server.*`, or `.beads/.beads-credential-key`.**
+   They are machine-local (and `.beads-credential-key` is flagged by `bd doctor` as tracked sensitive data). If they show in `git ls-files`, untrack them with `git rm --cached`.
 3. **Verify, don't trust, the success message.** bd printing "Closed X" is not
    proof of persistence during a corruption episode. Re-read with `bd show X`
    *and* grep the JSONL.
@@ -322,7 +326,8 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
     Running `bd init` in a repository with a git `origin` remote (`git+ssh://...`) often auto-populates `.beads/config.yaml` (`sync.remote`) and Dolt's `origin` remote with the git SSH URL, causing `bd doctor` to warn `Dolt Remote vs Git Origin: 1 Dolt remote(s) match the git origin URL: origin`. **Never blindly run `bd config set dolt.local-only true`** when remote viewers (such as `beads-run` / Beads Explorer) rely on GCS bucket federation — `dolt.local-only: true` globally disables all Dolt remote sync (`Remote sync: disabled (dolt.local-only=true)`). Instead:
     - Check `git log -p -- .beads/config.yaml` and sibling project configs (`grep -h -A1 "^sync:" ~/projects/*/.beads/config.yaml`) to see if the project uses a GCS federation bucket (`gs://<bucket>/<project-id>`).
     - If federated via GCS: remove `dolt.local-only: true` from `.beads/config.yaml`, set `sync.remote: "gs://<bucket>/<project-id>"`, replace the Dolt `origin` remote (`bd dolt remote remove origin && bd dolt remote add origin gs://<bucket>/<project-id>`), and run `bd dolt push --no-adopt && bd sync`.
-    - Only set `dolt.local-only: true` if confirmed with the user that no remote viewers or federated buckets exist.
+    - If not federated (local + git `issues.jsonl` only): run `bd dolt remote remove origin` and clean up the leftover empty `sync:` stub in `.beads/config.yaml` rather than setting `dolt.local-only: true` (which blocks future federation unless explicitly desired).
+    - **Watch for implicit git commits:** Both `bd init` and `bd dolt remote remove` auto-commit to git and will sweep in anything currently staged in the git index. Keep the index clean beforehand, inspect `git log`, and squash auto-commits cleanly before pushing.
 
 ## Manual Verification Snippet
 
