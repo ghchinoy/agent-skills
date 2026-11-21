@@ -384,6 +384,48 @@ bd vc commit -m "chore(bd): commit metadata after bootstrap"
 bd doctor          # should pass with 0 warnings, 0 errors
 ```
 
+### Sub-case I.2: Unreachable `sync.remote` (e.g., GCS 403 / offline) with git-tracked `.beads/issues.jsonl`
+
+When `.beads/config.yaml` configures a GCS federation remote (`sync.remote: "gs://..."`) that this machine cannot authenticate to (e.g., HTTP `403 AccessDenied` under a different ADC account), `bd bootstrap --yes` fails without falling back to `.beads/issues.jsonl`. Running `bd init --server --reinit-local` directly also fails with exit code `10`:
+```
+! could not verify refs/dolt/data on gs://... (git: 'remote-gs' is not a git command); treating remote as having Dolt history
+bd init refuses: remote 'origin' already has Dolt history (refs/dolt/data).
+```
+
+If you want to restore a working local database from `.beads/issues.jsonl` while keeping `sync.remote` intact (without touching or pushing to GCS):
+
+```bash
+# 1. Record current HEAD and back up config.yaml; temporarily strip `sync:` so bd init does not probe gs://
+BASE_HEAD=$(git rev-parse HEAD)
+cp -f .beads/config.yaml /tmp/bd-config.yaml.bak
+sed -i.bak '/^sync:/,$d' .beads/config.yaml && rm -f .beads/config.yaml.bak
+
+# 2. Stop scoped server, clear empty .beads/dolt, and re-init local server DB (preserves metadata.json project_id)
+bd dolt stop || true
+rm -rf .beads/dolt .beads/dolt-server.* .beads/dolt.gate.lock
+bd init --server --reinit-local --prefix <prefix> --database <db> --non-interactive --skip-agents --skip-hooks
+
+# 3. Import authoritative JSONL and repair blocked flags
+bd import .beads/issues.jsonl
+bd recompute-blocked --json
+
+# 4. Replace bd init's auto-wired git+ssh:// Dolt remote with the original GCS remote
+REMOTE=$(sed -En 's/^[[:space:]]*remote:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' /tmp/bd-config.yaml.bak | head -1)
+bd dolt remote remove origin
+[ -n "$REMOTE" ] && bd dolt remote add origin "$REMOTE"
+bd dolt remote list    # confirm with remote list (bd dolt show may print Remotes: (none) in server mode)
+
+# 5. Undo the 3 implicit git auto-commits (bd init, clear sync.remote, update sync.remote) and restore config.yaml
+git reset --mixed "$BASE_HEAD"
+git checkout -- .beads/config.yaml
+rm -f /tmp/bd-config.yaml.bak
+
+# 6. Verify
+bd doctor
+```
+
+> **Do not run `bd dolt push` / `bd sync` against GCS from this locally-imported DB:** its Dolt commit graph has a different root commit than the existing GCS remote. Use local `bd` commands + `bd export -o .beads/issues.jsonl` + `git push` until you have GCS credentials; once authenticated, move `.beads/dolt` aside and run `bd bootstrap --yes` to adopt the shared remote history cleanly.
+
 ---
 
 ## Case J: Cross-Era Legacy Dolt Server Workspace (`bd v0.55–v0.62` → `bd v1.3+`)

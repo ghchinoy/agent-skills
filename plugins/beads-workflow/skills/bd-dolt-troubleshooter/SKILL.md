@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the `bd` (beads) CLI and a repo with a `.beads/` directory using the Dolt backend. Diagnostic scripts are POSIX sh; tested on macOS and Linux.
 metadata:
   author: ghchinoy
-  version: "1.10.1"
+  version: "1.10.2"
 ---
 
 # bd / Dolt Troubleshooter
@@ -327,7 +327,8 @@ git commit -m "chore(bd): untrack corrupt dolt backup; resync issues.jsonl"
     - Check `git log -p -- .beads/config.yaml` and sibling project configs (`grep -h -A1 "^sync:" ~/projects/*/.beads/config.yaml`) to see if the project uses a GCS federation bucket (`gs://<bucket>/<project-id>`).
     - If federated via GCS: remove `dolt.local-only: true` from `.beads/config.yaml`, set `sync.remote: "gs://<bucket>/<project-id>"`, replace the Dolt `origin` remote (`bd dolt remote remove origin && bd dolt remote add origin gs://<bucket>/<project-id>`), and run `bd dolt push --no-adopt && bd sync`.
     - If not federated (local + git `issues.jsonl` only): run `bd dolt remote remove origin` and clean up the leftover empty `sync:` stub in `.beads/config.yaml` rather than setting `dolt.local-only: true` (which blocks future federation unless explicitly desired).
-    - **Watch for implicit git commits:** Both `bd init` and `bd dolt remote remove` auto-commit to git and will sweep in anything currently staged in the git index. Keep the index clean beforehand, inspect `git log`, and squash auto-commits cleanly before pushing.
+    - **Verify remotes with `bd dolt remote list`:** In server mode, `bd dolt show` may report `Remotes: (none)` even when a remote is registered in Dolt. Always confirm configured remotes with `bd dolt remote list`.
+    - **Watch for implicit git commits:** `bd init`, `bd dolt remote remove`, and `bd dolt remote add` all auto-commit to git, will sweep in anything currently staged in the git index, and can leave a commented `# remote:` stub in `.beads/config.yaml`. Keep the index clean beforehand, inspect `git log` / `git diff <base>..HEAD`, and squash or reset stray auto-commits cleanly before pushing.
 
 ## Manual Verification Snippet
 
@@ -380,7 +381,7 @@ project `AGENTS.md`.
 - `scripts/diagnose.sh` — read-only (or `--probe` for write test): primary health check for engine mode, missing/misplaced server-mode databases, schema skew, repo fingerprint, PATH shadowing, backup corruption, and Dolt/JSONL agreement
 - `scripts/repair.sh` — unified automated repair: creates a raw snapshot backup, bootstraps/relocates missing server-mode databases, clears corrupt backup files, applies schema migrations (`--force`), updates repo fingerprints, untracks local files, runs `bd doctor --fix --yes` + `bd vc commit`, refreshes active git hooks, and exports clean JSONL
 - `scripts/repair-corrupt-backup.sh` — targeted repair for corrupt backup write-rollback loops
-- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@latest` (or `--main` / `<commit>`) with full CGO/ICU support,
+- `scripts/restore-bd.sh` — utility to rebuild `bd` against `@latest` (or `--main` / `<commit>`) with `CGO_ENABLED=1` (using native ICU headers when present or `-tags gms_pure_go` fallback),
   disk-space preflight checks, optional automated schema migration (`--migrate`), and automatic symlinking of shadowed PATH binaries across macOS and Linux
 - `scripts/find-dolt-server.sh` — read-only: list all `dolt sql-server` PIDs with
   their working dirs and flag the one owning the current repo's `.beads/`

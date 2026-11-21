@@ -58,7 +58,17 @@ fi
 if [ "$META_MODE" = "server" ] && [ -n "$META_DB" ] && [ ! -d ".beads/dolt/$META_DB" ]; then
   if [ ! -d ".beads/embeddeddolt/$META_DB" ]; then
     yellow "    Server-mode database '$META_DB' missing locally; running 'bd bootstrap --yes' (may retry up to ~70s)..."
-    bd bootstrap --yes 2>&1 | sed 's/^/    /' || true
+    BOOT_RC=0
+    BOOT_OUT=$(bd bootstrap --yes 2>&1) || BOOT_RC=$?
+    [ -n "$BOOT_OUT" ] && printf '%s\n' "$BOOT_OUT" | sed 's/^/    /'
+    if [ "$BOOT_RC" -ne 0 ] && [ ! -d ".beads/dolt/$META_DB" ] && [ ! -d ".beads/embeddeddolt/$META_DB" ]; then
+      red "    bd bootstrap failed (exit $BOOT_RC) and database '$META_DB' was not created."
+      if echo "$BOOT_OUT" | grep -qi -E "AccessDenied|403|storage\.objects|credentials|unreachable|clone from remote"; then
+        red "    Remote sync.remote could not be cloned (auth/403 or offline)."
+        red "    Either fix remote credentials and re-run, or follow references/recovery-playbook.md Case I (Sub-case I.2) to initialize locally from .beads/issues.jsonl."
+      fi
+      exit 1
+    fi
   fi
   if [ -d ".beads/embeddeddolt/$META_DB" ] && [ ! -d ".beads/dolt/$META_DB" ]; then
     yellow "    Relocating bootstrapped database from .beads/embeddeddolt/$META_DB -> .beads/dolt/$META_DB..."
@@ -83,6 +93,10 @@ if [ "$META_MODE" = "server" ] && [ -n "$META_DB" ] && [ ! -d ".beads/dolt/$META
     rm -f .beads/dolt-server.lock .beads/dolt-server.port .beads/dolt-server.info .beads/dolt-server.pid .beads/dolt-server-config.yaml
     bd dolt start 2>&1 | sed 's/^/    /' || true
     green "    Server-mode database '$META_DB' restored and Dolt server started."
+  fi
+  if [ ! -d ".beads/dolt/$META_DB" ]; then
+    red "    Server-mode database '$META_DB' is still missing under .beads/dolt/. Aborting repair."
+    exit 1
   fi
 else
   green "    Server-mode database directory present (or not in server mode)."
@@ -142,7 +156,14 @@ if [ -f .git/hooks/pre-commit ] && [ ! -f .git/hooks/pre-commit.disabled ]; then
 fi
 
 info "7. Exporting clean JSONL"
-bd export -o .beads/issues.jsonl 2>&1 | sed 's/^/    /'
+EXPORT_RC=0
+EXPORT_OUT=$(bd export -o .beads/issues.jsonl 2>&1) || EXPORT_RC=$?
+[ -n "$EXPORT_OUT" ] && printf '%s\n' "$EXPORT_OUT" | sed 's/^/    /'
+if [ "$EXPORT_RC" -ne 0 ]; then
+  red "    bd export failed (exit $EXPORT_RC). Repair incomplete."
+  echo "Raw snapshot saved at: $BACKUP_SNAPSHOT"
+  exit "$EXPORT_RC"
+fi
 
 echo
 green "Unified repair complete."

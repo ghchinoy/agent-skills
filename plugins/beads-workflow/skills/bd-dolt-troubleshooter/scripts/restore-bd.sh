@@ -68,39 +68,35 @@ if [ -n "$AVAIL_KB" ] && [ "$AVAIL_KB" -eq "$AVAIL_KB" ] 2>/dev/null; then
     fi
 fi
 
-# 1. OS and ICU detection for CGO support
+# 1. OS and ICU detection for CGO support (with gms_pure_go fallback)
 OS="$(uname -s)"
 export CGO_ENABLED=1
+GO_TAGS=()
 
 if [ "$OS" = "Darwin" ]; then
     echo "    Detected macOS (Darwin). Probing Homebrew for ICU C++ headers..."
-    if ! command -v brew >/dev/null 2>&1; then
-        echo "    [ERROR] Homebrew is not installed or not in PATH."
-        echo "    Please install Homebrew and run: brew install icu4c"
-        exit 1
-    fi
-
-    # Probe default icu4c first, then check for versioned formulas (e.g. icu4c@78)
     ICU_PREFIX=""
-    if brew --prefix icu4c >/dev/null 2>&1; then
-        ICU_PREFIX="$(brew --prefix icu4c)"
+    if command -v brew >/dev/null 2>&1; then
+        # Probe default icu4c first, then check for versioned formulas (e.g. icu4c@78)
+        if brew --prefix icu4c >/dev/null 2>&1; then
+            ICU_PREFIX="$(brew --prefix icu4c)"
+        else
+            for formula in $(brew list -1 2>/dev/null | grep -E '^icu4c@' | sort -V); do
+                ICU_PREFIX="$(brew --prefix "$formula" 2>/dev/null || true)"
+                if [ -n "$ICU_PREFIX" ]; then break; fi
+            done
+        fi
+    fi
+
+    if [ -n "$ICU_PREFIX" ] && [ -d "$ICU_PREFIX/include/unicode" ]; then
+        echo "    Found ICU library prefix at: $ICU_PREFIX"
+        export CGO_CFLAGS="-I$ICU_PREFIX/include ${CGO_CFLAGS:-}"
+        export CGO_CPPFLAGS="-I$ICU_PREFIX/include ${CGO_CPPFLAGS:-}"
+        export CGO_LDFLAGS="-L$ICU_PREFIX/lib ${CGO_LDFLAGS:-}"
     else
-        for formula in $(brew list -1 2>/dev/null | grep -E '^icu4c@' | sort -V); do
-            ICU_PREFIX="$(brew --prefix "$formula" 2>/dev/null || true)"
-            if [ -n "$ICU_PREFIX" ]; then break; fi
-        done
+        echo "    [INFO] ICU C++ headers not found; building with CGO_ENABLED=1 -tags gms_pure_go (matches upstream release builds; full CGO & embeddeddolt enabled)."
+        GO_TAGS=(-tags gms_pure_go)
     fi
-
-    if [ -z "$ICU_PREFIX" ] || [ ! -d "$ICU_PREFIX/include/unicode" ]; then
-        echo "    [ERROR] Missing ICU C++ header files ('unicode/regex.h')."
-        echo "    To fix CGO ICU compilation on macOS, run: brew install icu4c"
-        exit 1
-    fi
-
-    echo "    Found ICU library prefix at: $ICU_PREFIX"
-    export CGO_CFLAGS="-I$ICU_PREFIX/include ${CGO_CFLAGS:-}"
-    export CGO_CPPFLAGS="-I$ICU_PREFIX/include ${CGO_CPPFLAGS:-}"
-    export CGO_LDFLAGS="-L$ICU_PREFIX/lib ${CGO_LDFLAGS:-}"
 
 elif [ "$OS" = "Linux" ]; then
     echo "    Detected Linux. Verifying ICU development libraries..."
@@ -111,21 +107,22 @@ elif [ "$OS" = "Linux" ]; then
     elif [ -f "/usr/include/unicode/regex.h" ] || [ -f "/usr/local/include/unicode/regex.h" ] || ls /usr/include/*/unicode/regex.h >/dev/null 2>&1; then
         echo "    Found ICU headers in system include directories."
     else
-        echo "    [ERROR] Missing ICU C++ development libraries ('unicode/regex.h')."
-        echo "    Please install ICU development libraries for your distribution:"
-        echo "      Debian / Ubuntu : sudo apt-get install -y libicu-dev build-essential"
-        echo "      RHEL / Fedora   : sudo dnf install -y libicu-devel gcc gcc-c++"
-        echo "      Alpine Linux    : sudo apk add icu-dev gcc g++ musl-dev"
-        echo "      Arch Linux      : sudo pacman -S --needed icu gcc"
-        exit 1
+        echo "    [INFO] ICU C++ development headers not found; building with CGO_ENABLED=1 -tags gms_pure_go (matches upstream release builds; full CGO & embeddeddolt enabled)."
+        GO_TAGS=(-tags gms_pure_go)
     fi
 else
     echo "    [WARN] Unrecognized OS ($OS); proceeding with default CGO compilation flags."
 fi
 
 # 2. Compile and install target release
-echo "==> Compiling with CGO_ENABLED=1 from ${PKG_URL}@${TARGET}..."
-if ! go install "${PKG_URL}@${TARGET}"; then
+if [ "${#GO_TAGS[@]}" -gt 0 ]; then
+    echo "==> Compiling with CGO_ENABLED=1 ${GO_TAGS[*]} from ${PKG_URL}@${TARGET}..."
+    INSTALL_CMD=(go install "${GO_TAGS[@]}" "${PKG_URL}@${TARGET}")
+else
+    echo "==> Compiling with CGO_ENABLED=1 from ${PKG_URL}@${TARGET}..."
+    INSTALL_CMD=(go install "${PKG_URL}@${TARGET}")
+fi
+if ! "${INSTALL_CMD[@]}"; then
     echo "    [ERROR] 'go install' failed."
     echo "    Hint: If this is an untagged branch or revision on main, verify that your network and Go module proxies are accessible."
     exit 1
