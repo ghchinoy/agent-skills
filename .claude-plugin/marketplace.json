@@ -50,7 +50,8 @@
         "./plugins/repo-authoring/skills/node-security-audit",
         "./plugins/repo-authoring/skills/go-security-audit",
         "./plugins/repo-authoring/skills/repo-health-audit",
-        "./plugins/repo-authoring/skills/arxiv-preprint-authoring"
+        "./plugins/repo-authoring/skills/arxiv-preprint-authoring",
+        "./plugins/repo-authoring/skills/oss-contribution-audit"
       ]
     },
     {
