@@ -38,3 +38,7 @@ agent-skills/
    ```bash
    ./scripts/validate-plugins.sh
    ```
+   If you use Antigravity, you can also validate individual plugins against the `agy` manifest checker:
+   ```bash
+   agy plugin validate ./plugins/<plugin-name>
+   ```
