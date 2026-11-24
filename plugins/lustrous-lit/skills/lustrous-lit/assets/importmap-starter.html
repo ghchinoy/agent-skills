@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-theme="system" class="lustrous-root">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lustrous App</title>
+    <link rel="stylesheet" href="/vendor/lustrous-lit/dist/lustrous-theme.css" />
+    <link rel="stylesheet" href="/vendor/lustrous-lit/fonts/lustrous-fonts.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "lit": "/vendor/lit/index.js",
+          "lit/": "/vendor/lit/",
+          "lit-html": "/vendor/lit-html/lit-html.js",
+          "lit-html/": "/vendor/lit-html/",
+          "lit-element/": "/vendor/lit-element/",
+          "@lit/reactive-element": "/vendor/reactive-element/reactive-element.js",
+          "@lit/reactive-element/": "/vendor/reactive-element/",
+          "@ghchinoy/lustrous-lit": "/vendor/lustrous-lit/dist/index.js",
+          "@ghchinoy/lustrous-lit/": "/vendor/lustrous-lit/dist/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <lustrous-flex direction="column" gap="m" padding="2xl" max-width="480">
+      <lustrous-text variant="headline-medium" heading="1">Quick Deploy</lustrous-text>
+      <lustrous-text-input id="service" label="Service name" value="edge-gateway"></lustrous-text-input>
+      <lustrous-button id="deploy" icon="bolt">Deploy</lustrous-button>
+    </lustrous-flex>
+
+    <script type="module">
+      import "@ghchinoy/lustrous-lit/components/lustrous-flex/lustrous-flex.js";
+      import "@ghchinoy/lustrous-lit/components/lustrous-text/lustrous-text.js";
+      import "@ghchinoy/lustrous-lit/components/lustrous-text-input/lustrous-text-input.js";
+      import "@ghchinoy/lustrous-lit/components/lustrous-button/lustrous-button.js";
+      import { showSnack } from "@ghchinoy/lustrous-lit/components/lustrous-snackbar/lustrous-snackbar.js";
+
+      document.getElementById("deploy")?.addEventListener("click", () => {
+        const name = document.getElementById("service").value;
+        showSnack(`Deployed ${name}`, { variant: "positive" });
+      });
+    </script>
+  </body>
+</html>

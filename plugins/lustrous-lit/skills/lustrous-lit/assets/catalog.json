@@ -1,0 +1,6807 @@
+{
+  "package": "@ghchinoy/lustrous-lit",
+  "version": "0.2.0",
+  "breakpoints": {
+    "mobile": "(max-width: 768px)",
+    "desktop": "(min-width: 769px)",
+    "shellMobile": "(max-width: 959.98px)",
+    "shellDesktop": "(min-width: 960px)",
+    "reducedMotion": "(prefers-reduced-motion: reduce)",
+    "forcedColors": "(forced-colors: active)",
+    "darkMode": "(prefers-color-scheme: dark)"
+  },
+  "typographyVariants": [
+    "display-large",
+    "display-medium",
+    "display-small",
+    "headline-large",
+    "headline-medium",
+    "headline-small",
+    "body-large",
+    "body-large-emphasized",
+    "body-medium",
+    "body-medium-emphasized",
+    "body-small",
+    "body-small-emphasized",
+    "lead",
+    "blockquote",
+    "callout",
+    "caption",
+    "code",
+    "overline"
+  ],
+  "components": [
+    {
+      "tag": "lustrous-action-bar",
+      "className": "LustrousActionBar",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-action-bar",
+      "superclass": "LustrousFlex",
+      "formAssociated": false,
+      "summary": "Pill-shaped toolbar for contextual or multi-select actions.",
+      "properties": [
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousActionBarVariant",
+          "default": "\"flat\"",
+          "reflects": true,
+          "description": "Visual treatment: `flat` (default) or `floating` (elevated)."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name for the `toolbar` landmark."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-badge",
+      "className": "LustrousBadge",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-badge",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Compact 24px pill badge supporting semantic and dual-theme categorical tones (`cobalt`, `emerald`, `amber`, `rose`, `violet`, `teal`) and an optional icon.",
+      "properties": [
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousBadgeTone",
+          "default": "\"default\"",
+          "reflects": true
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Badge label text."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "badge",
+          "description": "The pill element."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-badge-indicator",
+      "className": "LustrousBadgeIndicator",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-badge-indicator",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Decorative 8px unread indicator dot inside a 20×20 box. Hidden from assistive technology unless `aria-label` is set (`role=\"img\"`).",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "aria-label",
+          "type": "string | null",
+          "default": "null"
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "dot",
+          "description": "The 8px indicator dot."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-banner",
+      "className": "LustrousBanner",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-banner",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Informational, promotional, or status banner rendered as a named `<section>` region.",
+      "properties": [
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Banner heading; also provides the `<section>` region's accessible name."
+        },
+        {
+          "name": "headingLevel",
+          "attribute": "heading-level",
+          "type": "number",
+          "default": "3",
+          "description": "ARIA heading level when `heading` is set."
+        },
+        {
+          "name": "description",
+          "attribute": "description",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Supporting body copy."
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional leading icon."
+        },
+        {
+          "name": "imageUrl",
+          "attribute": "image-url",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Optional leading image URL."
+        },
+        {
+          "name": "imageSize",
+          "attribute": "image-size",
+          "type": "number | undefined",
+          "description": "Explicit image width/height in px (defaults to `72` for `separate`, `24` for `inline-title`)."
+        },
+        {
+          "name": "imageAlt",
+          "attribute": "image-alt",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Alternative text for `image-url`."
+        },
+        {
+          "name": "imageBorderRadius",
+          "attribute": "image-border-radius",
+          "type": "LustrousRadiusToken | undefined",
+          "reflects": true,
+          "description": "Border radius token for `image-url` (`none` also switches `object-fit` to `contain`)."
+        },
+        {
+          "name": "badge",
+          "attribute": "badge",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Optional pill badge displayed at the trailing edge of the heading row."
+        },
+        {
+          "name": "mediaPlacement",
+          "attribute": "media-placement",
+          "type": "LustrousBannerMediaPlacement",
+          "default": "\"separate\"",
+          "reflects": true,
+          "description": "Placement of leading icon or image."
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousBannerVariant",
+          "default": "\"overlay\"",
+          "reflects": true,
+          "description": "Visual surface treatment."
+        },
+        {
+          "name": "layout",
+          "attribute": "layout",
+          "type": "LustrousBannerLayout",
+          "default": "\"auto\"",
+          "reflects": true,
+          "description": "Flex layout mode."
+        },
+        {
+          "name": "primaryAction",
+          "attribute": "primary-action",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Primary action button label."
+        },
+        {
+          "name": "secondaryAction",
+          "attribute": "secondary-action",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Secondary action button label."
+        },
+        {
+          "name": "clickable",
+          "attribute": "clickable",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Makes the entire banner surface a keyboard-operable `<button>` firing `lustrous-click`."
+        },
+        {
+          "name": "dismissible",
+          "attribute": "dismissible",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Shows a dismiss icon button."
+        },
+        {
+          "name": "closeLabel",
+          "attribute": "close-label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible label for the dismiss button (defaults to `getLustrousLabels().dismiss`)."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-action",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ action: \"primary\" | \"secondary\" }>`."
+        },
+        {
+          "name": "lustrous-click",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<void>` when `clickable` is set and the banner surface is activated."
+        },
+        {
+          "name": "lustrous-close-request",
+          "description": "`CustomEvent<{ reason: \"dismiss\" }>` (cancelable; hides the banner unless canceled)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Extra content rendered beneath the description."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "banner",
+          "description": "The `<section>` banner container."
+        },
+        {
+          "name": "surface",
+          "description": "The interactive `<button>` surface when `clickable` is set."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-bottom-sheet",
+      "className": "LustrousBottomSheet",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-bottom-sheet",
+      "superclass": "LustrousModal",
+      "formAssociated": false,
+      "summary": "Mobile-first modal sheet rising from the bottom edge.",
+      "properties": [
+        {
+          "name": "expanded",
+          "attribute": "expanded",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Whether the sheet is expanded to its full content height instead of peeking at 50%."
+        },
+        {
+          "name": "defaultSnapPoint",
+          "attribute": "default-snap-point",
+          "type": "0.5 | 1",
+          "default": "0.5",
+          "reflects": true,
+          "description": "Snap point used when opening: `0.5` peeks at half the viewport height for tall content, while `1` opens fully expanded."
+        },
+        {
+          "name": "scrollable",
+          "attribute": "scrollable",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true,
+          "description": "Wraps default slot body content in `<lustrous-scrollable-box>`. Set `scrollable=\"false\"` to manage scrolling manually."
+        },
+        {
+          "name": "bodyScrim",
+          "attribute": "body-scrim",
+          "type": "LustrousScrollableBoxScrim",
+          "default": "\"both\"",
+          "reflects": true,
+          "description": "Edge scrim fade applied to `<lustrous-scrollable-box>` when `scrollable` is true."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "header",
+          "description": "Optional fixed header rendered above the scrollable body."
+        },
+        {
+          "name": "footer",
+          "description": "Optional fixed footer rendered below the scrollable body."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "sheet",
+          "description": "The sheet surface."
+        },
+        {
+          "name": "handle",
+          "description": "The drag handle area."
+        },
+        {
+          "name": "header",
+          "description": "Optional fixed header slot wrapper."
+        },
+        {
+          "name": "body",
+          "description": "The scrollable content container (`<lustrous-scrollable-box>` when `scrollable`, otherwise `<div>`)."
+        },
+        {
+          "name": "footer",
+          "description": "Optional fixed footer slot wrapper."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-box",
+      "className": "LustrousBox",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-box",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Foundational layout and surface primitive. Styles the host directly via static `:host([attr=\"value\"])` rules with zero wrapper DOM.",
+      "properties": [
+        {
+          "name": "padding",
+          "attribute": "padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingBlock",
+          "attribute": "padding-block",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingInline",
+          "attribute": "padding-inline",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingTop",
+          "attribute": "padding-top",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingBottom",
+          "attribute": "padding-bottom",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingStart",
+          "attribute": "padding-start",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "paddingEnd",
+          "attribute": "padding-end",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobilePadding",
+          "attribute": "mobile-padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobilePaddingBlock",
+          "attribute": "mobile-padding-block",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobilePaddingInline",
+          "attribute": "mobile-padding-inline",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "margin",
+          "attribute": "margin",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginBlock",
+          "attribute": "margin-block",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginInline",
+          "attribute": "margin-inline",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginTop",
+          "attribute": "margin-top",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginBottom",
+          "attribute": "margin-bottom",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginStart",
+          "attribute": "margin-start",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "marginEnd",
+          "attribute": "margin-end",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "display",
+          "attribute": "display",
+          "type": "LustrousDisplay | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileDisplay",
+          "attribute": "mobile-display",
+          "type": "LustrousDisplay | undefined",
+          "reflects": true
+        },
+        {
+          "name": "position",
+          "attribute": "position",
+          "type": "\"relative\" | \"absolute\" | \"fixed\" | \"sticky\" | \"static\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "background",
+          "attribute": "background",
+          "type": "LustrousBackground | undefined",
+          "reflects": true
+        },
+        {
+          "name": "border",
+          "attribute": "border",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderBlock",
+          "attribute": "border-block",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderInline",
+          "attribute": "border-inline",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderTop",
+          "attribute": "border-top",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderBottom",
+          "attribute": "border-bottom",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderStart",
+          "attribute": "border-start",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderEnd",
+          "attribute": "border-end",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "borderRadius",
+          "attribute": "border-radius",
+          "type": "LustrousRadiusToken | undefined",
+          "reflects": true
+        },
+        {
+          "name": "shadow",
+          "attribute": "shadow",
+          "type": "\"\" | \"1\" | \"2\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "cursor",
+          "attribute": "cursor",
+          "type": "\"default\" | \"pointer\" | \"not-allowed\" | \"text\" | \"move\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "overflow",
+          "attribute": "overflow",
+          "type": "(typeof OVERFLOW)[number] | undefined",
+          "reflects": true
+        },
+        {
+          "name": "overflowX",
+          "attribute": "overflow-x",
+          "type": "(typeof OVERFLOW)[number] | undefined",
+          "reflects": true
+        },
+        {
+          "name": "overflowY",
+          "attribute": "overflow-y",
+          "type": "(typeof OVERFLOW)[number] | undefined",
+          "reflects": true
+        },
+        {
+          "name": "zIndex",
+          "attribute": "z-index",
+          "type": "LustrousZIndexToken | \"1\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "textAlign",
+          "attribute": "text-align",
+          "type": "\"start\" | \"end\" | \"center\" | \"justify\" | \"inherit\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "whiteSpace",
+          "attribute": "white-space",
+          "type": "\"normal\" | \"nowrap\" | \"pre\" | \"pre-wrap\" | \"pre-line\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "overflowWrap",
+          "attribute": "overflow-wrap",
+          "type": "\"normal\" | \"break-word\" | \"anywhere\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "width",
+          "attribute": "width",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileWidth",
+          "attribute": "mobile-width",
+          "type": "LustrousMobileWidth | undefined",
+          "reflects": true
+        },
+        {
+          "name": "height",
+          "attribute": "height",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "minWidth",
+          "attribute": "min-width",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "minHeight",
+          "attribute": "min-height",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "maxWidth",
+          "attribute": "max-width",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "maxHeight",
+          "attribute": "max-height",
+          "type": "LustrousDimension | undefined",
+          "reflects": true
+        },
+        {
+          "name": "top",
+          "attribute": "top",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "bottom",
+          "attribute": "bottom",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "left",
+          "attribute": "left",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "right",
+          "attribute": "right",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "start",
+          "attribute": "start",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "end",
+          "attribute": "end",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "inset",
+          "attribute": "inset",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "animateFrom",
+          "attribute": "animate",
+          "type": "LustrousAnimateValue | boolean | undefined",
+          "reflects": true
+        },
+        {
+          "name": "transition",
+          "attribute": "transition",
+          "type": "LustrousTransitionValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "hiddenOn",
+          "attribute": "hidden-on",
+          "type": "LustrousBreakpointValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "shownOn",
+          "attribute": "shown-on",
+          "type": "LustrousBreakpointValue | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Box content."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-button",
+      "className": "LustrousButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-button",
+      "superclass": "LustrousButtonBase",
+      "formAssociated": true,
+      "summary": "Primary and secondary action button.",
+      "properties": [
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousButtonVariant",
+          "default": "\"accent\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousButtonSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "shape",
+          "attribute": "shape",
+          "type": "LustrousButtonShape",
+          "default": "\"rounded\"",
+          "reflects": true
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "trailingIcon",
+          "attribute": "trailing-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "collapsedDirection",
+          "attribute": "collapsed-direction",
+          "type": "LustrousChevronDirection",
+          "default": "\"down\"",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Button label."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "button",
+          "description": "The inner `<button>` or `<a>`."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-checkbox",
+      "className": "LustrousCheckbox",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-checkbox",
+      "superclass": "LustrousCheckBase",
+      "formAssociated": true,
+      "summary": "Form-associated checkbox supporting standalone (`aria-label`) and labelled row layouts, `indeterminate`, `supporting-text`, `required`, and `<fieldset disabled>`.",
+      "properties": [
+        {
+          "name": "indeterminate",
+          "attribute": "indeterminate",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Checkbox label text."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "box",
+          "description": "The 20px checkbox indicator."
+        },
+        {
+          "name": "label",
+          "description": "The label container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-chevron-icon",
+      "className": "LustrousChevronIcon",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-chevron-icon",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Animated disclosure chevron (`direction=\"down\"` or `\"end\"`), RTL-aware and reduced-motion safe.",
+      "properties": [
+        {
+          "name": "expanded",
+          "attribute": "expanded",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "direction",
+          "attribute": "direction",
+          "type": "LustrousChevronDirection",
+          "default": "\"down\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousIconSize",
+          "default": "\"s\"",
+          "reflects": true
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousIconTone | undefined",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-code-block",
+      "className": "LustrousCodeBlock",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-code-block",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Dark code surface (`--lustrous-color-code-background`, `--lustrous-color-code-primary-text`, `--lustrous-color-code-outline`) rendered in `--lustrous-font-code` with an optional `label` header, line-wrapping toggle (`wrap`), and clipboard copy `<lustrous-icon-button>` switching from `\"copy\"` to `\"check\"` with a polite screen-reader announcement.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Optional filename, language, or caption displayed in the header row."
+        },
+        {
+          "name": "code",
+          "attribute": "code",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Code string to display and copy; falls back to slotted text content when empty."
+        },
+        {
+          "name": "wrap",
+          "attribute": "wrap",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Wraps long code lines instead of scrolling horizontally."
+        },
+        {
+          "name": "noCopy",
+          "attribute": "no-copy",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Hides the clipboard copy button."
+        },
+        {
+          "name": "copyLabel",
+          "attribute": "copy-label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Custom accessible label for the copy button."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Resolved code text from `code` or trimmed slotted text content."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-copy",
+          "description": "`CustomEvent<{ code: string }>` dispatched after copying to the clipboard."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Fallback code text used when `code` is empty."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "surface",
+          "description": "Outer dark code container."
+        },
+        {
+          "name": "header",
+          "description": "Header bar containing the label and copy button."
+        },
+        {
+          "name": "copy-button",
+          "description": "The `<lustrous-icon-button>` clipboard trigger."
+        },
+        {
+          "name": "pre",
+          "description": "Scrollable `<pre>` code region."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-collapsible-card",
+      "className": "LustrousCollapsibleCard",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-collapsible-card",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Elevated surface card with an accessible disclosure header.",
+      "properties": [
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Plain-text heading for the disclosure card."
+        },
+        {
+          "name": "headingLevel",
+          "attribute": "heading-level",
+          "type": "LustrousHeadingLevel",
+          "default": "3",
+          "description": "ARIA heading level (`2`–`6`) applied to the disclosure header."
+        },
+        {
+          "name": "subtitle",
+          "attribute": "subtitle",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Optional secondary metadata shown beside the heading."
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional leading icon name in the disclosure header."
+        },
+        {
+          "name": "badge",
+          "attribute": "badge",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Optional badge label rendered beside the heading."
+        },
+        {
+          "name": "badgeTone",
+          "attribute": "badge-tone",
+          "type": "LustrousBadgeTone",
+          "default": "\"accent\"",
+          "reflects": true,
+          "description": "Semantic or categorical tone for `badge`."
+        },
+        {
+          "name": "storageKey",
+          "attribute": "storage-key",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Persists open/closed state in `localStorage` under `lustrous.card.open.<storage-key>`."
+        },
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true,
+          "description": "Whether the card body is expanded."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` dispatched after toggling."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Card body content (hidden when collapsed)."
+        },
+        {
+          "name": "heading",
+          "description": "Rich heading content; overrides the `heading` attribute."
+        },
+        {
+          "name": "actions",
+          "description": "Header action controls rendered beside the disclosure button."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "card",
+          "description": "Outer surface container."
+        },
+        {
+          "name": "header",
+          "description": "Header bar containing the heading toggle and actions slot."
+        },
+        {
+          "name": "toggle",
+          "description": "Native disclosure `<button>`."
+        },
+        {
+          "name": "badge",
+          "description": "Optional `<lustrous-badge>` in the header."
+        },
+        {
+          "name": "body",
+          "description": "Collapsible card body container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-collapsible-container",
+      "className": "LustrousCollapsibleContainer",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-collapsible-container",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Headless animated height disclosure region.",
+      "properties": [
+        {
+          "name": "expanded",
+          "attribute": "expanded",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Whether the collapsible content region is expanded."
+        },
+        {
+          "name": "inlineBleed",
+          "attribute": "inline-bleed",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true,
+          "description": "Spacing token matching children that bleed horizontally past the content box (e.g. `inline-bleed=\"l\"` for `margin-inline: calc(-1 * var(--lustrous-space-l))`), widening the inner region with equal negative margin and padding so horizontal edges are preserved during fold animations."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "description": "Alias for `expanded`."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "description": "Cancelable `CustomEvent<{ open: boolean, expanded: boolean }>`."
+        }
+      ],
+      "slots": [
+        {
+          "name": "trigger",
+          "description": "Disclosure control (or a header containing the trigger and sibling actions)."
+        },
+        {
+          "name": "",
+          "description": "Collapsible content body."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "content",
+          "description": "Outer animated CSS grid region."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-dialog",
+      "className": "LustrousDialog",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-dialog",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Structured inline or `modal` dialog card built on `<lustrous-modal>`.",
+      "properties": [
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousDialogSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "primaryAction",
+          "attribute": "primary-action",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "secondaryAction",
+          "attribute": "secondary-action",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "primaryDisabled",
+          "attribute": "primary-disabled",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "secondaryDisabled",
+          "attribute": "secondary-disabled",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "dismissible",
+          "attribute": "dismissible",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "closeLabel",
+          "attribute": "close-label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "closeDisabled",
+          "attribute": "close-disabled",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "onClose",
+          "type": "(e: MouseEvent) => void | undefined"
+        },
+        {
+          "name": "modal",
+          "attribute": "modal",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "mobileDrawer",
+          "attribute": "mobile-drawer",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Renders modal dialogs inside a `<lustrous-bottom-sheet default-snap-point=\"1\">` at `<= 768px`."
+        },
+        {
+          "name": "scrimBlur",
+          "attribute": "scrim-blur",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Blurs the modal backdrop scrim (`backdrop-filter: blur`)."
+        },
+        {
+          "name": "focusHeading",
+          "attribute": "focus-heading",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Makes the `<h2>` heading focusable (`tabindex=\"-1\"`) and focuses it on open when `initialFocus` is unset."
+        },
+        {
+          "name": "returnFocus",
+          "type": "HTMLElement | null | undefined"
+        },
+        {
+          "name": "initialFocus",
+          "type": "HTMLElement | (() => HTMLElement | null | undefined) | null | undefined"
+        },
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "headingElement",
+          "type": "HTMLHeadingElement | null",
+          "description": "The rendered `<h2>` heading element (useful for programmatic focus management)."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` when `modal` opens or closes."
+        },
+        {
+          "name": "lustrous-action",
+          "description": "`CustomEvent<{ action: \"primary\" | \"secondary\" }>` (cancelable)."
+        },
+        {
+          "name": "lustrous-close-request",
+          "description": "`CustomEvent<{ reason: \"escape\" | \"scrim\" | \"dismiss\" }>` (cancelable)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Dialog body content."
+        },
+        {
+          "name": "actions",
+          "description": "Custom action buttons replacing built-in action buttons."
+        },
+        {
+          "name": "trigger",
+          "description": "Trigger element that opens the dialog on click (when `modal` is set)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "card",
+          "description": "The dialog card surface."
+        },
+        {
+          "name": "scroller",
+          "description": "The inner scroll wrapper around heading, body, and actions."
+        },
+        {
+          "name": "heading",
+          "description": "The `<h2>` heading element."
+        },
+        {
+          "name": "close-button",
+          "description": "The optional header close button (`dismissible`)."
+        },
+        {
+          "name": "body",
+          "description": "The scrolling body container."
+        },
+        {
+          "name": "actions",
+          "description": "The action row container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-flex",
+      "className": "LustrousFlex",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-flex",
+      "superclass": "LustrousFlexItem",
+      "formAssociated": false,
+      "summary": "1-D flexbox container accepting all `<lustrous-box>` and `<lustrous-flex-item>` attributes.",
+      "properties": [
+        {
+          "name": "direction",
+          "attribute": "direction",
+          "type": "LustrousFlexDirection | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileDirection",
+          "attribute": "mobile-direction",
+          "type": "LustrousFlexDirection | undefined",
+          "reflects": true
+        },
+        {
+          "name": "align",
+          "attribute": "align",
+          "type": "LustrousFlexAlign | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileAlign",
+          "attribute": "mobile-align",
+          "type": "LustrousFlexAlign | undefined",
+          "reflects": true
+        },
+        {
+          "name": "justify",
+          "attribute": "justify",
+          "type": "LustrousFlexJustify | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileJustify",
+          "attribute": "mobile-justify",
+          "type": "LustrousFlexJustify | undefined",
+          "reflects": true
+        },
+        {
+          "name": "wrap",
+          "attribute": "wrap",
+          "type": "LustrousFlexWrap | undefined",
+          "reflects": true
+        },
+        {
+          "name": "gap",
+          "attribute": "gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileGap",
+          "attribute": "mobile-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rowGap",
+          "attribute": "row-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "columnGap",
+          "attribute": "column-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "inline",
+          "attribute": "inline",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-flex-item",
+      "className": "LustrousFlexItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-flex",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Box with flex-item placement/sizing controls (`grow`, `shrink`, `basis`, `align-self`, `order`).",
+      "properties": [
+        {
+          "name": "grow",
+          "attribute": "grow",
+          "type": "number | boolean | string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "shrink",
+          "attribute": "shrink",
+          "type": "number | boolean | string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "basis",
+          "attribute": "basis",
+          "type": "string | number | undefined",
+          "reflects": true
+        },
+        {
+          "name": "alignSelf",
+          "attribute": "align-self",
+          "type": "LustrousFlexAlign | undefined",
+          "reflects": true
+        },
+        {
+          "name": "order",
+          "attribute": "order",
+          "type": "number | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-grid",
+      "className": "LustrousGrid",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-grid",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "2-D CSS Grid container built on `<lustrous-box>`.",
+      "properties": [
+        {
+          "name": "columns",
+          "attribute": "columns",
+          "type": "number | string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileColumns",
+          "attribute": "mobile-columns",
+          "type": "number | string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rows",
+          "attribute": "rows",
+          "type": "number | string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "gap",
+          "attribute": "gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileGap",
+          "attribute": "mobile-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rowGap",
+          "attribute": "row-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "columnGap",
+          "attribute": "column-gap",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "align",
+          "attribute": "align",
+          "type": "LustrousGridAlign | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobileAlign",
+          "attribute": "mobile-align",
+          "type": "LustrousGridAlign | undefined",
+          "reflects": true
+        },
+        {
+          "name": "justify",
+          "attribute": "justify",
+          "type": "LustrousGridJustify | undefined",
+          "reflects": true
+        },
+        {
+          "name": "autoFlow",
+          "attribute": "auto-flow",
+          "type": "LustrousGridAutoFlow | undefined",
+          "reflects": true
+        },
+        {
+          "name": "inline",
+          "attribute": "inline",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-grid-item",
+      "className": "LustrousGridItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-grid",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Grid child with `col-span`, `row-span`, `col`, and `row` placement controls.",
+      "properties": [
+        {
+          "name": "colSpan",
+          "attribute": "col-span",
+          "type": "number | \"full\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rowSpan",
+          "attribute": "row-span",
+          "type": "number | \"full\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "col",
+          "attribute": "col",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "row",
+          "attribute": "row",
+          "type": "string | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-icon",
+      "className": "LustrousIcon",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-icon",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Monochrome vector icon element. Inherits `currentColor`, scales stroke weight by size, mirrors directional icons in RTL, and supports custom icons registered via `registerLustrousIcons()`.",
+      "properties": [
+        {
+          "name": "name",
+          "attribute": "name",
+          "type": "LustrousIconName",
+          "default": "\"bolt\"",
+          "reflects": true
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousIconTone | undefined",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousIconSize",
+          "default": "\"s\"",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-icon-button",
+      "className": "LustrousIconButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-icon-button",
+      "superclass": "LustrousButtonBase",
+      "formAssociated": true,
+      "summary": "Circular icon-only action button (`aria-label` required).",
+      "properties": [
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName",
+          "default": "\"bolt\"",
+          "reflects": true
+        },
+        {
+          "name": "collapsedDirection",
+          "attribute": "collapsed-direction",
+          "type": "LustrousChevronDirection",
+          "default": "\"down\"",
+          "reflects": true
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousIconButtonVariant",
+          "default": "\"on-surface\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousIconButtonSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "badge",
+          "attribute": "badge",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "button",
+          "description": "The native `<button>` or `<a>`."
+        },
+        {
+          "name": "badge",
+          "description": "Optional unread dot (`lustrous-badge-indicator`)."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-image",
+      "className": "LustrousImage",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-image",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Responsive image container extending `<lustrous-box>`.",
+      "properties": [
+        {
+          "name": "src",
+          "attribute": "src",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Image URL."
+        },
+        {
+          "name": "alt",
+          "attribute": "alt",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible description; required unless `decorative` is set."
+        },
+        {
+          "name": "decorative",
+          "attribute": "decorative",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Marks the image purely decorative (`alt=\"\"` and `aria-hidden=\"true\"`)."
+        },
+        {
+          "name": "objectFit",
+          "attribute": "object-fit",
+          "type": "LustrousImageObjectFit | undefined",
+          "reflects": true,
+          "description": "CSS `object-fit` mode."
+        },
+        {
+          "name": "aspectRatio",
+          "attribute": "aspect-ratio",
+          "type": "LustrousImageAspectRatio | undefined",
+          "reflects": true,
+          "description": "Intrinsic aspect ratio preset to reserve layout space before load."
+        },
+        {
+          "name": "loading",
+          "attribute": "loading",
+          "type": "\"lazy\" | \"eager\" | undefined",
+          "reflects": true,
+          "description": "Native browser loading hint (`lazy` or `eager`)."
+        },
+        {
+          "name": "decoding",
+          "attribute": "decoding",
+          "type": "\"async\" | \"sync\" | \"auto\"",
+          "default": "\"async\"",
+          "description": "Image decoding hint."
+        },
+        {
+          "name": "referrerPolicy",
+          "attribute": "referrerpolicy",
+          "type": "ReferrerPolicy",
+          "default": "\"no-referrer\"",
+          "description": "Referrer policy forwarded to `<img>`."
+        },
+        {
+          "name": "imgDraggable",
+          "attribute": "draggable",
+          "type": "boolean | undefined"
+        },
+        {
+          "name": "srcset",
+          "attribute": "srcset",
+          "type": "string | undefined"
+        },
+        {
+          "name": "sizes",
+          "attribute": "sizes",
+          "type": "string | undefined"
+        }
+      ],
+      "events": [
+        {
+          "name": "load",
+          "description": "Re-dispatched when the inner `<img>` finishes loading."
+        },
+        {
+          "name": "error",
+          "description": "Re-dispatched when the inner `<img>` fails to load."
+        }
+      ],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "img",
+          "description": "The native `<img>` element."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-kbd",
+      "className": "LustrousKbd",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-kbd",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Semantic `<kbd>` keycap chip or multi-key shortcut chord sequence.",
+      "properties": [
+        {
+          "name": "keys",
+          "attribute": "keys",
+          "type": "LustrousShortcutKeyInput | undefined",
+          "description": "Shortcut chord string (e.g. `\"Mod+K\"`, formatted automatically per platform) or pre-split keycap array (e.g. `[\"⇧\", \"⌘\", \"O\"]`)."
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousKbdSize",
+          "default": "\"s\"",
+          "reflects": true,
+          "description": "Visual scale: `s` (inline / menu compact, default) or `m` (shortcut reference modal)."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Single keycap label when `keys` is omitted."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "group",
+          "description": "The `dir=\"ltr\"` flex container around multiple `<kbd>` chips."
+        },
+        {
+          "name": "key",
+          "description": "Each `<kbd>` keycap element."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-keyboard-shortcuts-modal",
+      "className": "LustrousKeyboardShortcutsModal",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-keyboard-shortcuts-modal",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Modal shortcut reference dialog built on `<lustrous-dialog modal>` and `<lustrous-kbd size=\"m\">`.",
+      "properties": [
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"Keyboard shortcuts\""
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousDialogSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "dismissible",
+          "attribute": "dismissible",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "closeLabel",
+          "attribute": "close-label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "sections",
+          "type": "readonly LustrousKeyboardShortcutSection[]",
+          "default": "[]"
+        },
+        {
+          "name": "returnFocus",
+          "type": "HTMLElement | null | undefined"
+        },
+        {
+          "name": "initialFocus",
+          "type": "HTMLElement | null | undefined"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` when opened or closed."
+        },
+        {
+          "name": "lustrous-close-request",
+          "description": "`CustomEvent<{ reason: \"escape\" | \"scrim\" | \"dismiss\" }>` (cancelable)."
+        },
+        {
+          "name": "lustrous-action",
+          "description": "`CustomEvent<{ action: \"secondary\" }>` (cancelable) when the close action is clicked."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Optional supplementary content below the shortcut sections."
+        },
+        {
+          "name": "trigger",
+          "description": "Optional trigger element that opens the modal on click."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "dialog",
+          "description": "The inner `<lustrous-dialog>`."
+        },
+        {
+          "name": "sections",
+          "description": "The vertical stack of sections."
+        },
+        {
+          "name": "section",
+          "description": "Each `<section>` group."
+        },
+        {
+          "name": "section-title",
+          "description": "Each section's `<h3>` heading."
+        },
+        {
+          "name": "row",
+          "description": "Each `<dt>` / `<dd>` flex row."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-link",
+      "className": "LustrousLink",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-link",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Inline text link or link-styled action button.",
+      "properties": [
+        {
+          "name": "href",
+          "attribute": "href",
+          "type": "string | undefined",
+          "reflects": true,
+          "description": "Destination URL. When omitted, renders a `<button type=\"button\">`."
+        },
+        {
+          "name": "target",
+          "attribute": "target",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rel",
+          "attribute": "rel",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "download",
+          "attribute": "download",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousLinkVariant",
+          "default": "\"primary\"",
+          "reflects": true,
+          "description": "Color treatment."
+        },
+        {
+          "name": "underline",
+          "attribute": "underline",
+          "type": "LustrousLinkUnderline",
+          "default": "\"always\"",
+          "reflects": true,
+          "description": "Text underline behavior."
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Disables navigation and click activation."
+        },
+        {
+          "name": "external",
+          "attribute": "external",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Appends a trailing external-link indicator icon."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Link label text."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "link",
+          "description": "The native `<a>` or `<button>` element."
+        },
+        {
+          "name": "external-icon",
+          "description": "Optional trailing external indicator wrapper."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-list",
+      "className": "LustrousList",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-list",
+      "superclass": "LustrousFlex",
+      "formAssociated": false,
+      "summary": "Vertical list container (`role=\"list\"` via `ElementInternals`) extending `<lustrous-flex>`.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name of the list (`aria-label` on the host is also respected)."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-list-item",
+      "className": "LustrousListItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-list",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Interactive or static row inside a `<lustrous-list>` (`role=\"listitem\"` via `ElementInternals`).",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Primary row label."
+        },
+        {
+          "name": "description",
+          "attribute": "description",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Secondary muted description text."
+        },
+        {
+          "name": "startIcon",
+          "attribute": "start-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional 24px leading icon."
+        },
+        {
+          "name": "endIcon",
+          "attribute": "end-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional 20px trailing icon."
+        },
+        {
+          "name": "selected",
+          "attribute": "selected",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Marks the row as active (`aria-current=\"true\"`)."
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Disables interaction."
+        },
+        {
+          "name": "isStatic",
+          "attribute": "static",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Renders a non-interactive `<div>` row instead of a button or link."
+        },
+        {
+          "name": "href",
+          "attribute": "href",
+          "type": "string | undefined",
+          "reflects": true,
+          "description": "Turns the row into an `<a>` link."
+        },
+        {
+          "name": "target",
+          "attribute": "target",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rel",
+          "attribute": "rel",
+          "type": "string | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "end",
+          "description": "Trailing content (e.g. `<lustrous-badge>` or `<lustrous-kbd>`). Use `static` rows when slotting interactive controls."
+        },
+        {
+          "name": "",
+          "description": "Supplemental content below the description."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "row",
+          "description": "The inner `<button>`, `<a>`, or `<div>` surface."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-menu",
+      "className": "LustrousMenu",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-menu",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Top-layer dropdown, context, and overflow menu with nested submenus.",
+      "properties": [
+        {
+          "name": "items",
+          "type": "LustrousMenuItem[]",
+          "default": "[]"
+        },
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "side",
+          "attribute": "side",
+          "type": "FloatingSide",
+          "default": "\"bottom\"",
+          "reflects": true
+        },
+        {
+          "name": "align",
+          "attribute": "align",
+          "type": "FloatingAlign",
+          "default": "\"start\"",
+          "reflects": true
+        },
+        {
+          "name": "offset",
+          "attribute": "offset",
+          "type": "number",
+          "default": "4"
+        },
+        {
+          "name": "maxHeight",
+          "attribute": "max-height",
+          "type": "number | \"available\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "width",
+          "attribute": "width",
+          "type": "number | \"max-content\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "anchor",
+          "type": "Element | null | undefined"
+        },
+        {
+          "name": "returnFocus",
+          "type": "HTMLElement | null | undefined",
+          "description": "Explicit element focused when the menu closes via item selection (overrides returning focus to the trigger)."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "openOnHover",
+          "attribute": "open-on-hover",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "hoverOpenDelay",
+          "attribute": "hover-open-delay",
+          "type": "number",
+          "default": "100"
+        },
+        {
+          "name": "hoverCloseDelay",
+          "attribute": "hover-close-delay",
+          "type": "number",
+          "default": "0"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-select",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ item, id?, value? }>` when an item is activated."
+        },
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` when the menu opens or closes."
+        }
+      ],
+      "slots": [
+        {
+          "name": "trigger",
+          "description": "The menu trigger element (`aria-haspopup=\"menu\"`, `aria-expanded`)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "menu",
+          "description": "Each `role=\"menu\"` popup panel."
+        },
+        {
+          "name": "item",
+          "description": "Each interactive menu row."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-modal",
+      "className": "LustrousModal",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-modal",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Accessible modal primitive built on native `<dialog>.showModal()`. Locks background scroll, renders in the top layer with a themed scrim, coordinates layered Escape dismissal via `ShortcutManager`, and restores focus on close.",
+      "properties": [
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "padding",
+          "attribute": "padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "scrim",
+          "attribute": "scrim",
+          "type": "\"default\" | \"immersive\"",
+          "default": "\"default\"",
+          "reflects": true
+        },
+        {
+          "name": "scrimBlur",
+          "attribute": "scrim-blur",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "returnFocus",
+          "type": "HTMLElement | null | undefined"
+        },
+        {
+          "name": "initialFocus",
+          "type": "HTMLElement | (() => HTMLElement | null | undefined) | null | undefined"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` after opening or closing."
+        },
+        {
+          "name": "lustrous-close-request",
+          "description": "`CustomEvent<{ reason: \"escape\" | \"scrim\" }>` (cancelable)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Modal surface content."
+        },
+        {
+          "name": "trigger",
+          "description": "Optional trigger element that opens the modal on click."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "dialog",
+          "description": "The native `<dialog>`."
+        },
+        {
+          "name": "viewport",
+          "description": "The centering viewport container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-photo-lightbox",
+      "className": "LustrousPhotoLightbox",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-photo-lightbox",
+      "superclass": "LustrousLightboxBase",
+      "formAssociated": false,
+      "summary": "Full-screen immersive image lightbox built on `LustrousLightboxBase`.",
+      "properties": [
+        {
+          "name": "src",
+          "attribute": "src",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Full-resolution image URL."
+        },
+        {
+          "name": "ambientSrcProp",
+          "attribute": "ambient-src",
+          "type": "string | undefined",
+          "description": "Optional custom ambient backdrop URL (defaults to `src` once loaded)."
+        },
+        {
+          "name": "loading",
+          "attribute": "loading",
+          "type": "boolean",
+          "default": "false",
+          "description": "Forces the loading skeleton when rendering custom slotted stage media."
+        }
+      ],
+      "events": [
+        {
+          "name": "error",
+          "type": "Event",
+          "description": "Fired if the image fails to load."
+        }
+      ],
+      "slots": [
+        {
+          "name": "actions",
+          "description": "Optional contextual controls below the stage (e.g. `<lustrous-action-bar>`)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "stage",
+          "description": "The media stage container."
+        },
+        {
+          "name": "actions",
+          "description": "The actions slot wrapper."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-popover",
+      "className": "LustrousPopover",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-popover",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Unified anchored interactive popover and rich hover card rendered in the browser's top layer via the Popover API.",
+      "properties": [
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "arrow",
+          "attribute": "arrow",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true,
+          "description": "Renders the directional SVG arrow and square-corner alignment rule (`arrow=\"false\"` for a flat-cornered panel)."
+        },
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "content",
+          "attribute": "content",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "side",
+          "attribute": "side",
+          "type": "LustrousPopoverSide",
+          "default": "\"bottom\"",
+          "reflects": true
+        },
+        {
+          "name": "align",
+          "attribute": "align",
+          "type": "FloatingAlign",
+          "default": "\"center\"",
+          "reflects": true
+        },
+        {
+          "name": "offset",
+          "attribute": "offset",
+          "type": "number | undefined"
+        },
+        {
+          "name": "alignOffset",
+          "attribute": "align-offset",
+          "type": "number",
+          "default": "0"
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousPopoverSize | undefined",
+          "reflects": true
+        },
+        {
+          "name": "padding",
+          "attribute": "padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "maxHeight",
+          "attribute": "max-height",
+          "type": "string | undefined"
+        },
+        {
+          "name": "elevation",
+          "attribute": "elevation",
+          "type": "\"1\" | \"2\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "primaryAction",
+          "attribute": "primary-action",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "secondaryAction",
+          "attribute": "secondary-action",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "openOnHover",
+          "attribute": "open-on-hover",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "delay",
+          "attribute": "delay",
+          "type": "number",
+          "default": "300"
+        },
+        {
+          "name": "closeDelay",
+          "attribute": "close-delay",
+          "type": "number",
+          "default": "0"
+        },
+        {
+          "name": "closeLabel",
+          "attribute": "close-label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "mobileDrawer",
+          "attribute": "mobile-drawer",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "anchor",
+          "type": "Element | null | undefined"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` when opened or closed."
+        },
+        {
+          "name": "lustrous-action",
+          "description": "`CustomEvent<{ action: \"primary\" | \"secondary\" }>` (cancelable)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Trigger element (or pass `slot=\"trigger\"`)."
+        },
+        {
+          "name": "content",
+          "description": "Rich or interactive content rendered below `heading` / `content`."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "panel",
+          "description": "The floating `role=\"dialog\"` panel."
+        },
+        {
+          "name": "close-button",
+          "description": "The optional modal close icon button (`close-label`)."
+        },
+        {
+          "name": "actions",
+          "description": "The optional action button row."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-pressable",
+      "className": "LustrousPressable",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-pressable",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Interactive surface primitive for clickable cards, option tiles, and custom rows with the Lustrous state layer and focus ring.",
+      "properties": [
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Disables pointer and keyboard interaction."
+        },
+        {
+          "name": "selected",
+          "attribute": "selected",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Visual selected highlight (`surface-dim` / `surface-container-high` background)."
+        },
+        {
+          "name": "focusable",
+          "attribute": "focusable",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true,
+          "description": "Keeps the inner control in the tab order with a focus ring (`focusable=\"false\"` removes both)."
+        },
+        {
+          "name": "href",
+          "attribute": "href",
+          "type": "string | undefined",
+          "reflects": true,
+          "description": "Renders the inner control as an `<a>` link when set."
+        },
+        {
+          "name": "target",
+          "attribute": "target",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "rel",
+          "attribute": "rel",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "download",
+          "attribute": "download",
+          "type": "string | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "inner",
+          "description": "The native `<button>` or `<a>` control."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-progress-bar",
+      "className": "LustrousProgressBar",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-progress-bar",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Determinate linear progress bar (`0–100`).",
+      "properties": [
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "number",
+          "default": "0",
+          "description": "Determinate completion percentage (`0–100`, clamped)."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name (`aria-label` on the host is also respected)."
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousProgressBarTone",
+          "default": "\"default\"",
+          "reflects": true,
+          "description": "Semantic fill color tone."
+        },
+        {
+          "name": "decorative",
+          "attribute": "decorative",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Hides the bar from assistive technology when adjacent text already conveys progress."
+        },
+        {
+          "name": "clampedValue",
+          "type": "number",
+          "description": "Clamped `0–100` percentage displayed by the indicator."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "track",
+          "description": "The pill track container."
+        },
+        {
+          "name": "fill",
+          "description": "The determinate indicator bar."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-prose-direction-scope",
+      "className": "LustrousProseDirectionScope",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-prose-text",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Aggregates descendant `<lustrous-prose-text>` word counts bottom-up and stamps the resolved `dir` (`\"ltr\"` or `\"rtl\"`) onto its container child for multilingual lists, tables, and editorial layouts.",
+      "properties": [
+        {
+          "name": "alignStart",
+          "attribute": "align-start",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Keeps descendant prose blocks aligned to the horizontal start edge of marker- or column-aligned containers (lists, tables, timelines) even when an individual item resolves the opposite `dir`."
+        },
+        {
+          "name": "alignWithParent",
+          "attribute": "align-with-parent",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Aligns composite inline-paragraph scopes inside an `align-start` container with the enclosing list or table scope when their resolved directions differ."
+        },
+        {
+          "name": "fallbackDir",
+          "attribute": "fallback-dir",
+          "type": "TextDirection | undefined",
+          "reflects": true,
+          "description": "Fallback direction before any strong prose words are reported. Defaults to the nearest ancestor `<lustrous-prose-direction-scope>` and then `<html dir>`."
+        },
+        {
+          "name": "hasConnected",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "estimatedDir",
+          "type": "EstimatedDirection",
+          "description": "Estimated direction from aggregated descendant prose words (`\"ltr\" | \"rtl\" | \"neutral\"`)."
+        },
+        {
+          "name": "effectiveFallback",
+          "type": "TextDirection",
+          "description": "Effective fallback direction from `fallback-dir`, ancestor scope, or `<html dir>`."
+        },
+        {
+          "name": "resolvedDir",
+          "type": "TextDirection",
+          "description": "Concrete resolved direction (`\"ltr\" | \"rtl\"`)."
+        },
+        {
+          "name": "effectiveDir",
+          "type": "TextDirection",
+          "description": "Effective direction taking into account an explicit `dir` on the container child."
+        },
+        {
+          "name": "childAlignedDir",
+          "type": "TextDirection | null",
+          "description": "Alignment direction exposed to descendants when `align-start` is enabled and direction is non-neutral (or explicitly set on the container child)."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Single container element (e.g. `<ul>`, `<table>`, `<lustrous-box>`) receiving `dir`."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-prose-text",
+      "className": "LustrousProseText",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-prose-text",
+      "superclass": "LustrousText",
+      "formAssociated": false,
+      "summary": "Bidirectional prose typography for multilingual content.",
+      "properties": [
+        {
+          "name": "language",
+          "attribute": "language",
+          "type": "string | undefined",
+          "reflects": true,
+          "description": "Optional BCP-47 language tag (e.g. `\"he\"`, `\"ar-EG\"`) used to disambiguate neutral or matching-script strings."
+        },
+        {
+          "name": "fallbackDir",
+          "attribute": "fallback-dir",
+          "type": "TextDirection | undefined",
+          "reflects": true,
+          "description": "Fallback direction when the text has zero strong RTL or LTR prose words. Defaults to the nearest `<lustrous-prose-direction-scope>` and then `<html dir>`."
+        },
+        {
+          "name": "inlineIsolate",
+          "attribute": "inline-isolate",
+          "type": "boolean | undefined",
+          "reflects": true,
+          "description": "Wraps content in `<bdi dir={resolvedDir}>` inside the element instead of setting `dir` on the host so surrounding UI chrome alignment and CSS ellipsis stay anchored to the host container."
+        },
+        {
+          "name": "hasConnected",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "effectiveFallback",
+          "type": "TextDirection",
+          "description": "Effective fallback direction from `fallback-dir`, enclosing scope, or `<html dir>`."
+        },
+        {
+          "name": "resolvedDir",
+          "type": "TextDirection",
+          "description": "Resolved direction (`\"ltr\" | \"rtl\"`) for this prose element."
+        },
+        {
+          "name": "shouldInlineIsolate",
+          "type": "boolean",
+          "description": "Whether content is wrapped in an inline `<bdi>` instead of setting `dir` on the host."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "bdi",
+          "description": "Inline `<bdi>` wrapper rendered when `inline-isolate`, `wrap=\"truncate\"`, or `wrap=\"nowrap\"` is active."
+        }
+      ],
+      "cssProperties": [
+        {
+          "name": "--lustrous-text-muted",
+          "description": "Secondary text color (automatically adapted by `<lustrous-box background>`)."
+        }
+      ]
+    },
+    {
+      "tag": "lustrous-radio",
+      "className": "LustrousRadio",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-radio-group",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Individual radio option (`role=\"radio\"`) used inside `<lustrous-radio-group>`.",
+      "properties": [
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\"",
+          "reflects": true
+        },
+        {
+          "name": "checked",
+          "attribute": "checked",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "supportingText",
+          "attribute": "supporting-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "isDisabled",
+          "type": "boolean"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-radio-select",
+          "type": "CustomEvent"
+        },
+        {
+          "name": "change",
+          "type": "Event"
+        },
+        {
+          "name": "lustrous-change",
+          "type": "CustomEvent"
+        },
+        {
+          "name": "lustrous-radio-sync",
+          "type": "CustomEvent"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Radio label text."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "button",
+          "description": "The inner `<button role=\"radio\">`."
+        },
+        {
+          "name": "ring",
+          "description": "The 20px circular radio ring."
+        },
+        {
+          "name": "dot",
+          "description": "The 10px inner selection dot."
+        },
+        {
+          "name": "label",
+          "description": "The label and supporting-text container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-radio-group",
+      "className": "LustrousRadioGroup",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-radio-group",
+      "superclass": "LustrousElement",
+      "formAssociated": true,
+      "summary": "Form-associated `role=\"radiogroup\"` container managing `<lustrous-radio>` children, roving `tabindex`, arrow/Home/End keyboard selection, `FormData`, `required` validity, `formResetCallback`, and `<fieldset disabled>`.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "name",
+          "attribute": "name",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\"",
+          "reflects": true
+        },
+        {
+          "name": "orientation",
+          "attribute": "orientation",
+          "type": "LustrousRadioGroupOrientation",
+          "default": "\"vertical\"",
+          "reflects": true
+        },
+        {
+          "name": "required",
+          "attribute": "required",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "error",
+          "attribute": "error",
+          "type": "string | null",
+          "default": "null"
+        },
+        {
+          "name": "supportingText",
+          "attribute": "supporting-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "form",
+          "type": "HTMLFormElement | null"
+        },
+        {
+          "name": "validity",
+          "type": "ValidityState | undefined"
+        },
+        {
+          "name": "validationMessage",
+          "type": "string"
+        }
+      ],
+      "events": [
+        {
+          "name": "input",
+          "type": "Event"
+        },
+        {
+          "name": "change",
+          "type": "Event",
+          "description": "Native-style `change` event on user selection (bubbles)."
+        },
+        {
+          "name": "lustrous-change",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ value: string }>` on user selection (`bubbles: true, composed: true`)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Child `<lustrous-radio>` elements."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "radiogroup",
+          "description": "The `role=\"radiogroup\"` container."
+        },
+        {
+          "name": "label",
+          "description": "The group label heading."
+        },
+        {
+          "name": "items",
+          "description": "The vertical or horizontal radio list container."
+        },
+        {
+          "name": "supporting",
+          "description": "The supporting or error message row."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-scrollable-box",
+      "className": "LustrousScrollableBox",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-scrollable-box",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Scroll container with thin scrollbars, edge scrim fades, and automatic keyboard `tabindex=\"0\"` when overflowing.",
+      "properties": [
+        {
+          "name": "scrim",
+          "attribute": "scrim",
+          "type": "LustrousScrollableBoxScrim | \"true\" | \"false\"",
+          "default": "\"both\"",
+          "reflects": true
+        },
+        {
+          "name": "scrimSize",
+          "attribute": "scrim-size",
+          "type": "number",
+          "default": "36",
+          "reflects": true,
+          "description": "Edge scrim fade length in pixels; scoped per viewport so nested scroll boxes do not inherit it."
+        },
+        {
+          "name": "scrollbar",
+          "attribute": "scrollbar",
+          "type": "LustrousScrollbarVisibility",
+          "default": "\"hover\"",
+          "reflects": true
+        },
+        {
+          "name": "compact",
+          "attribute": "compact",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "scrollElement",
+          "type": "HTMLElement"
+        }
+      ],
+      "events": [
+        {
+          "name": "scroll",
+          "type": "Event"
+        }
+      ],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "viewport",
+          "description": "The scrolling element."
+        },
+        {
+          "name": "content",
+          "description": "The padded flex-column content wrapper."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-search-bar",
+      "className": "LustrousSearchBar",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-search-bar",
+      "superclass": "LustrousElement",
+      "formAssociated": true,
+      "summary": "Form-associated toolbar and page search input.",
+      "properties": [
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "placeholder",
+          "attribute": "placeholder",
+          "type": "string",
+          "default": "\"Search\""
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName",
+          "default": "\"search\"",
+          "reflects": true
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousSearchBarVariant",
+          "default": "\"floating\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousSearchBarSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "showClear",
+          "attribute": "show-clear",
+          "type": "\"auto\" | \"false\"",
+          "default": "\"auto\""
+        },
+        {
+          "name": "clearLabel",
+          "attribute": "clear-label",
+          "type": "string",
+          "default": "\"Clear search\""
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "name",
+          "attribute": "name",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "form",
+          "type": "HTMLFormElement | null"
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-search",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ value: string }>` when Enter is pressed (`bubbles: true, composed: true`)."
+        },
+        {
+          "name": "input",
+          "type": "Event",
+          "description": "Native `input` event on each edit (composed)."
+        },
+        {
+          "name": "lustrous-clear",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<void>` when the built-in clear action runs (`bubbles: true, composed: true`)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "trailing",
+          "description": "Optional trailing actions rendered after the clear button."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "surface",
+          "description": "The outer pill container."
+        },
+        {
+          "name": "input",
+          "description": "The native `<input type=\"search\">`."
+        },
+        {
+          "name": "clear",
+          "description": "The clear `<lustrous-icon-button>`."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-segmented-control",
+      "className": "LustrousSegmentedControl",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-segmented-control",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Compact 2–5 option view switcher with equal-width columns and an animated sliding pill indicator.",
+      "properties": [
+        {
+          "name": "options",
+          "type": "LustrousSegmentOption[]",
+          "default": "[]",
+          "description": "Segment definitions (`2–5` options recommended)."
+        },
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\"",
+          "reflects": true,
+          "description": "Selected option value."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name forwarded to `role=\"tablist\"`."
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousSegmentedControlVariant",
+          "default": "\"default\"",
+          "reflects": true,
+          "description": "Track treatment: `default` (filled pill track) or `transparent` (trackless)."
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousSegmentedControlSize",
+          "default": "\"s\"",
+          "reflects": true,
+          "description": "Control height: `s` (32px) or `m` (40px)."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-change",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ value: string }>` when a segment is selected."
+        }
+      ],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "track",
+          "description": "The pill track container."
+        },
+        {
+          "name": "indicator",
+          "description": "The sliding active pill."
+        },
+        {
+          "name": "segment",
+          "description": "Each segment button."
+        },
+        {
+          "name": "segment-selected",
+          "description": "Applied in addition to `segment` on the active segment."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-segmented-list",
+      "className": "LustrousSegmentedList",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-segmented-list",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Vertical list of segmented cards or surface rows (`role=\"list\"`).",
+      "properties": [
+        {
+          "name": "borderRadius",
+          "attribute": "border-radius",
+          "type": "LustrousSegmentedRadius",
+          "default": "\"l\"",
+          "reflects": true,
+          "description": "Outer corner radius token applied to the first and last items."
+        },
+        {
+          "name": "divider",
+          "attribute": "divider",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Renders items as a continuous card (`0px` gap and inner seams) with `16px`-inset `1px` hairlines."
+        },
+        {
+          "name": "as",
+          "attribute": "as",
+          "type": "LustrousSegmentedListTag",
+          "default": "\"ul\"",
+          "reflects": true,
+          "description": "Semantic list variant (`ul` or `ol`)."
+        },
+        {
+          "name": "gap",
+          "attribute": "gap",
+          "type": "LustrousSpacingToken | undefined",
+          "reflects": true,
+          "description": "Vertical spacing override between segmented items."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name for the list."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "`<lustrous-segmented-list-item>`, `<lustrous-segmented-list-button>`, or `<lustrous-segmented-list-link>` elements."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-segmented-list-button",
+      "className": "LustrousSegmentedListButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-segmented-list",
+      "superclass": "LustrousPressable",
+      "formAssociated": false,
+      "summary": "Interactive button row inside `<lustrous-segmented-list>` (`role=\"listitem\"`).",
+      "properties": [],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-segmented-list-item",
+      "className": "LustrousSegmentedListItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-segmented-list",
+      "superclass": "LustrousBox",
+      "formAssociated": false,
+      "summary": "Static or composite row inside `<lustrous-segmented-list>` (`role=\"listitem\"`).",
+      "properties": [],
+      "events": [],
+      "slots": [
+        {
+          "name": "action",
+          "description": "Optional trailing control (`<lustrous-switch>`, `<lustrous-button>`, etc.)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "row",
+          "description": "Horizontal flex wrapper rendered when `slot=\"action\"` is populated."
+        },
+        {
+          "name": "body",
+          "description": "Primary content column rendered when `slot=\"action\"` is populated."
+        },
+        {
+          "name": "action",
+          "description": "Non-shrinking trailing action wrapper rendered when `slot=\"action\"` is populated."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-segmented-list-link",
+      "className": "LustrousSegmentedListLink",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-segmented-list",
+      "superclass": "LustrousPressable",
+      "formAssociated": false,
+      "summary": "Interactive link row inside `<lustrous-segmented-list>` (`role=\"listitem\"`).",
+      "properties": [],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-select",
+      "className": "LustrousSelect",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-select",
+      "superclass": "LustrousElement",
+      "formAssociated": true,
+      "summary": "Form-associated custom single-select dropdown matching `<lustrous-text-input>`'s field geometry (`44px` at `m`, `36px` at `s`, `10px` radius).",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "caption",
+          "attribute": "caption",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "placeholder",
+          "attribute": "placeholder",
+          "type": "string",
+          "default": "\"Select…\""
+        },
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "name",
+          "attribute": "name",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "required",
+          "attribute": "required",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "error",
+          "attribute": "error",
+          "type": "string | null",
+          "default": "null"
+        },
+        {
+          "name": "supportingText",
+          "attribute": "supporting-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "validationState",
+          "attribute": "validation-state",
+          "type": "LustrousSelectValidationState",
+          "default": "\"default\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousSelectSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "borderRadius",
+          "attribute": "border-radius",
+          "type": "LustrousRadiusToken | undefined",
+          "reflects": true
+        },
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "options",
+          "type": "readonly LustrousSelectOption[]",
+          "default": "[]"
+        },
+        {
+          "name": "form",
+          "type": "HTMLFormElement | null"
+        },
+        {
+          "name": "validity",
+          "type": "ValidityState | undefined"
+        },
+        {
+          "name": "validationMessage",
+          "type": "string"
+        }
+      ],
+      "events": [
+        {
+          "name": "input",
+          "type": "Event",
+          "description": "Native `input` event on user selection (composed)."
+        },
+        {
+          "name": "change",
+          "type": "Event",
+          "description": "Native-style `change` event on user selection (bubbles)."
+        },
+        {
+          "name": "lustrous-change",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ value: string }>` on user selection (`bubbles: true, composed: true`)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Optional `<option>` / `<optgroup>` elements parsed when `.options` is empty."
+        },
+        {
+          "name": "caption",
+          "description": "Optional rich caption content at the end of the header row."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "header",
+          "description": "The label and caption row."
+        },
+        {
+          "name": "label",
+          "description": "The `<label>` element."
+        },
+        {
+          "name": "caption",
+          "description": "The caption container."
+        },
+        {
+          "name": "field",
+          "description": "The combobox `<button>` field frame."
+        },
+        {
+          "name": "value",
+          "description": "The selected option text or placeholder span."
+        },
+        {
+          "name": "listbox",
+          "description": "The top-layer `[popover]` listbox surface."
+        },
+        {
+          "name": "option",
+          "description": "Each `[role=\"option\"]` row."
+        },
+        {
+          "name": "supporting",
+          "description": "The supporting or error message row."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-side-panel",
+      "className": "LustrousSidePanel",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-side-panel",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Persistent complementary `<aside>` panel beside or over main content.",
+      "properties": [
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "presentation",
+          "attribute": "presentation",
+          "type": "LustrousSidePanelPresentation",
+          "default": "\"split\"",
+          "reflects": true
+        },
+        {
+          "name": "focusOnOpen",
+          "attribute": "focus-on-open",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "side",
+          "attribute": "side",
+          "type": "LustrousSidePanelSide",
+          "default": "\"inline-end\"",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "announcement",
+          "attribute": "announcement",
+          "type": "string | undefined"
+        },
+        {
+          "name": "returnFocus",
+          "type": "HTMLElement | null | undefined"
+        },
+        {
+          "name": "border",
+          "attribute": "border",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true
+        },
+        {
+          "name": "shadow",
+          "attribute": "shadow",
+          "type": "\"\" | \"1\" | \"2\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "margin",
+          "attribute": "margin",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "scrollable",
+          "attribute": "scrollable",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true
+        },
+        {
+          "name": "scrim",
+          "attribute": "scrim",
+          "type": "LustrousScrollableBoxScrim | \"true\" | \"false\"",
+          "default": "\"both\"",
+          "reflects": true
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-close-request",
+          "description": "`CustomEvent<{ reason: \"escape\" }>` (cancelable). Host controls `open`."
+        }
+      ],
+      "slots": [
+        {
+          "name": "header",
+          "description": "Fixed header above the scrolling body."
+        },
+        {
+          "name": "",
+          "description": "Panel body content."
+        },
+        {
+          "name": "footer",
+          "description": "Fixed footer below the scrolling body."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "aside",
+          "description": "The `<aside>` landmark element."
+        },
+        {
+          "name": "card",
+          "description": "The panel card surface."
+        },
+        {
+          "name": "body",
+          "description": "The body container (`<lustrous-scrollable-box>` or unscrolled `<div>`)."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar",
+      "className": "LustrousSidebar",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Collapsible application navigation shell (`272px` ↔ `56px`).",
+      "properties": [
+        {
+          "name": "collapsed",
+          "attribute": "collapsed",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "density",
+          "attribute": "density",
+          "type": "LustrousSidebarDensity",
+          "default": "\"default\"",
+          "reflects": true,
+          "description": "Layout density preset: `default`, `compact-panel` (full-width dense panel), or `mobile` (pins mobile geometry at any viewport width)."
+        },
+        {
+          "name": "surfaceTone",
+          "attribute": "surface-tone",
+          "type": "LustrousSidebarSurfaceTone",
+          "default": "\"surface-bright\"",
+          "reflects": true,
+          "description": "Background surface tone when expanded (`surface-bright` default or `surface`)."
+        },
+        {
+          "name": "width",
+          "attribute": "width",
+          "type": "string | number | undefined"
+        },
+        {
+          "name": "collapsedWidth",
+          "attribute": "collapsed-width",
+          "type": "string | number | undefined"
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"Sidebar navigation\""
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-change",
+          "description": "`CustomEvent<{ collapsed: boolean }>` (cancelable) when collapse state is toggled."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Sidebar composition parts (`header`, `nav`, `footer`)."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-drawer",
+      "className": "LustrousSidebarDrawer",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousModal",
+      "formAssociated": false,
+      "summary": "Modal slide-in navigation drawer for compact app shells (`< 960px`).",
+      "properties": [],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "panel",
+          "description": "The sliding drawer surface."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-footer",
+      "className": "LustrousSidebarFooter",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Bottom-docked stack for settings, help, and account items.",
+      "properties": [],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Footer items."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-header",
+      "className": "LustrousSidebarHeader",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "56px brand header with logo, product label, optional actions, and collapse/expand toggle button.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "logoHref",
+          "attribute": "logo-href",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "dismissVariant",
+          "attribute": "dismiss-variant",
+          "type": "LustrousSidebarDismissVariant",
+          "default": "\"trailing-close\"",
+          "reflects": true,
+          "description": "Header toggle placement when expanded: `trailing-close` (default) or `leading-back` (renders leading `arrowBack` button)."
+        },
+        {
+          "name": "collapseLabel",
+          "attribute": "collapse-label",
+          "type": "string",
+          "default": "\"Close sidebar\""
+        },
+        {
+          "name": "expandLabel",
+          "attribute": "expand-label",
+          "type": "string",
+          "default": "\"Open sidebar\""
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "logo",
+          "description": "24px logo mark (`<lustrous-icon size=\"m\">` or `<img>`)."
+        },
+        {
+          "name": "actions",
+          "description": "Optional header action controls shown while expanded."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "brand",
+          "description": "The logo and label wrapper (`<a>` when expanded with `logo-href`, `<span>` otherwise)."
+        },
+        {
+          "name": "actions",
+          "description": "The header actions container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-item",
+      "className": "LustrousSidebarItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Navigation row inside `<lustrous-sidebar>`.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "active",
+          "attribute": "active",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "pending",
+          "attribute": "pending",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "pinned",
+          "attribute": "pinned",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "pinnedLabel",
+          "attribute": "pinned-label",
+          "type": "string",
+          "default": "\"Pinned\""
+        },
+        {
+          "name": "badge",
+          "attribute": "badge",
+          "type": "boolean | LustrousSidebarBadge",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "badgeLabel",
+          "attribute": "badge-label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "pillBadge",
+          "attribute": "pill-badge",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Inline pill badge label rendered after the truncated label while expanded and not `pending`."
+        },
+        {
+          "name": "editing",
+          "attribute": "editing",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Enables inline row renaming (`<input part=\"edit-input\">`), firing cancelable `lustrous-edit-commit` / `lustrous-edit-cancel`."
+        },
+        {
+          "name": "defaultEditValue",
+          "attribute": "default-edit-value",
+          "type": "string | undefined",
+          "description": "Initial draft text when entering `editing` mode (defaults to `label`)."
+        },
+        {
+          "name": "maxEditLength",
+          "attribute": "max-edit-length",
+          "type": "number",
+          "default": "128",
+          "description": "Maximum character length for inline rename input."
+        },
+        {
+          "name": "editInputLabel",
+          "attribute": "edit-input-label",
+          "type": "string",
+          "default": "\"Rename item\"",
+          "description": "Accessible label for the inline rename `<input>`."
+        },
+        {
+          "name": "itemsOpenOnHover",
+          "attribute": "items-open-on-hover",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "meta",
+          "attribute": "meta",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "href",
+          "attribute": "href",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "target",
+          "attribute": "target",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "items",
+          "type": "LustrousMenuItem[] | undefined"
+        },
+        {
+          "name": "actions",
+          "type": "LustrousMenuItem[] | undefined"
+        },
+        {
+          "name": "actionsLabel",
+          "attribute": "actions-label",
+          "type": "string",
+          "default": "\"More options for {label}\""
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "row",
+          "description": "The interactive `<button>` or `<a>` element."
+        },
+        {
+          "name": "glimmer",
+          "description": "The loading shimmer bar rendered when `pending` is true."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-message",
+      "className": "LustrousSidebarMessage",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Inline empty/status message aligned with sidebar rows. Preserves expanded width so copy does not reflow during collapse transitions, and optionally announces `announcement` via a polite `role=\"status\"` region.",
+      "properties": [
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "description",
+          "attribute": "description",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "announcement",
+          "attribute": "announcement",
+          "type": "string | undefined"
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Supplementary action or link below `description`."
+        },
+        {
+          "name": "heading",
+          "description": "Custom rich heading content."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "icon",
+          "description": "The leading icon container."
+        },
+        {
+          "name": "text",
+          "description": "The heading/description stack."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-nav",
+      "className": "LustrousSidebarNav",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Semantic `<nav>` landmark container for sidebar items and sections.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"Navigation\""
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Navigation items, sections, and scroll areas."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-scroll-area",
+      "className": "LustrousSidebarScrollArea",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Scrollable region inside `<lustrous-sidebar-nav>`. Disables scrolling while collapsed and smoothly resets scroll offset to the top on collapse.",
+      "properties": [],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Scrollable navigation sections and items."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-sidebar-section",
+      "className": "LustrousSidebarSection",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-sidebar",
+      "superclass": "LustrousSidebarPart",
+      "formAssociated": false,
+      "summary": "Titled or collapsible group of secondary navigation items. Fades out and becomes `inert` when `<lustrous-sidebar>` collapses.",
+      "properties": [
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "collapsible",
+          "attribute": "collapsible",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "expanded",
+          "attribute": "expanded",
+          "type": "boolean",
+          "default": "true",
+          "reflects": true
+        },
+        {
+          "name": "toggleLabel",
+          "attribute": "toggle-label",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "description": "`CustomEvent<{ open: boolean }>` (cancelable) when a `collapsible` heading is toggled."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Section items."
+        },
+        {
+          "name": "action",
+          "description": "Optional trailing control in the section header."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "toggle",
+          "description": "The disclosure button when `collapsible` is set."
+        },
+        {
+          "name": "body",
+          "description": "The section body container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-skeleton",
+      "className": "LustrousSkeleton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-skeleton",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Decorative loading placeholder shimmer (`aria-hidden=\"true\"`).",
+      "properties": [
+        {
+          "name": "width",
+          "attribute": "width",
+          "type": "string | number | undefined",
+          "default": "\"100%\"",
+          "reflects": true,
+          "description": "Width as a number (`px`), `\"full\"`, or CSS length."
+        },
+        {
+          "name": "height",
+          "attribute": "height",
+          "type": "string | number | undefined",
+          "default": "\"16px\"",
+          "reflects": true,
+          "description": "Height as a number (`px`), `\"full\"`, or CSS length."
+        },
+        {
+          "name": "shape",
+          "attribute": "shape",
+          "type": "LustrousSkeletonShape",
+          "default": "\"rect\"",
+          "reflects": true,
+          "description": "Preset geometry: `rect` (default), `circle`, or `text` (pill line)."
+        },
+        {
+          "name": "borderRadius",
+          "attribute": "border-radius",
+          "type": "LustrousRadiusToken | undefined",
+          "reflects": true,
+          "description": "Explicit radius token override (`none`, `xs`, `s`, `m`, `l`, `xl`, `2xl`, `full`)."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-snackbar",
+      "className": "LustrousSnackbar",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-snackbar",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Top-layer toast notification viewport rendered with `popover=\"manual\"`.",
+      "properties": [
+        {
+          "name": "position",
+          "attribute": "position",
+          "type": "LustrousSnackbarPosition",
+          "default": "\"bottom-start\"",
+          "reflects": true,
+          "description": "Corner placement of the notification stack."
+        },
+        {
+          "name": "max",
+          "attribute": "max",
+          "type": "number",
+          "default": "3",
+          "description": "Maximum visible notifications at once; older entries are dropped. Set `max=\"1\"` for single-toast replacement behavior where each new notification replaces the active one."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name of the notifications region (defaults to `getLustrousLabels().notifications`)."
+        },
+        {
+          "name": "closeLabel",
+          "attribute": "close-label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible label for each close button (defaults to `getLustrousLabels().close`)."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-snack-dismiss",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ id: string; reason: \"timeout\" | \"action\" | \"close\" | \"api\" }>` when a notification is removed."
+        }
+      ],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "viewport",
+          "description": "The fixed top-layer container."
+        },
+        {
+          "name": "snack",
+          "description": "Individual toast surface."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-spinner",
+      "className": "LustrousSpinner",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-spinner",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Indeterminate loading indicator (`variant=\"icon\"` or `\"ring\"`). Stops cleanly (`animation: none`) under `prefers-reduced-motion: reduce`.",
+      "properties": [
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousSpinnerVariant",
+          "default": "\"icon\"",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousIconSize",
+          "default": "\"s\"",
+          "reflects": true
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousIconTone",
+          "default": "\"primary\"",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "speed",
+          "attribute": "speed",
+          "type": "LustrousSpinnerSpeed",
+          "default": "\"default\"",
+          "reflects": true
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "spinner",
+          "description": "The rotating glyph or ring."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-split-button",
+      "className": "LustrousSplitButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-split-button",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Primary action button joined to a trailing caret `<lustrous-menu>` trigger.",
+      "properties": [
+        {
+          "name": "actions",
+          "type": "readonly LustrousSplitButtonAction[]",
+          "default": "[]"
+        },
+        {
+          "name": "onAction",
+          "type": "(action: LustrousSplitButtonAction, index: number) => void | undefined"
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousSplitButtonSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousSplitButtonVariant",
+          "default": "\"tonal\"",
+          "reflects": true
+        },
+        {
+          "name": "shape",
+          "attribute": "shape",
+          "type": "LustrousButtonShape",
+          "default": "\"rounded\"",
+          "reflects": true
+        },
+        {
+          "name": "caretAriaLabel",
+          "attribute": "caret-aria-label",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-action",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ action, index }>` when the face or a menu action is activated."
+        }
+      ],
+      "slots": [],
+      "cssParts": [
+        {
+          "name": "face",
+          "description": "The primary action `<button>`."
+        },
+        {
+          "name": "caret",
+          "description": "The trailing menu-trigger `<button>`."
+        },
+        {
+          "name": "menu",
+          "description": "The dropdown `<lustrous-menu>` panel."
+        },
+        {
+          "name": "item",
+          "description": "Each interactive menu item inside the dropdown."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-switch",
+      "className": "LustrousSwitch",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-switch",
+      "superclass": "LustrousCheckBase",
+      "formAssociated": true,
+      "summary": "Form-associated binary toggle control (`role=\"switch\"`).",
+      "properties": [
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousSwitchSize",
+          "default": "\"m\"",
+          "reflects": true,
+          "description": "Track size (`m` 52×32 or `s` 32×20)."
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Thumb icon shown when checked (size `m` only)."
+        },
+        {
+          "name": "offIcon",
+          "attribute": "off-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Thumb icon shown when unchecked (size `m` only; expands resting thumb to 24px)."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Optional visible label text."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "track",
+          "description": "The switch `<button role=\"switch\">` track."
+        },
+        {
+          "name": "thumb",
+          "description": "The sliding thumb indicator."
+        },
+        {
+          "name": "label",
+          "description": "The slotted label and supporting-text container."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-tabs",
+      "className": "LustrousTabs",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-tabs",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Accessible horizontal tab bar with optional slotted `tabpanel` content.",
+      "properties": [
+        {
+          "name": "tabs",
+          "type": "LustrousTabItem[]",
+          "default": "[]",
+          "description": "Ordered tab definitions (property-only)."
+        },
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string | undefined",
+          "reflects": true,
+          "description": "Active tab value; defaults to the first enabled tab when unset."
+        },
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name of the `tablist`."
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousTabsVariant",
+          "default": "\"pill\"",
+          "reflects": true,
+          "description": "Visual style: `pill` (default) or `underline`."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-change",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ value: string }>` when the selected tab changes."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Panel content associated with the tab matching `{value}`."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "list",
+          "description": "The `role=\"tablist\"` container."
+        },
+        {
+          "name": "tab",
+          "description": "Each `role=\"tab\"` button."
+        },
+        {
+          "name": "tab-selected",
+          "description": "Applied in addition to `tab` on the active tab."
+        },
+        {
+          "name": "panel",
+          "description": "The `role=\"tabpanel\"` container when slotted panels are present."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-text",
+      "className": "LustrousText",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-text",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Typography primitive. Inline by default; `block`, `heading=\"1\"…\"6\"`, `wrap=\"truncate\"`, and `max-lines` render block-level.",
+      "properties": [
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "LustrousTextVariant",
+          "default": "\"body-medium\"",
+          "reflects": true
+        },
+        {
+          "name": "mobileVariant",
+          "attribute": "mobile-variant",
+          "type": "LustrousTextVariant | undefined",
+          "reflects": true
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "LustrousTextTone | undefined",
+          "reflects": true
+        },
+        {
+          "name": "muted",
+          "attribute": "muted",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "wrap",
+          "attribute": "wrap",
+          "type": "LustrousTextWrap | undefined",
+          "reflects": true
+        },
+        {
+          "name": "maxLines",
+          "attribute": "max-lines",
+          "type": "1 | 2 | 3 | undefined",
+          "reflects": true
+        },
+        {
+          "name": "textAlign",
+          "attribute": "text-align",
+          "type": "\"start\" | \"end\" | \"center\" | \"justify\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "overflowWrap",
+          "attribute": "overflow-wrap",
+          "type": "\"normal\" | \"break-word\" | \"anywhere\" | undefined",
+          "reflects": true
+        },
+        {
+          "name": "block",
+          "attribute": "block",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "visuallyHidden",
+          "attribute": "visually-hidden",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "1 | 2 | 3 | 4 | 5 | 6 | undefined",
+          "reflects": true
+        },
+        {
+          "name": "padding",
+          "attribute": "padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "mobilePadding",
+          "attribute": "mobile-padding",
+          "type": "LustrousPaddingValue | undefined",
+          "reflects": true
+        },
+        {
+          "name": "margin",
+          "attribute": "margin",
+          "type": "LustrousMarginValue | undefined",
+          "reflects": true
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Text content."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": [
+        {
+          "name": "--lustrous-text-muted",
+          "description": "Secondary text color (automatically adapted by `<lustrous-box background>`)."
+        }
+      ]
+    },
+    {
+      "tag": "lustrous-text-area",
+      "className": "LustrousTextArea",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-text-area",
+      "superclass": "LustrousTextInput",
+      "formAssociated": true,
+      "summary": "Form-associated multi-line outlined textarea extending `LustrousTextInput`.",
+      "properties": [
+        {
+          "name": "rows",
+          "attribute": "rows",
+          "type": "number",
+          "default": "4",
+          "description": "Visible line count when resting."
+        },
+        {
+          "name": "minRows",
+          "attribute": "min-rows",
+          "type": "number | undefined",
+          "default": "rows",
+          "description": "Minimum line count when `auto-grow` is enabled."
+        },
+        {
+          "name": "maxRows",
+          "attribute": "max-rows",
+          "type": "number | undefined",
+          "description": "Maximum line count when `auto-grow` is enabled; scrolls beyond this height."
+        },
+        {
+          "name": "autoGrow",
+          "attribute": "auto-grow",
+          "type": "boolean",
+          "default": "true",
+          "description": "Automatically grow and shrink with content (`auto-grow=\"false\"` to disable)."
+        },
+        {
+          "name": "resize",
+          "attribute": "resize",
+          "type": "\"none\" | \"vertical\" | \"horizontal\" | \"both\"",
+          "default": "\"none\"",
+          "description": "CSS resize handle when `auto-grow` is disabled."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-text-input",
+      "className": "LustrousTextInput",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-text-input",
+      "superclass": "LustrousElement",
+      "formAssociated": true,
+      "summary": "Form-associated single-line outlined text field.",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "caption",
+          "attribute": "caption",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "value",
+          "attribute": "value",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "type",
+          "attribute": "type",
+          "type": "\"text\" | \"email\" | \"password\" | \"search\" | \"tel\" | \"url\" | \"number\"",
+          "default": "\"text\""
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "LustrousTextInputSize",
+          "default": "\"m\"",
+          "reflects": true
+        },
+        {
+          "name": "borderRadius",
+          "attribute": "border-radius",
+          "type": "LustrousRadiusToken | undefined",
+          "reflects": true
+        },
+        {
+          "name": "placeholder",
+          "attribute": "placeholder",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "supportingText",
+          "attribute": "supporting-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "error",
+          "attribute": "error",
+          "type": "string | null",
+          "default": "null"
+        },
+        {
+          "name": "validationState",
+          "attribute": "validation-state",
+          "type": "LustrousValidationState",
+          "default": "\"default\"",
+          "reflects": true
+        },
+        {
+          "name": "leadingIcon",
+          "attribute": "leading-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "trailingIcon",
+          "attribute": "trailing-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true
+        },
+        {
+          "name": "leadingText",
+          "attribute": "leading-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "trailingText",
+          "attribute": "trailing-text",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "characterCount",
+          "attribute": "character-count",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "required",
+          "attribute": "required",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "readonly",
+          "attribute": "readonly",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "name",
+          "attribute": "name",
+          "type": "string | undefined",
+          "reflects": true
+        },
+        {
+          "name": "maxlength",
+          "attribute": "maxlength",
+          "type": "number | undefined"
+        },
+        {
+          "name": "minlength",
+          "attribute": "minlength",
+          "type": "number | undefined"
+        },
+        {
+          "name": "pattern",
+          "attribute": "pattern",
+          "type": "string | undefined"
+        },
+        {
+          "name": "autocomplete",
+          "attribute": "autocomplete",
+          "type": "string | undefined"
+        },
+        {
+          "name": "inputmode",
+          "attribute": "inputmode",
+          "type": "string | undefined"
+        },
+        {
+          "name": "form",
+          "type": "HTMLFormElement | null"
+        },
+        {
+          "name": "validity",
+          "type": "ValidityState | undefined"
+        },
+        {
+          "name": "validationMessage",
+          "type": "string"
+        }
+      ],
+      "events": [
+        {
+          "name": "change",
+          "type": "Event",
+          "description": "Native-style `change` event on commit (bubbles)."
+        },
+        {
+          "name": "input",
+          "description": "Native `input` event on each edit (composed)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "leading",
+          "description": "Custom leading content replacing `leading-icon`."
+        },
+        {
+          "name": "trailing",
+          "description": "Trailing action (e.g. `<lustrous-icon-button size=\"s\">`), replacing `trailing-icon` and status indicators."
+        },
+        {
+          "name": "caption",
+          "description": "Rich caption content at the end of the header row."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "header",
+          "description": "The label and caption row."
+        },
+        {
+          "name": "label",
+          "description": "The `<label>` element."
+        },
+        {
+          "name": "caption",
+          "description": "The caption container."
+        },
+        {
+          "name": "field",
+          "description": "The outlined field frame."
+        },
+        {
+          "name": "input",
+          "description": "The native `<input>` element."
+        },
+        {
+          "name": "leading",
+          "description": "The leading icon/slot container."
+        },
+        {
+          "name": "trailing",
+          "description": "The trailing icon/status container."
+        },
+        {
+          "name": "supporting",
+          "description": "The supporting text / error / character count row."
+        },
+        {
+          "name": "counter",
+          "description": "The character counter."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-timeline",
+      "className": "LustrousTimeline",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-timeline",
+      "superclass": "LustrousFlex",
+      "formAssociated": false,
+      "summary": "Vertical milestone, deployment pipeline, and audit-log container (`role=\"list\"`).",
+      "properties": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name of the timeline list."
+        }
+      ],
+      "events": [],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-timeline-item",
+      "className": "LustrousTimelineItem",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-timeline",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Single milestone, pipeline stage, or audit event inside `<lustrous-timeline>` (`role=\"listitem\"`).",
+      "properties": [
+        {
+          "name": "heading",
+          "attribute": "heading",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Primary milestone or event title."
+        },
+        {
+          "name": "headingVariant",
+          "attribute": "heading-variant",
+          "type": "LustrousTextVariant",
+          "default": "\"body-large-emphasized\"",
+          "description": "Typography scale token for `heading`."
+        },
+        {
+          "name": "timeLabel",
+          "attribute": "time-label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Secondary timestamp or phase label rendered in `caption` style."
+        },
+        {
+          "name": "status",
+          "attribute": "status",
+          "type": "LustrousTimelineStatus",
+          "default": "\"default\"",
+          "reflects": true,
+          "description": "Milestone state controlling dot color (`default`, `past`, `active`, `future`)."
+        },
+        {
+          "name": "markerLabel",
+          "attribute": "marker-label",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Accessible name for the status dot (`role=\"img\"`) when `status` is not `\"default\"`."
+        },
+        {
+          "name": "icon",
+          "attribute": "icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional icon rendered in place of the status dot."
+        },
+        {
+          "name": "hideConnector",
+          "attribute": "hide-connector",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Hides the vertical connector below this item."
+        }
+      ],
+      "events": [],
+      "slots": [
+        {
+          "name": "",
+          "description": "Body content below the heading and timestamp."
+        },
+        {
+          "name": "heading",
+          "description": "Rich heading content (overrides `heading`)."
+        },
+        {
+          "name": "time-label",
+          "description": "Rich timestamp or metadata label (overrides `time-label`)."
+        },
+        {
+          "name": "marker",
+          "description": "Custom marker element (replaces `icon` and the status dot)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "row",
+          "description": "Outer flex row."
+        },
+        {
+          "name": "marker",
+          "description": "Status dot, icon box, or custom marker container."
+        },
+        {
+          "name": "connector",
+          "description": "Dotted vertical connector below the marker."
+        },
+        {
+          "name": "content",
+          "description": "Heading, timestamp, and body column."
+        }
+      ],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-togglable-button",
+      "className": "LustrousTogglableButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-togglable-button",
+      "superclass": "LustrousButton",
+      "formAssociated": true,
+      "summary": "Action button with a binary pressed state (`aria-pressed`).",
+      "properties": [
+        {
+          "name": "selected",
+          "attribute": "selected",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Whether the button is currently toggled on (`aria-pressed=\"true\"`)."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-change",
+          "description": "`CustomEvent<{ selected: boolean }>` (cancelable)."
+        }
+      ],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-togglable-icon-button",
+      "className": "LustrousTogglableIconButton",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-togglable-icon-button",
+      "superclass": "LustrousIconButton",
+      "formAssociated": true,
+      "summary": "Circular icon-only toggle button (`aria-pressed`, `aria-label` required).",
+      "properties": [
+        {
+          "name": "selected",
+          "attribute": "selected",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true,
+          "description": "Whether the button is currently toggled on (`aria-pressed=\"true\"`)."
+        },
+        {
+          "name": "selectedIcon",
+          "attribute": "selected-icon",
+          "type": "LustrousIconName | undefined",
+          "reflects": true,
+          "description": "Optional alternate icon rendered while `selected` is true."
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-change",
+          "description": "`CustomEvent<{ selected: boolean }>` (cancelable)."
+        }
+      ],
+      "slots": [],
+      "cssParts": [],
+      "cssProperties": []
+    },
+    {
+      "tag": "lustrous-tooltip",
+      "className": "LustrousTooltip",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-tooltip",
+      "superclass": "LustrousElement",
+      "formAssociated": false,
+      "summary": "Brief non-interactive hover/focus tooltip rendered in the browser's top layer (`popover=\"manual\"`). Supports `only-when-truncated` and BiDi text.",
+      "properties": [
+        {
+          "name": "content",
+          "attribute": "content",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "side",
+          "attribute": "side",
+          "type": "LustrousTooltipSide",
+          "default": "\"top\"",
+          "reflects": true
+        },
+        {
+          "name": "align",
+          "attribute": "align",
+          "type": "FloatingAlign",
+          "default": "\"center\"",
+          "reflects": true
+        },
+        {
+          "name": "offset",
+          "attribute": "offset",
+          "type": "number",
+          "default": "6"
+        },
+        {
+          "name": "delay",
+          "attribute": "delay",
+          "type": "number",
+          "default": "0"
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "onlyWhenTruncated",
+          "attribute": "only-when-truncated",
+          "type": "boolean | Element | null",
+          "default": "false",
+          "reflects": true
+        },
+        {
+          "name": "truncationTarget",
+          "type": "Element | null | undefined"
+        },
+        {
+          "name": "anchor",
+          "type": "Element | null | undefined"
+        },
+        {
+          "name": "open",
+          "attribute": "open",
+          "type": "boolean",
+          "default": "false",
+          "reflects": true
+        }
+      ],
+      "events": [
+        {
+          "name": "lustrous-toggle",
+          "type": "CustomEvent",
+          "description": "`CustomEvent<{ open: boolean }>` when opened or closed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Trigger element."
+        }
+      ],
+      "cssParts": [],
+      "cssProperties": [
+        {
+          "name": "--lustrous-tooltip-max-width",
+          "description": "Maximum bubble width (default 220px)."
+        }
+      ]
+    },
+    {
+      "tag": "lustrous-video-lightbox",
+      "className": "LustrousVideoLightbox",
+      "importPath": "@ghchinoy/lustrous-lit/components/lustrous-video-lightbox",
+      "superclass": "LustrousLightboxBase",
+      "formAssociated": false,
+      "summary": "Full-screen immersive video player lightbox built on `LustrousLightboxBase`.",
+      "properties": [
+        {
+          "name": "src",
+          "attribute": "src",
+          "type": "string",
+          "default": "\"\"",
+          "description": "Video stream or file URL."
+        },
+        {
+          "name": "poster",
+          "attribute": "poster",
+          "type": "string | undefined",
+          "description": "Poster image displayed prior to playback and blurred as the ambient backdrop."
+        },
+        {
+          "name": "captionsSrc",
+          "attribute": "captions-src",
+          "type": "string | undefined",
+          "description": "Optional WebVTT captions URL (`<track kind=\"captions\">`)."
+        },
+        {
+          "name": "captionsLabel",
+          "attribute": "captions-label",
+          "type": "string",
+          "default": "\"Captions\"",
+          "description": "Accessible track label when `captions-src` is provided."
+        },
+        {
+          "name": "captionsSrclang",
+          "attribute": "captions-srclang",
+          "type": "string",
+          "default": "\"en\"",
+          "description": "BCP-47 language code for `captions-src`."
+        },
+        {
+          "name": "autoplay",
+          "attribute": "autoplay",
+          "type": "boolean",
+          "default": "true",
+          "description": "Starts playback automatically when opened (`autoplay=\"false\"` disables)."
+        },
+        {
+          "name": "videoElement",
+          "type": "HTMLVideoElement | undefined",
+          "description": "Reference to the inner `<video>` element when rendered."
+        }
+      ],
+      "events": [
+        {
+          "name": "error",
+          "type": "Event",
+          "description": "Fired if video playback/loading fails."
+        }
+      ],
+      "slots": [
+        {
+          "name": "actions",
+          "description": "Optional contextual controls below the stage (e.g. `<lustrous-action-bar>`)."
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "stage",
+          "description": "The media stage container."
+        },
+        {
+          "name": "actions",
+          "description": "The actions slot wrapper."
+        }
+      ],
+      "cssProperties": []
+    }
+  ],
+  "tokens": [
+    {
+      "name": "--lustrous-color-background",
+      "category": "color",
+      "value": "#f8fafc",
+      "dark": "#0b0f17"
+    },
+    {
+      "name": "--lustrous-color-on-background",
+      "category": "color",
+      "value": "#0f172a",
+      "dark": "#e2e8f0"
+    },
+    {
+      "name": "--lustrous-color-surface",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#111827"
+    },
+    {
+      "name": "--lustrous-color-surface-bright",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#1f2937"
+    },
+    {
+      "name": "--lustrous-color-surface-dim",
+      "category": "color",
+      "value": "#f1f5f9",
+      "dark": "#0d131f"
+    },
+    {
+      "name": "--lustrous-color-surface-background",
+      "category": "color",
+      "value": "#f8fafc",
+      "dark": "#0b0f17"
+    },
+    {
+      "name": "--lustrous-color-surface-container-low",
+      "category": "color",
+      "value": "#f8fafc",
+      "dark": "#151d2e"
+    },
+    {
+      "name": "--lustrous-color-surface-container",
+      "category": "color",
+      "value": "#f1f5f9",
+      "dark": "#1a2336"
+    },
+    {
+      "name": "--lustrous-color-surface-container-high",
+      "category": "color",
+      "value": "#e2e8f0",
+      "dark": "#232f46"
+    },
+    {
+      "name": "--lustrous-color-surface-container-highest",
+      "category": "color",
+      "value": "#cbd5e1",
+      "dark": "#2e3c56"
+    },
+    {
+      "name": "--lustrous-color-surface-accent",
+      "category": "color",
+      "value": "#dbeafe",
+      "dark": "#172554"
+    },
+    {
+      "name": "--lustrous-color-on-surface",
+      "category": "color",
+      "value": "#0f172a",
+      "dark": "#f1f5f9"
+    },
+    {
+      "name": "--lustrous-color-on-surface-control",
+      "category": "color",
+      "value": "#0f172a",
+      "dark": "#f1f5f9"
+    },
+    {
+      "name": "--lustrous-color-on-surface-variant",
+      "category": "color",
+      "value": "#475569",
+      "dark": "#94a3b8"
+    },
+    {
+      "name": "--lustrous-color-on-surface-low",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.08)",
+      "dark": "rgba(241, 245, 249, 0.10)"
+    },
+    {
+      "name": "--lustrous-color-outline",
+      "category": "color",
+      "value": "#64748b",
+      "dark": "#8496ae"
+    },
+    {
+      "name": "--lustrous-color-outline-variant",
+      "category": "color",
+      "value": "#cbd5e1",
+      "dark": "#334155"
+    },
+    {
+      "name": "--lustrous-color-primary",
+      "category": "color",
+      "value": "#1d4ed8",
+      "dark": "#93c5fd"
+    },
+    {
+      "name": "--lustrous-color-on-primary",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#0c2461"
+    },
+    {
+      "name": "--lustrous-color-primary-container",
+      "category": "color",
+      "value": "#dbeafe",
+      "dark": "#1e3a8a"
+    },
+    {
+      "name": "--lustrous-color-on-primary-container",
+      "category": "color",
+      "value": "#1e3a8a",
+      "dark": "#dbeafe"
+    },
+    {
+      "name": "--lustrous-color-accent",
+      "category": "color",
+      "value": "#1d4ed8",
+      "dark": "#60a5fa"
+    },
+    {
+      "name": "--lustrous-color-on-accent",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#081226"
+    },
+    {
+      "name": "--lustrous-color-accent-container",
+      "category": "color",
+      "value": "#e0e7ff",
+      "dark": "#1e2b58"
+    },
+    {
+      "name": "--lustrous-color-on-accent-container",
+      "category": "color",
+      "value": "#1e1b4b",
+      "dark": "#e0e7ff"
+    },
+    {
+      "name": "--lustrous-color-accent-fixed",
+      "category": "color",
+      "value": "#2563eb",
+      "dark": "#3b82f6"
+    },
+    {
+      "name": "--lustrous-color-tertiary",
+      "category": "color",
+      "value": "#0f766e",
+      "dark": "#5eead4"
+    },
+    {
+      "name": "--lustrous-color-on-tertiary",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#042f2e"
+    },
+    {
+      "name": "--lustrous-color-tertiary-container",
+      "category": "color",
+      "value": "#ccfbf1",
+      "dark": "#115e59"
+    },
+    {
+      "name": "--lustrous-color-on-tertiary-container",
+      "category": "color",
+      "value": "#134e4a",
+      "dark": "#ccfbf1"
+    },
+    {
+      "name": "--lustrous-color-positive",
+      "category": "color",
+      "value": "#047857",
+      "dark": "#34d399"
+    },
+    {
+      "name": "--lustrous-color-on-positive",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#022c22"
+    },
+    {
+      "name": "--lustrous-color-positive-container",
+      "category": "color",
+      "value": "#d1fae5",
+      "dark": "#064e3b"
+    },
+    {
+      "name": "--lustrous-color-on-positive-container",
+      "category": "color",
+      "value": "#065f46",
+      "dark": "#d1fae5"
+    },
+    {
+      "name": "--lustrous-color-warning",
+      "category": "color",
+      "value": "#b45309",
+      "dark": "#fbbf24"
+    },
+    {
+      "name": "--lustrous-color-on-warning",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#451a03"
+    },
+    {
+      "name": "--lustrous-color-warning-container",
+      "category": "color",
+      "value": "#fef3c7",
+      "dark": "#78350f"
+    },
+    {
+      "name": "--lustrous-color-on-warning-container",
+      "category": "color",
+      "value": "#92400e",
+      "dark": "#fef3c7"
+    },
+    {
+      "name": "--lustrous-color-error",
+      "category": "color",
+      "value": "#b91c1c",
+      "dark": "#f87171"
+    },
+    {
+      "name": "--lustrous-color-on-error",
+      "category": "color",
+      "value": "#ffffff",
+      "dark": "#450a0a"
+    },
+    {
+      "name": "--lustrous-color-error-container",
+      "category": "color",
+      "value": "#fee2e2",
+      "dark": "#7f1d1d"
+    },
+    {
+      "name": "--lustrous-color-on-error-container",
+      "category": "color",
+      "value": "#991b1b",
+      "dark": "#fee2e2"
+    },
+    {
+      "name": "--lustrous-color-white",
+      "category": "color",
+      "value": "#ffffff"
+    },
+    {
+      "name": "--lustrous-color-black",
+      "category": "color",
+      "value": "#000000"
+    },
+    {
+      "name": "--lustrous-color-state-hover",
+      "category": "color",
+      "value": "color-mix(in srgb, currentColor 8%, transparent)"
+    },
+    {
+      "name": "--lustrous-color-state-pressed",
+      "category": "color",
+      "value": "color-mix(in srgb, currentColor 13%, transparent)"
+    },
+    {
+      "name": "--lustrous-color-state-focus",
+      "category": "color",
+      "value": "color-mix(in srgb, currentColor 10%, transparent)"
+    },
+    {
+      "name": "--lustrous-color-state-disabled",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.10)",
+      "dark": "rgba(241, 245, 249, 0.12)"
+    },
+    {
+      "name": "--lustrous-color-state-disabled-label",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.38)",
+      "dark": "rgba(241, 245, 249, 0.38)"
+    },
+    {
+      "name": "--lustrous-color-scrim",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.32)",
+      "dark": "rgba(0, 0, 0, 0.56)"
+    },
+    {
+      "name": "--lustrous-color-scrim-immersive",
+      "category": "color",
+      "value": "rgba(10, 14, 23, 0.92)",
+      "dark": "rgba(8, 12, 20, 0.92)"
+    },
+    {
+      "name": "--lustrous-color-elevation1",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.07)",
+      "dark": "rgba(0, 0, 0, 0.36)"
+    },
+    {
+      "name": "--lustrous-color-elevation2",
+      "category": "color",
+      "value": "rgba(15, 23, 42, 0.14)",
+      "dark": "rgba(0, 0, 0, 0.52)"
+    },
+    {
+      "name": "--lustrous-color-category-cobalt",
+      "category": "color",
+      "value": "#dbeafe",
+      "dark": "#172554"
+    },
+    {
+      "name": "--lustrous-color-on-category-cobalt",
+      "category": "color",
+      "value": "#1e40af",
+      "dark": "#bfdbfe"
+    },
+    {
+      "name": "--lustrous-color-category-emerald",
+      "category": "color",
+      "value": "#d1fae5",
+      "dark": "#064e3b"
+    },
+    {
+      "name": "--lustrous-color-on-category-emerald",
+      "category": "color",
+      "value": "#065f46",
+      "dark": "#a7f3d0"
+    },
+    {
+      "name": "--lustrous-color-category-amber",
+      "category": "color",
+      "value": "#fef3c7",
+      "dark": "#451a03"
+    },
+    {
+      "name": "--lustrous-color-on-category-amber",
+      "category": "color",
+      "value": "#92400e",
+      "dark": "#fde68a"
+    },
+    {
+      "name": "--lustrous-color-category-rose",
+      "category": "color",
+      "value": "#ffe4e6",
+      "dark": "#4c0519"
+    },
+    {
+      "name": "--lustrous-color-on-category-rose",
+      "category": "color",
+      "value": "#9f1239",
+      "dark": "#fecdd3"
+    },
+    {
+      "name": "--lustrous-color-category-violet",
+      "category": "color",
+      "value": "#ede9fe",
+      "dark": "#2e1065"
+    },
+    {
+      "name": "--lustrous-color-on-category-violet",
+      "category": "color",
+      "value": "#5b21b6",
+      "dark": "#ddd6fe"
+    },
+    {
+      "name": "--lustrous-color-category-teal",
+      "category": "color",
+      "value": "#ccfbf1",
+      "dark": "#134e4a"
+    },
+    {
+      "name": "--lustrous-color-on-category-teal",
+      "category": "color",
+      "value": "#115e59",
+      "dark": "#99f6e4"
+    },
+    {
+      "name": "--lustrous-color-code-background",
+      "category": "color",
+      "value": "#0f172a",
+      "dark": "#0d131f"
+    },
+    {
+      "name": "--lustrous-color-code-primary-text",
+      "category": "color",
+      "value": "#f8fafc",
+      "dark": "#f1f5f9"
+    },
+    {
+      "name": "--lustrous-color-code-comment",
+      "category": "color",
+      "value": "rgba(248, 250, 252, 0.62)",
+      "dark": "rgba(241, 245, 249, 0.62)"
+    },
+    {
+      "name": "--lustrous-color-code-outline",
+      "category": "color",
+      "value": "rgba(248, 250, 252, 0.14)",
+      "dark": "rgba(241, 245, 249, 0.14)"
+    },
+    {
+      "name": "--lustrous-color-code-grey-text",
+      "category": "color",
+      "value": "#94a3b8",
+      "dark": "#94a3b8"
+    },
+    {
+      "name": "--lustrous-color-code-blue-text",
+      "category": "color",
+      "value": "#60a5fa",
+      "dark": "#93c5fd"
+    },
+    {
+      "name": "--lustrous-color-code-pink-text",
+      "category": "color",
+      "value": "#f472b6",
+      "dark": "#f9a8d4"
+    },
+    {
+      "name": "--lustrous-color-code-yellow-text",
+      "category": "color",
+      "value": "#fbbf24",
+      "dark": "#fde047"
+    },
+    {
+      "name": "--lustrous-color-code-green-text",
+      "category": "color",
+      "value": "#34d399",
+      "dark": "#6ee7b7"
+    },
+    {
+      "name": "--lustrous-color-code-red-text",
+      "category": "color",
+      "value": "#f87171",
+      "dark": "#fca5a5"
+    },
+    {
+      "name": "--lustrous-color-code-purple-text",
+      "category": "color",
+      "value": "#a78bfa",
+      "dark": "#c4b5fd"
+    },
+    {
+      "name": "--lustrous-color-code-teal-text",
+      "category": "color",
+      "value": "#2dd4bf",
+      "dark": "#5eead4"
+    },
+    {
+      "name": "--lustrous-color-data1",
+      "category": "color",
+      "value": "#1d4ed8",
+      "dark": "#60a5fa"
+    },
+    {
+      "name": "--lustrous-color-data1-hover",
+      "category": "color",
+      "value": "#3b82f6",
+      "dark": "#93c5fd"
+    },
+    {
+      "name": "--lustrous-color-data1-focus",
+      "category": "color",
+      "value": "#3b82f6",
+      "dark": "#93c5fd"
+    },
+    {
+      "name": "--lustrous-color-data1-pressed",
+      "category": "color",
+      "value": "#1e40af",
+      "dark": "#3b82f6"
+    },
+    {
+      "name": "--lustrous-color-data2",
+      "category": "color",
+      "value": "#0f766e",
+      "dark": "#2dd4bf"
+    },
+    {
+      "name": "--lustrous-color-data2-hover",
+      "category": "color",
+      "value": "#14b8a6",
+      "dark": "#5eead4"
+    },
+    {
+      "name": "--lustrous-color-data2-focus",
+      "category": "color",
+      "value": "#14b8a6",
+      "dark": "#5eead4"
+    },
+    {
+      "name": "--lustrous-color-data2-pressed",
+      "category": "color",
+      "value": "#115e59",
+      "dark": "#14b8a6"
+    },
+    {
+      "name": "--lustrous-color-data3",
+      "category": "color",
+      "value": "#6d28d9",
+      "dark": "#a78bfa"
+    },
+    {
+      "name": "--lustrous-color-data3-hover",
+      "category": "color",
+      "value": "#8b5cf6",
+      "dark": "#c4b5fd"
+    },
+    {
+      "name": "--lustrous-color-data3-focus",
+      "category": "color",
+      "value": "#8b5cf6",
+      "dark": "#c4b5fd"
+    },
+    {
+      "name": "--lustrous-color-data3-pressed",
+      "category": "color",
+      "value": "#5b21b6",
+      "dark": "#8b5cf6"
+    },
+    {
+      "name": "--lustrous-color-data4",
+      "category": "color",
+      "value": "#b45309",
+      "dark": "#fbbf24"
+    },
+    {
+      "name": "--lustrous-color-data4-hover",
+      "category": "color",
+      "value": "#f59e0b",
+      "dark": "#fde68a"
+    },
+    {
+      "name": "--lustrous-color-data4-focus",
+      "category": "color",
+      "value": "#f59e0b",
+      "dark": "#fde68a"
+    },
+    {
+      "name": "--lustrous-color-data4-pressed",
+      "category": "color",
+      "value": "#92400e",
+      "dark": "#f59e0b"
+    },
+    {
+      "name": "--lustrous-color-data5",
+      "category": "color",
+      "value": "#be123c",
+      "dark": "#fb7185"
+    },
+    {
+      "name": "--lustrous-color-data5-hover",
+      "category": "color",
+      "value": "#f43f5e",
+      "dark": "#fda4af"
+    },
+    {
+      "name": "--lustrous-color-data5-focus",
+      "category": "color",
+      "value": "#f43f5e",
+      "dark": "#fda4af"
+    },
+    {
+      "name": "--lustrous-color-data5-pressed",
+      "category": "color",
+      "value": "#9f1239",
+      "dark": "#f43f5e"
+    },
+    {
+      "name": "--lustrous-elevation-level1",
+      "category": "elevation",
+      "value": "0 1px 2px 0 var(--lustrous-color-elevation1), 0 4px 12px -2px var(--lustrous-color-elevation1)"
+    },
+    {
+      "name": "--lustrous-elevation-level2",
+      "category": "elevation",
+      "value": "0 4px 8px -2px var(--lustrous-color-elevation1), 0 16px 32px -4px var(--lustrous-color-elevation2)"
+    },
+    {
+      "name": "--lustrous-text-muted",
+      "category": "derived",
+      "value": "var(--lustrous-color-on-surface-variant)"
+    },
+    {
+      "name": "--lustrous-space-xs",
+      "category": "spacing",
+      "value": "4px"
+    },
+    {
+      "name": "--lustrous-space-s",
+      "category": "spacing",
+      "value": "8px"
+    },
+    {
+      "name": "--lustrous-space-m",
+      "category": "spacing",
+      "value": "12px"
+    },
+    {
+      "name": "--lustrous-space-l",
+      "category": "spacing",
+      "value": "16px"
+    },
+    {
+      "name": "--lustrous-space-xl",
+      "category": "spacing",
+      "value": "20px"
+    },
+    {
+      "name": "--lustrous-space-2xl",
+      "category": "spacing",
+      "value": "24px"
+    },
+    {
+      "name": "--lustrous-space-3xl",
+      "category": "spacing",
+      "value": "32px"
+    },
+    {
+      "name": "--lustrous-space-4xl",
+      "category": "spacing",
+      "value": "48px"
+    },
+    {
+      "name": "--lustrous-radius-none",
+      "category": "radius",
+      "value": "0px"
+    },
+    {
+      "name": "--lustrous-radius-xs",
+      "category": "radius",
+      "value": "4px"
+    },
+    {
+      "name": "--lustrous-radius-s",
+      "category": "radius",
+      "value": "6px"
+    },
+    {
+      "name": "--lustrous-radius-m",
+      "category": "radius",
+      "value": "10px"
+    },
+    {
+      "name": "--lustrous-radius-l",
+      "category": "radius",
+      "value": "14px"
+    },
+    {
+      "name": "--lustrous-radius-xl",
+      "category": "radius",
+      "value": "20px"
+    },
+    {
+      "name": "--lustrous-radius-2xl",
+      "category": "radius",
+      "value": "28px"
+    },
+    {
+      "name": "--lustrous-radius-full",
+      "category": "radius",
+      "value": "9999px"
+    },
+    {
+      "name": "--lustrous-z-base",
+      "category": "z-index",
+      "value": "0"
+    },
+    {
+      "name": "--lustrous-z-modal",
+      "category": "z-index",
+      "value": "30000"
+    },
+    {
+      "name": "--lustrous-z-dropdown",
+      "category": "z-index",
+      "value": "40000"
+    },
+    {
+      "name": "--lustrous-z-tooltip",
+      "category": "z-index",
+      "value": "50000"
+    },
+    {
+      "name": "--lustrous-z-snackbar",
+      "category": "z-index",
+      "value": "60000"
+    },
+    {
+      "name": "--lustrous-font-display",
+      "category": "font",
+      "value": "\"Google Sans Flex\", \"Google Sans Display\", \"Google Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+    },
+    {
+      "name": "--lustrous-font-body",
+      "category": "font",
+      "value": "\"Google Sans Flex\", \"Google Sans Text\", \"Google Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+    },
+    {
+      "name": "--lustrous-font-sans",
+      "category": "font",
+      "value": "\"Google Sans Flex\", \"Google Sans Text\", \"Google Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+    },
+    {
+      "name": "--lustrous-font-code",
+      "category": "font",
+      "value": "\"Google Sans Code\", \"Google Sans Mono\", \"Roboto Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+    },
+    {
+      "name": "--lustrous-duration-instant",
+      "category": "duration",
+      "value": "0ms"
+    },
+    {
+      "name": "--lustrous-duration-short50",
+      "category": "duration",
+      "value": "50ms"
+    },
+    {
+      "name": "--lustrous-duration-short100",
+      "category": "duration",
+      "value": "100ms"
+    },
+    {
+      "name": "--lustrous-duration-short150",
+      "category": "duration",
+      "value": "150ms"
+    },
+    {
+      "name": "--lustrous-duration-short200",
+      "category": "duration",
+      "value": "200ms"
+    },
+    {
+      "name": "--lustrous-duration-medium250",
+      "category": "duration",
+      "value": "250ms"
+    },
+    {
+      "name": "--lustrous-duration-medium300",
+      "category": "duration",
+      "value": "300ms"
+    },
+    {
+      "name": "--lustrous-duration-medium350",
+      "category": "duration",
+      "value": "350ms"
+    },
+    {
+      "name": "--lustrous-duration-medium400",
+      "category": "duration",
+      "value": "400ms"
+    },
+    {
+      "name": "--lustrous-duration-long450",
+      "category": "duration",
+      "value": "450ms"
+    },
+    {
+      "name": "--lustrous-duration-long500",
+      "category": "duration",
+      "value": "500ms"
+    },
+    {
+      "name": "--lustrous-duration-long600",
+      "category": "duration",
+      "value": "600ms"
+    },
+    {
+      "name": "--lustrous-duration-extralong750",
+      "category": "duration",
+      "value": "750ms"
+    },
+    {
+      "name": "--lustrous-duration-extralong1000",
+      "category": "duration",
+      "value": "1000ms"
+    },
+    {
+      "name": "--lustrous-easing-standard",
+      "category": "easing",
+      "value": "cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-easing-standard-decelerate",
+      "category": "easing",
+      "value": "cubic-bezier(0, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-easing-standard-accelerate",
+      "category": "easing",
+      "value": "cubic-bezier(0.3, 0, 1, 1)"
+    },
+    {
+      "name": "--lustrous-easing-standard-neutral",
+      "category": "easing",
+      "value": "cubic-bezier(0.62, 0, 0.33, 1)"
+    },
+    {
+      "name": "--lustrous-easing-linear",
+      "category": "easing",
+      "value": "cubic-bezier(0, 0, 1, 1)"
+    },
+    {
+      "name": "--lustrous-easing-emphasized",
+      "category": "easing",
+      "value": "cubic-bezier(0.35, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-easing-emphasized-decelerate",
+      "category": "easing",
+      "value": "cubic-bezier(0.05, 0.7, 0.1, 1)"
+    },
+    {
+      "name": "--lustrous-easing-emphasized-accelerate",
+      "category": "easing",
+      "value": "cubic-bezier(0.3, 0, 0.8, 0.15)"
+    },
+    {
+      "name": "--lustrous-easing-spring-standard",
+      "category": "easing",
+      "value": "cubic-bezier(0.27, 1.06, 0.18, 1)"
+    },
+    {
+      "name": "--lustrous-motion-fade-through",
+      "category": "motion",
+      "value": "50ms cubic-bezier(0, 0, 1, 1)"
+    },
+    {
+      "name": "--lustrous-motion-fast-fade",
+      "category": "motion",
+      "value": "100ms cubic-bezier(0, 0, 1, 1)"
+    },
+    {
+      "name": "--lustrous-motion-fade",
+      "category": "motion",
+      "value": "150ms cubic-bezier(0, 0, 1, 1)"
+    },
+    {
+      "name": "--lustrous-motion-scale-in",
+      "category": "motion",
+      "value": "150ms cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-scale-out",
+      "category": "motion",
+      "value": "100ms cubic-bezier(0.62, 0, 0.33, 1)"
+    },
+    {
+      "name": "--lustrous-motion-lateral",
+      "category": "motion",
+      "value": "350ms cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-shared-axis-x",
+      "category": "motion",
+      "value": "350ms cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-shared-axis-y",
+      "category": "motion",
+      "value": "350ms cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-fast-shared-axis-y",
+      "category": "motion",
+      "value": "200ms cubic-bezier(0.2, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-bottom-enter",
+      "category": "motion",
+      "value": "450ms cubic-bezier(0.35, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-bottom-exit",
+      "category": "motion",
+      "value": "250ms cubic-bezier(0.62, 0, 0.33, 1)"
+    },
+    {
+      "name": "--lustrous-motion-container-transform-enter",
+      "category": "motion",
+      "value": "450ms cubic-bezier(0.35, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-container-transform-exit",
+      "category": "motion",
+      "value": "450ms cubic-bezier(0.35, 0, 0, 1)"
+    },
+    {
+      "name": "--lustrous-motion-fast-spatial",
+      "category": "motion",
+      "value": "350ms cubic-bezier(0.27, 1.06, 0.18, 1)"
+    },
+    {
+      "name": "--lustrous-motion-default-spatial",
+      "category": "motion",
+      "value": "500ms cubic-bezier(0.27, 1.06, 0.18, 1)"
+    },
+    {
+      "name": "--lustrous-motion-slow-spatial",
+      "category": "motion",
+      "value": "750ms cubic-bezier(0.27, 1.06, 0.18, 1)"
+    }
+  ],
+  "icons": [
+    {
+      "name": "ExternalLink"
+    },
+    {
+      "name": "activity"
+    },
+    {
+      "name": "add"
+    },
+    {
+      "name": "addImage"
+    },
+    {
+      "name": "archive"
+    },
+    {
+      "name": "arrowBack",
+      "directional": true
+    },
+    {
+      "name": "arrowCircleDown"
+    },
+    {
+      "name": "arrowDownward"
+    },
+    {
+      "name": "arrowDropDown"
+    },
+    {
+      "name": "arrowForward",
+      "directional": true
+    },
+    {
+      "name": "arrowForwardIos",
+      "directional": true
+    },
+    {
+      "name": "arrowOutward"
+    },
+    {
+      "name": "arrowSplit"
+    },
+    {
+      "name": "arrowUpward"
+    },
+    {
+      "name": "aspectRatio"
+    },
+    {
+      "name": "assignment"
+    },
+    {
+      "name": "attachMoney"
+    },
+    {
+      "name": "autorenew"
+    },
+    {
+      "name": "avatar"
+    },
+    {
+      "name": "backspace",
+      "directional": true
+    },
+    {
+      "name": "bell"
+    },
+    {
+      "name": "bolt"
+    },
+    {
+      "name": "book"
+    },
+    {
+      "name": "bookmark"
+    },
+    {
+      "name": "bookmarkSpark"
+    },
+    {
+      "name": "brush"
+    },
+    {
+      "name": "building"
+    },
+    {
+      "name": "calendar"
+    },
+    {
+      "name": "cancel"
+    },
+    {
+      "name": "chatPasteGo"
+    },
+    {
+      "name": "chatSpark2"
+    },
+    {
+      "name": "check"
+    },
+    {
+      "name": "checkBox"
+    },
+    {
+      "name": "checkBoxOutlineBlank"
+    },
+    {
+      "name": "checkCircle"
+    },
+    {
+      "name": "checkSmall"
+    },
+    {
+      "name": "chevronDown"
+    },
+    {
+      "name": "chevronLeft",
+      "directional": true
+    },
+    {
+      "name": "chevronRight",
+      "directional": true
+    },
+    {
+      "name": "chevronRightAlt",
+      "directional": true
+    },
+    {
+      "name": "chevronUp"
+    },
+    {
+      "name": "clock"
+    },
+    {
+      "name": "close"
+    },
+    {
+      "name": "cloud"
+    },
+    {
+      "name": "cloudDone"
+    },
+    {
+      "name": "cloudOff"
+    },
+    {
+      "name": "code"
+    },
+    {
+      "name": "codeBlocks"
+    },
+    {
+      "name": "codeOff"
+    },
+    {
+      "name": "compareArrows"
+    },
+    {
+      "name": "compass"
+    },
+    {
+      "name": "contacts"
+    },
+    {
+      "name": "contrast"
+    },
+    {
+      "name": "copy"
+    },
+    {
+      "name": "cropLandscape"
+    },
+    {
+      "name": "cropPortrait"
+    },
+    {
+      "name": "cropSquare"
+    },
+    {
+      "name": "darkMode"
+    },
+    {
+      "name": "database"
+    },
+    {
+      "name": "delete"
+    },
+    {
+      "name": "devices"
+    },
+    {
+      "name": "docs"
+    },
+    {
+      "name": "domain"
+    },
+    {
+      "name": "download"
+    },
+    {
+      "name": "draw"
+    },
+    {
+      "name": "edit"
+    },
+    {
+      "name": "encrypted"
+    },
+    {
+      "name": "error"
+    },
+    {
+      "name": "event"
+    },
+    {
+      "name": "explore"
+    },
+    {
+      "name": "extension"
+    },
+    {
+      "name": "favorite"
+    },
+    {
+      "name": "features"
+    },
+    {
+      "name": "filter"
+    },
+    {
+      "name": "filterAlt"
+    },
+    {
+      "name": "filterList"
+    },
+    {
+      "name": "finance"
+    },
+    {
+      "name": "flag"
+    },
+    {
+      "name": "folder"
+    },
+    {
+      "name": "folderOpen"
+    },
+    {
+      "name": "formatBold"
+    },
+    {
+      "name": "formatItalic"
+    },
+    {
+      "name": "formatListBulleted"
+    },
+    {
+      "name": "formatListNumbered"
+    },
+    {
+      "name": "formatUnderlined"
+    },
+    {
+      "name": "forward10"
+    },
+    {
+      "name": "globe"
+    },
+    {
+      "name": "grid"
+    },
+    {
+      "name": "group"
+    },
+    {
+      "name": "groups"
+    },
+    {
+      "name": "headset"
+    },
+    {
+      "name": "health"
+    },
+    {
+      "name": "helpOutline"
+    },
+    {
+      "name": "hideImage"
+    },
+    {
+      "name": "home"
+    },
+    {
+      "name": "hourglassEmpty"
+    },
+    {
+      "name": "info"
+    },
+    {
+      "name": "keyboard"
+    },
+    {
+      "name": "label"
+    },
+    {
+      "name": "language"
+    },
+    {
+      "name": "lassoSelect"
+    },
+    {
+      "name": "layers"
+    },
+    {
+      "name": "lightMode"
+    },
+    {
+      "name": "lightbulb"
+    },
+    {
+      "name": "link"
+    },
+    {
+      "name": "locationOn"
+    },
+    {
+      "name": "lock"
+    },
+    {
+      "name": "mail"
+    },
+    {
+      "name": "markChatRead"
+    },
+    {
+      "name": "markChatUnread"
+    },
+    {
+      "name": "megaphone"
+    },
+    {
+      "name": "menu"
+    },
+    {
+      "name": "menuBook"
+    },
+    {
+      "name": "mic"
+    },
+    {
+      "name": "micOff"
+    },
+    {
+      "name": "modeAuto"
+    },
+    {
+      "name": "moreHoriz"
+    },
+    {
+      "name": "moreVert"
+    },
+    {
+      "name": "networkNode"
+    },
+    {
+      "name": "newReleases"
+    },
+    {
+      "name": "note"
+    },
+    {
+      "name": "notes"
+    },
+    {
+      "name": "openInNew"
+    },
+    {
+      "name": "package"
+    },
+    {
+      "name": "palette"
+    },
+    {
+      "name": "pause"
+    },
+    {
+      "name": "pauseCircle"
+    },
+    {
+      "name": "person"
+    },
+    {
+      "name": "personAlert"
+    },
+    {
+      "name": "phone"
+    },
+    {
+      "name": "photo"
+    },
+    {
+      "name": "photoCamera"
+    },
+    {
+      "name": "photoLibrary"
+    },
+    {
+      "name": "picture"
+    },
+    {
+      "name": "pin"
+    },
+    {
+      "name": "place"
+    },
+    {
+      "name": "play"
+    },
+    {
+      "name": "playArrow"
+    },
+    {
+      "name": "playCircle"
+    },
+    {
+      "name": "plug"
+    },
+    {
+      "name": "progressActivity"
+    },
+    {
+      "name": "provisional"
+    },
+    {
+      "name": "public"
+    },
+    {
+      "name": "recordVoiceOver"
+    },
+    {
+      "name": "redo",
+      "directional": true
+    },
+    {
+      "name": "refresh"
+    },
+    {
+      "name": "remove"
+    },
+    {
+      "name": "replay"
+    },
+    {
+      "name": "replay10"
+    },
+    {
+      "name": "rocketLaunch"
+    },
+    {
+      "name": "route"
+    },
+    {
+      "name": "scale"
+    },
+    {
+      "name": "science"
+    },
+    {
+      "name": "search"
+    },
+    {
+      "name": "searchActivity"
+    },
+    {
+      "name": "sell"
+    },
+    {
+      "name": "send",
+      "directional": true
+    },
+    {
+      "name": "settings"
+    },
+    {
+      "name": "settingsAlt"
+    },
+    {
+      "name": "share"
+    },
+    {
+      "name": "share2"
+    },
+    {
+      "name": "shield"
+    },
+    {
+      "name": "shuffle"
+    },
+    {
+      "name": "sideNav",
+      "directional": true
+    },
+    {
+      "name": "skipNext"
+    },
+    {
+      "name": "skipPrevious"
+    },
+    {
+      "name": "sliders"
+    },
+    {
+      "name": "smartphone"
+    },
+    {
+      "name": "sms"
+    },
+    {
+      "name": "star"
+    },
+    {
+      "name": "stop"
+    },
+    {
+      "name": "stopCircle"
+    },
+    {
+      "name": "subdirectoryArrowRight",
+      "directional": true
+    },
+    {
+      "name": "subtitles"
+    },
+    {
+      "name": "sync"
+    },
+    {
+      "name": "target"
+    },
+    {
+      "name": "terminal"
+    },
+    {
+      "name": "timeline"
+    },
+    {
+      "name": "trendingDown"
+    },
+    {
+      "name": "trendingFlat"
+    },
+    {
+      "name": "trendingUp"
+    },
+    {
+      "name": "tts"
+    },
+    {
+      "name": "undo",
+      "directional": true
+    },
+    {
+      "name": "unlock"
+    },
+    {
+      "name": "unpin"
+    },
+    {
+      "name": "upload"
+    },
+    {
+      "name": "users"
+    },
+    {
+      "name": "verifiedUser"
+    },
+    {
+      "name": "visibility"
+    },
+    {
+      "name": "visibilityOff"
+    },
+    {
+      "name": "voiceOverOff"
+    },
+    {
+      "name": "volumeOff"
+    },
+    {
+      "name": "volumeUp"
+    },
+    {
+      "name": "wallet"
+    },
+    {
+      "name": "warning"
+    },
+    {
+      "name": "wifiOff"
+    },
+    {
+      "name": "work"
+    }
+  ]
+}

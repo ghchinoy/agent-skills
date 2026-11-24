@@ -1,0 +1,49 @@
+/*
+ * Unlayered brand overrides for @ghchinoy/lustrous-lit.
+ *
+ * Because `lustrous-theme.css` places all defaults inside `@layer lustrous`,
+ * these unlayered declarations win automatically without `!important`.
+ * Maintain WCAG 2.1 AA contrast (>= 4.5:1 normal text, >= 3:1 UI boundaries).
+ */
+
+:root,
+[data-theme="light"],
+[data-lustrous-theme="light"] {
+  --lustrous-color-primary: #0369a1;
+  --lustrous-color-on-primary: #ffffff;
+  --lustrous-color-primary-container: #e0f2fe;
+  --lustrous-color-on-primary-container: #0c4a6e;
+
+  --lustrous-color-accent: #0284c7;
+  --lustrous-color-on-accent: #ffffff;
+  --lustrous-color-accent-container: #e0f2fe;
+  --lustrous-color-on-accent-container: #0c4a6e;
+}
+
+[data-theme="dark"],
+[data-lustrous-theme="dark"] {
+  --lustrous-color-primary: #7dd3fc;
+  --lustrous-color-on-primary: #082f49;
+  --lustrous-color-primary-container: #0c4a6e;
+  --lustrous-color-on-primary-container: #e0f2fe;
+
+  --lustrous-color-accent: #38bdf8;
+  --lustrous-color-on-accent: #082f49;
+  --lustrous-color-accent-container: #075985;
+  --lustrous-color-on-accent-container: #e0f2fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"],
+  [data-lustrous-theme="system"] {
+    --lustrous-color-primary: #7dd3fc;
+    --lustrous-color-on-primary: #082f49;
+    --lustrous-color-primary-container: #0c4a6e;
+    --lustrous-color-on-primary-container: #e0f2fe;
+
+    --lustrous-color-accent: #38bdf8;
+    --lustrous-color-on-accent: #082f49;
+    --lustrous-color-accent-container: #075985;
+    --lustrous-color-on-accent-container: #e0f2fe;
+  }
+}

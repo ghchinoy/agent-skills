@@ -8,7 +8,7 @@ Welcome to the `agent-skills` repository. This repository packages specialized e
 
 ## Available Plugins & Skills
 
-The repository is organized into 16 thematic plugins under `plugins/`:
+The repository is organized into 17 thematic plugins under `plugins/`:
 
 ### 1. 🎤 AI Pop (`plugins/ai-pop`)
 *Virtual music artist production suite: lore planning, audio synthesis, visual design, and web player compilation.*
@@ -101,6 +101,12 @@ The repository is organized into 16 thematic plugins under `plugins/`:
 *Google and modern Python readability standards, Ruff/Mypy linter automation, and code review checklists.*
 - **`python-readability`**: Write, review, and refactor Python code to meet Google Python Style Guide standards, covering naming, imports, docstrings, typing, testing, and automated `pyproject.toml` linter configuration (`scripts/setup-linters.py`).
 
+### 17. 💎 Lustrous Design System (`plugins/lustrous-lit`)
+*Lustrous Design System (`@ghchinoy/lustrous-lit`) for Lit 3 and Web Components: UI composition, token and theme architecture, custom-element authoring, and automated CSP, token, and WCAG 2.1 AA review.*
+- **`lustrous-lit`**: Composes accessible, responsive interfaces with `@ghchinoy/lustrous-lit` primitives, `ElementInternals` form controls, top-layer overlays, keyboard shortcuts, icons, and `--lustrous-*` tokens. Includes theming/responsive/framework reference guides, starter templates, and CLI API inspector (`scripts/lookup-lustrous.mjs`).
+- **`lustrous-component-author`**: Extends `LustrousElement` with CSP-safe `--_lustrous-*` CSSOM styling, `ElementInternals` form-associated lifecycles, top-layer Popover/`<dialog>` safeguards, `@lit-labs/ssr` safety, and `forced-colors` + RTL support. Includes engineering pitfall recipes and component scaffolds.
+- **`lustrous-reviewer`**: Audits templates, stylesheets, and custom elements against strict `style-src 'self'` CSP, `--lustrous-*` token validity, registered icon names, overlay/SSR safety, and WCAG 2.1 AA accessibility (`scripts/audit-lustrous.mjs`).
+
 ---
 
 ## Installation & Usage
@@ -155,16 +161,42 @@ git clone https://github.com/ghchinoy/agent-skills.git
 gemini skills link ./agent-skills/plugins/beads-workflow/skills/bd-dolt-troubleshooter
 ```
 
-### Using via Antigravity CLI (`agy`)
+### Using via Antigravity (`agy`)
 
-Copy or link the desired plugin or skill directory into your workspace:
+Register the local `plugins/` directory in `~/.gemini/config/plugins.json` using an **absolute path** so Antigravity discovers all plugins and future additions live from source with no copy step:
+
 ```bash
-# Global scope
-cp -R plugins/ai-pop/skills/* ~/.gemini/antigravity/skills/
-
-# Project scope
-cp -R plugins/ai-pop/skills/* .agents/skills/
+git clone https://github.com/ghchinoy/agent-skills.git ~/projects/agent-skills
 ```
+
+```json
+{
+  "entries": [
+    {
+      "path": "/absolute/path/to/agent-skills/plugins"
+    }
+  ]
+}
+```
+
+> **Notes:**
+> - Use an **absolute path** in `~/.gemini/config/plugins.json` (tilde `~/` expansion is not applied by runtime discovery).
+> - Edits to `SKILL.md`, `scripts/`, and `references/` are read live off disk; new skills and plugins added under `plugins/` are discovered automatically on session start or reload.
+> - `agy plugin list` only lists plugins located directly inside `~/.gemini/config/plugins/`. If you want per-plugin CLI management (`agy plugin list` / `enable` / `disable`) for a single plugin, install or symlink it directly:
+
+```bash
+# Install a single plugin globally (copied into ~/.gemini/config/plugins/)
+agy plugin install ./plugins/repo-authoring
+
+# Or symlink a single plugin for live edits + `agy plugin list` visibility
+ln -s /absolute/path/to/agent-skills/plugins/repo-authoring ~/.gemini/config/plugins/repo-authoring
+
+# Project scope: commit `.agents/plugins.json` or copy a specific skill into `.agents/skills/`
+mkdir -p .agents/skills
+cp -R plugins/repo-authoring/skills/go-security-audit .agents/skills/
+```
+
+See the official [Antigravity Plugins](https://antigravity.google/docs/plugins) and [Antigravity Skills](https://antigravity.google/docs/skills) documentation for plugin anatomy, progressive disclosure, and `/<skill-name>` invocation.
 
 ---
 

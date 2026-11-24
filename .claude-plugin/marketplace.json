@@ -158,6 +158,16 @@
         "./plugins/scion-platform/skills/scion-agent-models",
         "./plugins/scion-platform/skills/scion-hub-setup"
       ]
+    },
+    {
+      "name": "lustrous-lit",
+      "source": "./plugins/lustrous-lit",
+      "description": "Lustrous Design System (@ghchinoy/lustrous-lit) for Lit 3 and Web Components: UI composition, token and theme architecture, custom-element authoring, and automated CSP, token, and WCAG 2.1 AA review.",
+      "skills": [
+        "./plugins/lustrous-lit/skills/lustrous-lit",
+        "./plugins/lustrous-lit/skills/lustrous-component-author",
+        "./plugins/lustrous-lit/skills/lustrous-reviewer"
+      ]
     }
   ]
 }
