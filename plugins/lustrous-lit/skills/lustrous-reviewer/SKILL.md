@@ -20,7 +20,7 @@ Audit frontend codebases, Lit 3 templates, HTML/JSX/Vue/Svelte views, and styles
   ./scripts/audit-lustrous.mjs src/ --allow-custom-icons webhook,pipelineStep --json
   ```
 - [`references/review-checklist.md`](references/review-checklist.md) — Complete rule catalog (`CSP-01`, `TOK-01`–`TOK-03`, `ICO-01`, `A11Y-01`–`A11Y-03`, `OVR-01`–`OVR-02`, `SSR-01`) with bad/good examples and remediation steps.
-- **Companion skills:** Pair with `lustrous-lit` for idiomatic primitive composition and `lustrous-component-author` when refactoring custom `LustrousElement` classes.
+- **Companion skills:** Pair with `lustrous-lit` for idiomatic primitive composition and `lustrous-component-author` when refactoring custom `LustrousElement` classes. When Chrome's [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) is also installed, run `lustrous-reviewer` as the final design-system gate so platform patterns still satisfy `CSP-01` (zero inline `style=`), `TOK-01`–`TOK-03` (`--lustrous-*` tokens), `SSR-01`, and existing `<lustrous-*>` component preference.
 
 ---
 

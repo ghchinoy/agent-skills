@@ -5325,7 +5325,7 @@
     {
       "name": "--lustrous-color-surface-container-low",
       "category": "color",
-      "value": "#f8fafc",
+      "value": "#f4f7fb",
       "dark": "#151d2e"
     },
     {
@@ -5343,7 +5343,7 @@
     {
       "name": "--lustrous-color-surface-container-highest",
       "category": "color",
-      "value": "#cbd5e1",
+      "value": "#d5dee9",
       "dark": "#2e3c56"
     },
     {
@@ -5368,7 +5368,7 @@
       "name": "--lustrous-color-on-surface-variant",
       "category": "color",
       "value": "#475569",
-      "dark": "#94a3b8"
+      "dark": "#9aa9be"
     },
     {
       "name": "--lustrous-color-on-surface-low",

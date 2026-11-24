@@ -18,6 +18,7 @@ metadata:
 - [`references/theming-and-tokens.md`](references/theming-and-tokens.md) — Deep dive on `@layer lustrous`, `setLustrousTheme`, nested theme islands, shadow-root scoping, localization (`setLustrousLabels`), OFL-1.1 fonts, and full `--lustrous-*` token scales.
 - [`references/responsive-and-layout.md`](references/responsive-and-layout.md) — Two-layer responsive architecture (`768px` content vs `959.98px` shell), CSS-only responsive attributes, `@container` queries, `<lustrous-popover mobile-drawer>`, and `LustrousViewportController`.
 - [`references/frameworks-and-ssr.md`](references/frameworks-and-ssr.md) — Integration patterns for Plain HTML + Import Maps, Lit 3, React 19 / `@lit/react`, Vue 3, Angular, Svelte 5, embedded Go/Rust/Python servers, strict CSP headers, and `@lit-labs/ssr` hydration.
+- [`references/companion-plugins.md`](references/companion-plugins.md) — Recommended companion plugins including Chrome's [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) (`Baseline 2024` alignment, install commands, and the 3-tier precedence hierarchy keeping `<lustrous-*>` components and `--lustrous-*` tokens authoritative).
 - [`scripts/lookup-lustrous.mjs`](scripts/lookup-lustrous.mjs) — Fast CLI inspector querying [`assets/catalog.json`](assets/catalog.json) for component props/events/slots/parts, `--lustrous-*` tokens, and core icon names without loading large manifests into context:
   ```bash
   ./scripts/lookup-lustrous.mjs lustrous-select

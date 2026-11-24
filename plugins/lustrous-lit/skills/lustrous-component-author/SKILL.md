@@ -18,6 +18,7 @@ Build application and design-system Web Components on top of [`@ghchinoy/lustrou
 - [`assets/custom-element.template.ts`](assets/custom-element.template.ts) — Ready-to-copy `LustrousElement` component scaffold with `lustrousBase`, `lustrousFocusRing`, `lustrousStateLayer`, CSP-safe `--_lustrous-*` CSSOM geometry, and `forced-colors` fallbacks.
 - [`assets/form-control.template.ts`](assets/form-control.template.ts) — Ready-to-copy `ElementInternals` form-associated custom element scaffold (`formAssociated = true`, `delegatesFocus: true`, `formDisabledCallback`, `formResetCallback`, `formStateRestoreCallback`, and `lustrous-change`).
 - **Companion skills:** Use `lustrous-lit` when composing existing `<lustrous-*>` elements, and `lustrous-reviewer` to run automated CSP/token/icon/a11y checks on your finished component.
+- **Recommended external companion:** Pair with Chrome's [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) (`npx modern-web-guidance@latest install`, configured with `Baseline 2024`) for Web Components platform guides (`html/web-components`, `shadow-dom`, `form-associated-custom-elements`), CSS Scroll-Driven Animations, View Transitions, and Core Web Vitals. Always keep Lustrous's CSP (`style-src 'self'`), `--lustrous-*` token hygiene, and `LustrousElement` rules authoritative when adapting platform patterns.
 
 ---
 
